@@ -1,3 +1,5 @@
+/** Sites公開用ビルドへホスティング設定とDBマイグレーションを同梱するViteプラグインです。 */
+
 import { access, cp, mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
@@ -14,7 +16,7 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-// Packages Sites metadata and migrations after Vite finishes compiling.
+// Viteの出力完了後に、実行環境が必要とする管理ファイルだけをdistへ複製します。
 export function sites(): Plugin {
   let root = process.cwd();
 
@@ -25,6 +27,7 @@ export function sites(): Plugin {
       root = config.root;
     },
     async closeBundle() {
+      // 古い管理ファイルを残さず、現在の設定だけで公開物を再構成します。
       const outputDirectory = resolve(root, "dist", ".openai");
       const hostingConfig = resolve(root, ".openai", "hosting.json");
       const drizzleSource = resolve(root, "drizzle");

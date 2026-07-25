@@ -1,3 +1,5 @@
+/** KPTC Scheduler 全ページ共通の表示言語、フォント、検索・共有用メタデータを定義します。 */
+
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -20,6 +22,7 @@ export const viewport: Viewport = {
 };
 
 export async function generateMetadata(): Promise<Metadata> {
+  // 配信先のホスト名から絶対URLを組み立て、共有画像が環境ごとに正しく解決されるようにします。
   const requestHeaders = await headers();
   const protocol = requestHeaders.get("x-forwarded-proto") ?? "https";
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3000";

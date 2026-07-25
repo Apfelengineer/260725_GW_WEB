@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * KPTC Scheduler のメイン画面。
+ * 予定表、在席状況、伝言、ユーザー・予定種別管理を一つの画面で制御します。
+ */
+
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   groupWatcherApi,
@@ -28,6 +33,7 @@ type ContextMenuState = { scheduleId: string; x: number; y: number };
 type CellContextMenuState = { target: CellTarget; x: number; y: number };
 type ManagementTab = "members" | "categories" | "audit";
 
+// 日付はタイムゾーン境界で前後しないよう、常に正午を基準に計算します。
 const weekdayNames = ["日", "月", "火", "水", "木", "金", "土"];
 const presenceOptions: PresenceState[] = ["在席", "外出", "会議中", "離席", "休暇"];
 
@@ -55,6 +61,7 @@ function daysBetween(from: string, to: string) {
 }
 
 function scheduleOccursOn(item: ScheduleItem, targetKey: string) {
+  // 複数日予定と日次・週次・月次の繰り返しを、表示対象の日付へ展開します。
   const endDate = item.endDate || item.date;
   const duration = Math.max(0, daysBetween(item.date, endDate));
   const offset = daysBetween(item.date, targetKey);
@@ -175,6 +182,7 @@ function LoginScreen({ members, serverAvailable, onLogin }: { members: Member[];
 }
 
 export default function Home() {
+  // サーバーと共有する業務データと、画面内だけで使う選択状態を分けて保持します。
   const [section, setSection] = useState<Section>("schedule");
   const [view, setView] = useState<CalendarView>("week");
   const [calendarDate, setCalendarDate] = useState(() => new Date(2026, 6, 24, 12));
@@ -231,6 +239,7 @@ export default function Home() {
   }
 
   useEffect(() => {
+    // 初期表示時に共有DBを読み込み、失敗時のみ同梱デモデータへ切り替えます。
     let active = true;
     groupWatcherApi.bootstrap().then((payload) => {
       if (!active) return;
@@ -249,6 +258,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    // 変更を短時間まとめ、バージョン番号付きで直列保存して同時編集の競合を検出します。
     if (!authReady || !serverAvailable || !currentUserId || !csrfToken) return;
     const state: SharedState = { members, schedules, categories, messages };
     const serialized = JSON.stringify(state);
@@ -348,6 +358,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!currentUserId) return;
+    // 開始時刻が近い予定を30秒ごとに確認し、同じ予定の通知は一度だけ表示します。
     const checkReminders = () => {
       const now = new Date();
       schedules.forEach((item) => {
@@ -387,6 +398,7 @@ export default function Home() {
   }
 
   function saveSchedule(event: FormEvent<HTMLFormElement>) {
+    // 時間帯プリセットを実時刻へ変換し、新規作成と編集を同じ形式で保存します。
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const title = String(form.get("title") ?? "").trim();

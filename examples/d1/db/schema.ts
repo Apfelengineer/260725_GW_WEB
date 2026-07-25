@@ -1,3 +1,5 @@
+/** Cloudflare D1を追加するときの参考用メモテーブル定義です（本体からは未使用）。 */
+
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 

@@ -1,3 +1,4 @@
+# ネイティブ処理を含む依存パッケージについて、pnpmのビルド許可を管理します。
 allowBuilds:
   esbuild: set this to true or false
   sharp: set this to true or false

@@ -1,3 +1,7 @@
+/**
+ * Sites環境のChatGPT認証ヘッダーを、安全なアプリ内ユーザー情報へ変換する補助処理です。
+ */
+
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -55,6 +59,7 @@ export function chatGPTSignOutPath(returnTo = "/"): string {
 }
 
 function safeRelativeReturnPath(value: string): string {
+  // 外部URLや認証用予約パスへの誘導を防ぎ、アプリ内の相対パスだけを許可します。
   if (!value.startsWith("/") || value.startsWith("//")) return "/";
 
   let url: URL;

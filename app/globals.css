@@ -1,3 +1,6 @@
+/* KPTC Schedulerメイン画面の共通配色、レイアウト、部品、レスポンシブ表示を定義します。 */
+
+/* 基本変数とブラウザ既定値 */
 :root {
   --font-geist-sans: "Hiragino Sans", "Yu Gothic UI", sans-serif;
   --font-geist-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -32,6 +35,7 @@ button, select { cursor: pointer; }
 
 .app-shell { min-height: 100vh; }
 
+/* 左サイドバーとメインナビゲーション */
 .sidebar {
   position: fixed;
   inset: 0 auto 0 0;
@@ -117,6 +121,7 @@ button, select { cursor: pointer; }
 .avatar-small { width: 31px; height: 31px; flex-basis: 31px; border-radius: 10px; font-size: 11px; }
 
 .main-area { min-height: 100vh; margin-left: 244px; }
+/* 上部検索・同期状態とページ共通操作 */
 .topbar {
   position: sticky;
   top: 0;
@@ -181,6 +186,7 @@ button, select { cursor: pointer; }
 .view-switch button { width: 32px; height: 25px; border: 0; border-radius: 6px; color: #7f8b96; background: transparent; font-size: 10px; }
 .view-switch button.active { color: #fff; background: #19344e; box-shadow: 0 2px 6px rgba(20,42,62,.16); }
 
+/* 週表示の予定表とドラッグ可能な予定カード */
 .week-grid-wrap { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 5px 20px rgba(28,43,60,.035); }
 .week-grid { min-width: 1040px; }
 .week-header-row,
@@ -262,6 +268,7 @@ button, select { cursor: pointer; }
 .text-link { width: 100%; margin-top: 11px; border: 0; color: var(--teal-dark); background: transparent; text-align: left; font-size: 8.5px; font-weight: 680; }
 .text-link span { float: right; }
 
+/* 日表示・月表示 */
 .day-view, .month-view { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
 .day-view-heading { display: flex; align-items: center; gap: 8px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: #fafbfc; }
 .day-view-heading span { font-size: 12px; font-weight: 760; }.day-view-heading small { margin-left: auto; padding: 3px 7px; border-radius: 8px; color: #b86348; background: #fff0eb; font-size: 8px; }.day-view-heading em { padding: 3px 7px; border-radius: 8px; color: #c1513c; background: #fff0eb; font-size: 8px; font-style: normal; }
@@ -289,6 +296,7 @@ button, select { cursor: pointer; }
 
 .standard-page { max-width: 1280px; margin: 0 auto; padding: 31px 34px 48px; }
 .standard-page > .page-heading { align-items: center; margin-bottom: 25px; }
+/* 在席状況、伝言、ユーザー・予定種別管理 */
 .summary-strip { display: grid; grid-template-columns: repeat(4,1fr); margin-bottom: 20px; overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: #fff; }
 .summary-strip > div { display: flex; min-height: 66px; align-items: center; gap: 10px; padding: 0 20px; border-right: 1px solid var(--line); }.summary-strip > div:last-child { border-right: 0; }.summary-strip span:not(.status-dot) { color: var(--muted); font-size: 10px; }.summary-strip b { margin-left: auto; font-size: 19px; }
 .presence-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 15px; }
@@ -332,6 +340,7 @@ button, select { cursor: pointer; }
 .audit-list button { padding: 6px 9px; border: 1px solid #d8e1e4; border-radius: 7px; color: var(--teal-dark); background: #fff; font-size: 8px; font-weight: 700; }
 .table-status { display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px; border-radius: 12px; background: #f4f6f7; font-size: 8px; }
 
+/* 登録・編集ダイアログ、通知、右クリックメニュー */
 .modal-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 20px; background: rgba(7,20,33,.52); backdrop-filter: blur(4px); animation: fade-in .16s ease; }
 .modal { width: min(540px,100%); max-height: calc(100vh - 40px); overflow-y: auto; border: 1px solid rgba(255,255,255,.4); border-radius: 18px; background: #fff; box-shadow: 0 28px 80px rgba(3,14,24,.28); animation: modal-in .2s ease; }
 .modal > header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 21px 24px 17px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.96); backdrop-filter: blur(12px); }.modal header h2 { margin: 0; font-size: 19px; letter-spacing: -.035em; }.modal header > button { display: grid; width: 31px; height: 31px; place-items: center; border: 1px solid #e2e7ea; border-radius: 9px; color: #7c8994; background: #fff; font-size: 18px; }
@@ -360,6 +369,7 @@ button, select { cursor: pointer; }
 .context-menu button:last-child { color: #c4513a; }
 .mobile-nav { display: none; }
 
+/* ログイン画面 */
 .auth-screen { display: grid; min-height: 100vh; place-items: center; align-content: center; gap: 18px; padding: 24px; color: #dfeaf3; background: radial-gradient(circle at 18% 95%,rgba(33,180,157,.16),transparent 30%),linear-gradient(145deg,#0d243b,#081829); }
 .auth-screen > p { color: #8fa5b8; font-size: 11px; }
 .login-card { display: flex; width: min(440px,100%); flex-direction: column; gap: 24px; padding: 32px; border: 1px solid rgba(255,255,255,.12); border-radius: 20px; background: rgba(255,255,255,.97); box-shadow: 0 30px 80px rgba(0,0,0,.28); color: var(--ink); }
@@ -371,6 +381,7 @@ button, select { cursor: pointer; }
 @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 
+/* 画面幅に応じて右欄、サイドバー、操作部品を段階的に簡略化します。 */
 @media (max-width: 1180px) {
   .page-layout { grid-template-columns: minmax(0,1fr); }
   .right-rail { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); padding-top: 0; }

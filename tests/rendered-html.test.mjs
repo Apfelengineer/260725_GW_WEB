@@ -1,3 +1,5 @@
+/** ソースに主要機能と公開用素材が残っていることを軽量に検証する回帰テストです。 */
+
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
@@ -5,6 +7,7 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 
 test("KPTC Scheduler の主要機能を提供する", async () => {
+  // 主要画面・通信層・サーバーAPIをまとめて読み、必須機能の手掛かりを検査します。
   const [page, layout, api, phpApi] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/layout.tsx", root), "utf8"),
@@ -51,6 +54,7 @@ test("共有用画像を同梱する", async () => {
 });
 
 test("試験室3室の空き状況ページを提供する", async () => {
+  // 表示記号、配色、3画面の入口、ロゴ素材が欠落していないことを確認します。
   const [page, styles, vite, phpApi] = await Promise.all([
     readFile(new URL("app/reservations-page.tsx", root), "utf8"),
     readFile(new URL("app/reservations.css", root), "utf8"),
