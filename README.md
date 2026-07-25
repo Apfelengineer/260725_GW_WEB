@@ -31,6 +31,14 @@ pnpm run build
 pnpm test
 ```
 
+さくらのレンタルサーバー向け静的ビルド:
+
+```bash
+pnpm run build:sakura
+```
+
+生成された `dist-sakura` の中身をWeb公開フォルダへ配置します。画像やスクリプトは相対パスで出力されるため、初期ドメイン直下でも `/GW/` のようなサブフォルダでも利用できます。
+
 ## API接続予定箇所
 
 `app/lib/group-watcher-api.ts` に、メンバー・予定・メッセージの型とデモデータ、APIの差し替え口をまとめています。

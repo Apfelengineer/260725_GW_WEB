@@ -1,6 +1,6 @@
-@import "tailwindcss";
-
 :root {
+  --font-geist-sans: "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  --font-geist-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --ink: #172435;
   --muted: #6c7887;
   --line: #e5e9ee;
