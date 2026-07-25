@@ -1,6 +1,12 @@
 <?php
 declare(strict_types=1);
 
+/*
+ * さくらインターネット上で動作する共有APIです。
+ * PHPセッションで利用者を識別し、SQLiteへ予定・在席・伝言・操作履歴を保存します。
+ */
+
+// API応答をJSONに統一し、共有データをブラウザや中継キャッシュへ残さないようにします。
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 session_name('GW_SESSION');
@@ -25,6 +31,7 @@ function body(): array {
 }
 
 function initial_state(): array {
+    // DBを初めて作成したときだけ使用する、画面確認用の初期データです。
     return [
         'members' => [
             ['id'=>'m1','name'=>'佐藤 美咲','group'=>'営業部','initials'=>'佐','color'=>'#e96f51','presence'=>'外出','destination'=>'丸の内・山田商事','returnAt'=>'16:30','phone'=>'03-1234-5678','email'=>'misaki.sato@example.jp'],
@@ -66,6 +73,7 @@ function initial_state(): array {
 }
 
 function room_demo_schedules(): array {
+    // 試験室の空き状況表示を確認するための予約・メンテナンス例です。
     return [
         ['id'=>'room-demo-m6-july','memberId'=>'m6','date'=>'2026-07-01','endDate'=>'2026-07-01','start'=>'00:00','end'=>'23:59','timePreset'=>'all-day','title'=>'電波暗室 予約済み','category'=>'会議','repeat'=>'daily','repeatUntil'=>'2026-07-31'],
         ['id'=>'room-demo-m7-1','memberId'=>'m7','date'=>'2026-07-27','start'=>'09:00','end'=>'12:00','timePreset'=>'morning','title'=>'材料評価','category'=>'会議'],
@@ -83,6 +91,7 @@ function room_demo_schedules(): array {
 }
 
 function db(): PDO {
+    // Web公開フォルダの外側へSQLiteを置き、WALモードで同時アクセスを扱います。
     static $pdo;
     if ($pdo instanceof PDO) return $pdo;
     $dataDir = dirname(__DIR__, 2) . '/GW';
@@ -95,11 +104,13 @@ function db(): PDO {
     $pdo->exec('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
     $count = (int)$pdo->query('SELECT COUNT(*) FROM app_state')->fetchColumn();
     if ($count === 0) {
+        // アプリ状態は1行にまとめ、version列を楽観ロックへ利用します。
         $stmt = $pdo->prepare('INSERT INTO app_state(id,payload,version,updated_at) VALUES(1,?,1,?)');
         $stmt->execute([json_encode(initial_state(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), date(DATE_ATOM)]);
     }
     $seeded = $pdo->query("SELECT value FROM app_meta WHERE key='room_demo_v1'")->fetchColumn();
     if ($seeded === false) {
+        // 既存利用者へも試験室デモ予定を一度だけ追加します。
         $row = $pdo->query('SELECT payload,version FROM app_state WHERE id=1')->fetch(PDO::FETCH_ASSOC);
         $state = json_decode($row['payload'], true);
         $known = array_column($state['schedules'] ?? [], 'id');
@@ -121,6 +132,7 @@ function current_record(PDO $pdo): array {
 function audit_list(PDO $pdo): array {
     $rows = $pdo->query('SELECT id,actor_id,actor_name,action,summary,created_at,undone,before_json FROM audit_logs ORDER BY id DESC LIMIT 50')->fetchAll(PDO::FETCH_ASSOC);
     $historySeen = false;
+    // 取り消し可能なのは、履歴上で最後に行われたデータ変更だけです。
     return array_map(function($row) use (&$historySeen) {
         $canUndo = false;
         if (!$historySeen && $row['before_json'] !== null) {
@@ -144,6 +156,7 @@ function require_post(): void {
 }
 
 function require_auth(): string {
+    // 更新系APIはログイン済みセッションとCSRFトークンの両方を要求します。
     $memberId = $_SESSION['member_id'] ?? '';
     if ($memberId === '') respond(['error'=>'ログインが必要です'], 401);
     $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
@@ -166,8 +179,10 @@ function bootstrap_payload(PDO $pdo): array {
 $pdo = db();
 $action = $_GET['action'] ?? 'bootstrap';
 
+// 初期データ取得とログイン状態確認。
 if ($action === 'bootstrap') respond(bootstrap_payload($pdo));
 
+// デモ認証：選択された有効なユーザーをセッションへ記録します。
 if ($action === 'login') {
     require_post();
     $input = body();
@@ -192,6 +207,7 @@ if ($action === 'logout') {
 }
 
 if ($action === 'save') {
+    // 受信時のversionが最新値と一致した場合だけ、状態と監査ログを同じ取引で更新します。
     require_post();
     $actorId = require_auth();
     $input = body();
@@ -217,6 +233,7 @@ if ($action === 'save') {
 }
 
 if ($action === 'undo') {
+    // 指定された監査ログのbefore_jsonを復元し、取り消し自体も新しい履歴として残します。
     require_post();
     $actorId = require_auth();
     $input = body();

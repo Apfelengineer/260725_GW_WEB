@@ -1,8 +1,11 @@
+/** D1導入時の一覧取得・新規登録APIの参考実装です（本体からは未使用）。 */
+
 import { desc } from "drizzle-orm";
 import { getDb } from "../../../../../db";
 import { notes } from "../../../db/schema";
 
 function toRouteErrorMessage(error: unknown) {
+  // テーブル未作成の場合は、運用者が次に行う作業を含む説明へ置き換えます。
   const message = error instanceof Error ? error.message : "Unexpected error";
   const detail =
     error instanceof Error && error.cause instanceof Error ? error.cause.message : "";
@@ -16,6 +19,7 @@ function toRouteErrorMessage(error: unknown) {
 }
 
 export async function GET() {
+  // 新しい順に最大20件を返します。
   try {
     const db = getDb();
     const rows = await db
@@ -34,6 +38,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  // タイトルを必須として検証し、登録したレコードをそのまま返します。
   try {
     const payload = (await request.json()) as {
       title?: string;

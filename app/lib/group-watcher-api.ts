@@ -1,3 +1,8 @@
+/**
+ * 画面と共有APIの間で使用するデータ型、初期デモデータ、通信処理をまとめた層です。
+ * 本番APIへ切り替える場合も、画面側はこの公開インターフェースを利用します。
+ */
+
 export type PresenceState = "在席" | "外出" | "会議中" | "休暇" | "離席";
 
 export type Member = {
@@ -76,6 +81,7 @@ export type BootstrapResponse = {
 
 export const groups = ["すべてのグループ", "営業部", "開発部", "管理部", "試験室"] as const;
 
+// サーバーへ接続できない場合でも画面確認できるよう、同じ型のデモデータを同梱します。
 export const demoCategories: ScheduleCategory[] = [
   { id: "cat-meeting", name: "会議", color: "#5086bd" },
   { id: "cat-visit", name: "訪問", color: "#e87556" },
@@ -234,6 +240,7 @@ export const demoMessages: MessageItem[] = [
  * API 接続の差し替え口です。
  * 実API受領後は、UIを変更せずこのオブジェクトの実装を HTTP 通信へ置き換えます。
  */
+// PHP APIの各操作を集約し、HTTPエラー時は状態コードと最新データを呼び出し元へ渡します。
 export const groupWatcherApi = {
   async request<T>(action: string, options?: RequestInit): Promise<T> {
     const response = await fetch(`./api.php?action=${encodeURIComponent(action)}`, {

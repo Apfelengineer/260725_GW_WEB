@@ -1,3 +1,7 @@
+/**
+ * 試験室3室の空き状況を、共有スケジュールから直近3か月分へ集計する公開画面です。
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import { groupWatcherApi, japaneseHolidays, type Member, type ScheduleItem } from "./lib/group-watcher-api";
 import "./reservations.css";
@@ -29,6 +33,7 @@ function daysBetween(from: string, to: string) {
 }
 
 function occursOn(item: ScheduleItem, targetKey: string) {
+  // メイン予定表と同じ規則で、複数日・繰り返し予定が対象日に該当するか判定します。
   const duration = Math.max(0, daysBetween(item.date, item.endDate || item.date));
   const offset = daysBetween(item.date, targetKey);
   if (offset < 0) return false;
@@ -57,6 +62,7 @@ function minutes(value: string) {
 type DayStatus = { morning: boolean; afternoon: boolean; maintenance: boolean };
 
 function dayStatus(schedules: ScheduleItem[], roomId: string, key: string): DayStatus {
+  // 「会議」は予約、「作業」はメンテナンスとして午前・午後の占有状況へ変換します。
   const items = schedules.filter((item) => item.memberId === roomId && occursOn(item, key));
   if (items.some((item) => item.category === "作業")) return { morning: false, afternoon: false, maintenance: true };
   const bookings = items.filter((item) => item.category === "会議");
@@ -68,6 +74,7 @@ function dayStatus(schedules: ScheduleItem[], roomId: string, key: string): DayS
 }
 
 function MonthCalendar({ month, roomId, schedules }: { month: Date; roomId: string; schedules: ScheduleItem[] }) {
+  // 月初の曜日に合わせて空セルを補い、日曜始まりの7列カレンダーを構成します。
   const first = new Date(month.getFullYear(), month.getMonth(), 1, 12);
   const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0, 12).getDate();
   const cells: Array<Date | null> = Array.from({ length: first.getDay() }, () => null);
@@ -76,6 +83,7 @@ function MonthCalendar({ month, roomId, schedules }: { month: Date; roomId: stri
 
   const businessDays = cells.filter((date): date is Date => Boolean(date) && date!.getDay() !== 0 && date!.getDay() !== 6 && !japaneseHolidays.some((holiday) => holiday.date === dateKey(date!)));
   const fullyBooked = businessDays.length > 0 && businessDays.every((date) => {
+    // 土日祝を除く全営業日が埋まった月だけ、キャンセル待ち表示を重ねます。
     const status = dayStatus(schedules, roomId, dateKey(date));
     return status.maintenance || (status.morning && status.afternoon);
   });
