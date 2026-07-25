@@ -20,6 +20,7 @@ export type ScheduleItem = {
   endDate?: string;
   start: string;
   end: string;
+  timePreset?: "custom" | "all-day" | "morning" | "afternoon";
   title: string;
   category: string;
   private?: boolean;

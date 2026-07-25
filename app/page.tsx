@@ -122,6 +122,13 @@ function categoryStyle(name: string, categories: ScheduleCategory[]) {
   return { "--event-color": color, "--event-bg": `${color}18` } as React.CSSProperties;
 }
 
+function scheduleTimeLabel(item: ScheduleItem) {
+  if (item.timePreset === "all-day") return "終日";
+  if (item.timePreset === "morning") return "午前";
+  if (item.timePreset === "afternoon") return "午後";
+  return item.start;
+}
+
 function SectionIcon({ symbol }: { symbol: string }) {
   return <span className="nav-symbol" aria-hidden="true">{symbol}</span>;
 }
@@ -390,13 +397,20 @@ export default function Home() {
       setToast("終了日は開始日以降にしてください");
       return;
     }
+    const timePreset = String(form.get("timePreset") ?? "custom") as NonNullable<ScheduleItem["timePreset"]>;
+    const presetTimes = timePreset === "all-day" ? ["00:00", "23:59"] : timePreset === "morning" ? ["09:00", "12:00"] : timePreset === "afternoon" ? ["13:00", "17:00"] : [String(form.get("start")), String(form.get("end"))];
+    if (startDate === endDate && presetTimes[1] <= presetTimes[0]) {
+      setToast("終了時刻は開始時刻より後にしてください");
+      return;
+    }
     const nextItem: ScheduleItem = {
       id: scheduleEditor.mode === "edit" ? scheduleEditor.item.id : `s-${Date.now()}`,
       memberId: String(form.get("memberId")),
       date: startDate,
       endDate,
-      start: String(form.get("start")),
-      end: String(form.get("end")),
+      start: presetTimes[0],
+      end: presetTimes[1],
+      timePreset,
       title,
       category: String(form.get("category")),
       memo: String(form.get("memo") ?? ""),
@@ -849,9 +863,9 @@ function ScheduleEventButton({ item, categories, selected, cutting, compact = fa
       onClick={(event) => { event.stopPropagation(); onSelect(item); }}
       onDoubleClick={(event) => { event.stopPropagation(); onEdit(item); }}
       onContextMenu={(event) => onContextMenu(event, item)}
-      title={`${item.start}–${item.end} ${item.title}（ダブルクリックで編集）`}
+      title={`${item.timePreset === "all-day" ? "終日" : `${item.start}–${item.end}`} ${item.title}（ダブルクリックで編集）`}
     >
-      {compact ? <><i />{item.start} {item.repeat && item.repeat !== "none" ? "↻ " : ""}{item.private ? "【非】" : ""}{item.title}</> : <><time>{item.start}{item.endDate && item.endDate !== item.date ? "・複数日" : ""}</time><strong>{item.repeat && item.repeat !== "none" ? "↻ " : ""}{item.reminderMinutes ? "♢ " : ""}{item.private ? "【非】" : ""}{item.title}</strong>{item.memo && <span className="memo-mark">◆</span>}</>}
+      {compact ? <><i />{scheduleTimeLabel(item)} {item.repeat && item.repeat !== "none" ? "↻ " : ""}{item.private ? "【非】" : ""}{item.title}</> : <><time>{scheduleTimeLabel(item)}{item.endDate && item.endDate !== item.date ? "・複数日" : ""}</time><strong>{item.repeat && item.repeat !== "none" ? "↻ " : ""}{item.reminderMinutes ? "♢ " : ""}{item.private ? "【非】" : ""}{item.title}</strong>{item.memo && <span className="memo-mark">◆</span>}</>}
     </button>
   );
 }
@@ -969,7 +983,7 @@ function TodayCard({ members, schedules }: { members: Member[]; schedules: Sched
       <div className="rail-card-heading"><div><span className="eyebrow">TODAY</span><h2>今日のチーム</h2></div><span className="date-badge"><b>{today.getDate()}</b>{weekdayNames[today.getDay()]}</span></div>
       <div className="presence-summary"><div><b>{members.filter((member) => member.presence === "在席").length}</b><span>在席</span></div><div><b>{members.filter((member) => ["外出", "会議中", "離席"].includes(member.presence)).length}</b><span>外出・離席</span></div><div><b>{members.filter((member) => member.presence === "休暇").length}</b><span>休暇</span></div></div>
       <div className="today-list">
-        {todayItems.length ? todayItems.map((item) => { const member = members.find((person) => person.id === item.memberId); return member ? <div key={item.id}><Avatar member={member} small /><span><b>{item.start} {item.title}</b><small>{member.name} ・ {item.end}まで</small></span></div> : null; }) : <span className="rail-empty">今日の予定はありません</span>}
+        {todayItems.length ? todayItems.map((item) => { const member = members.find((person) => person.id === item.memberId); return member ? <div key={item.id}><Avatar member={member} small /><span><b>{scheduleTimeLabel(item)} {item.title}</b><small>{member.name} ・ {item.timePreset === "all-day" ? "終日" : `${item.end}まで`}</small></span></div> : null; }) : <span className="rail-empty">今日の予定はありません</span>}
       </div>
     </section>
   );
@@ -1041,17 +1055,29 @@ function ModalShell({ title, eyebrow, onClose, children }: { title: string; eyeb
 
 function ScheduleModal({ editor, members, categories, onClose, onSubmit, onDelete }: { editor: EditorState; members: Member[]; categories: ScheduleCategory[]; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onDelete?: () => void }) {
   const item = editor.mode === "edit" ? editor.item : null;
+  const initialPreset: NonNullable<ScheduleItem["timePreset"]> = item?.timePreset ?? (item?.start === "00:00" && item?.end === "23:59" ? "all-day" : item?.start === "09:00" && item?.end === "12:00" ? "morning" : item?.start === "13:00" && item?.end === "17:00" ? "afternoon" : "custom");
+  const [timePreset, setTimePreset] = useState(initialPreset);
+  const [startTime, setStartTime] = useState(item?.start ?? "13:00");
+  const [endTime, setEndTime] = useState(item?.end ?? "14:00");
+
+  function changeTimePreset(value: NonNullable<ScheduleItem["timePreset"]>) {
+    setTimePreset(value);
+    if (value === "all-day") { setStartTime("00:00"); setEndTime("23:59"); }
+    if (value === "morning") { setStartTime("09:00"); setEndTime("12:00"); }
+    if (value === "afternoon") { setStartTime("13:00"); setEndTime("17:00"); }
+  }
   return (
     <ModalShell title={item ? "予定を編集" : "予定を登録"} eyebrow={item ? "EDIT SCHEDULE" : "NEW SCHEDULE"} onClose={onClose}>
       <form onSubmit={onSubmit} className="modal-form">
         <label className="field full"><span>件名</span><input name="title" autoFocus placeholder="例：プロジェクト定例会" defaultValue={item?.title ?? ""} required /></label>
         <label className="field full"><span>ユーザー</span><select name="memberId" defaultValue={item?.memberId ?? (editor.mode === "create" ? editor.memberId : members[0]?.id)}>{members.map((member) => <option value={member.id} key={member.id}>{member.name}（{member.group}）</option>)}</select><small className="field-note">誰の予定でも変更できます</small></label>
+        <label className="field full"><span>時間帯</span><select name="timePreset" value={timePreset} onChange={(event) => changeTimePreset(event.target.value as NonNullable<ScheduleItem["timePreset"]>)}><option value="custom">時間を指定</option><option value="all-day">終日</option><option value="morning">午前（9:00–12:00）</option><option value="afternoon">午後（13:00–17:00）</option></select><small className="field-note">午前・午後・終日を選ぶと時刻が自動入力されます</small></label>
         <label className="field"><span>開始日</span><input name="date" type="date" defaultValue={item?.date ?? (editor.mode === "create" ? editor.date : "")} required /></label>
         <label className="field"><span>終了日</span><input name="endDate" type="date" defaultValue={item?.endDate ?? item?.date ?? (editor.mode === "create" ? editor.date : "")} required /></label>
         <label className="field"><span>予定種別</span><select name="category" defaultValue={item?.category ?? categories[0]?.name}>{categories.map((category) => <option key={category.id}>{category.name}</option>)}</select></label>
         <label className="field"><span>繰り返し</span><select name="repeat" defaultValue={item?.repeat ?? "none"}><option value="none">繰り返さない</option><option value="daily">毎日</option><option value="weekly">毎週</option><option value="monthly">毎月</option></select></label>
-        <label className="field"><span>開始</span><input name="start" type="time" defaultValue={item?.start ?? "13:00"} required /></label>
-        <label className="field"><span>終了</span><input name="end" type="time" defaultValue={item?.end ?? "14:00"} required /></label>
+        <label className="field"><span>開始</span><input name="start" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} readOnly={timePreset !== "custom"} required /></label>
+        <label className="field"><span>終了</span><input name="end" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} readOnly={timePreset !== "custom"} required /></label>
         <label className="field"><span>繰り返し終了日</span><input name="repeatUntil" type="date" defaultValue={item?.repeatUntil ?? item?.endDate ?? item?.date ?? (editor.mode === "create" ? editor.date : "")} /></label>
         <label className="field"><span>リマインダー</span><select name="reminderMinutes" defaultValue={item?.reminderMinutes ?? 0}><option value="0">なし</option><option value="5">5分前</option><option value="10">10分前</option><option value="15">15分前</option><option value="30">30分前</option><option value="60">1時間前</option><option value="1440">1日前</option></select></label>
         <label className="field full"><span>メモ</span><textarea name="memo" placeholder="場所、持ち物、共有事項など" rows={3} defaultValue={item?.memo ?? ""} /></label>

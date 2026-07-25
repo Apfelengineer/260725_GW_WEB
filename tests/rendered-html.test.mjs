@@ -26,6 +26,10 @@ test("Group Watcher の主要機能を提供する", async () => {
   assert.match(page, /LoginScreen/);
   assert.match(page, /新規予定作成/);
   assert.match(page, /name="endDate"/);
+  assert.match(page, /name="timePreset"/);
+  assert.match(page, /午前（9:00–12:00）/);
+  assert.match(page, /午後（13:00–17:00）/);
+  assert.match(page, /終日/);
   assert.match(page, /リマインダー/);
   assert.match(page, /操作履歴/);
   assert.match(page, /scheduleOccursOn/);
