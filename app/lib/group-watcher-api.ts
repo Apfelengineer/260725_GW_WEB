@@ -20,9 +20,15 @@ export type ScheduleItem = {
   start: string;
   end: string;
   title: string;
-  category: "会議" | "訪問" | "作業" | "休暇" | "その他";
+  category: string;
   private?: boolean;
   memo?: string;
+};
+
+export type ScheduleCategory = {
+  id: string;
+  name: string;
+  color: string;
 };
 
 export type MessageItem = {
@@ -37,6 +43,14 @@ export type MessageItem = {
 };
 
 export const groups = ["すべてのグループ", "営業部", "開発部", "管理部"] as const;
+
+export const demoCategories: ScheduleCategory[] = [
+  { id: "cat-meeting", name: "会議", color: "#5086bd" },
+  { id: "cat-visit", name: "訪問", color: "#e87556" },
+  { id: "cat-work", name: "作業", color: "#209885" },
+  { id: "cat-vacation", name: "休暇", color: "#9a83c8" },
+  { id: "cat-other", name: "その他", color: "#d09839" },
+];
 
 export const demoMembers: Member[] = [
   {
