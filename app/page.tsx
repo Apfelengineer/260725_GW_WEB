@@ -669,6 +669,7 @@ export default function Home() {
           <button className={section === "schedule" ? "active" : ""} onClick={() => setSection("schedule")}><SectionIcon symbol="▦" /><span>スケジュール</span></button>
           <button className={section === "presence" ? "active" : ""} onClick={() => setSection("presence")}><SectionIcon symbol="⌖" /><span>行き先・在席</span></button>
           <button className={section === "messages" ? "active" : ""} onClick={() => setSection("messages")}><SectionIcon symbol="✉" /><span>メッセージ</span>{unreadCount > 0 && <em>{unreadCount}</em>}</button>
+          <button onClick={() => window.location.assign("./reservations.html?room=m6")}><SectionIcon symbol="▤" /><span>試験室予約</span></button>
           <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>ユーザー・設定</span></button>
         </nav>
 
@@ -752,6 +753,7 @@ export default function Home() {
         <button className={section === "presence" ? "active" : ""} onClick={() => setSection("presence")}><SectionIcon symbol="⌖" /><span>行き先</span></button>
         <button className="mobile-add" onClick={() => openCreateSchedule()} aria-label="予定を登録">＋</button>
         <button className={section === "messages" ? "active" : ""} onClick={() => setSection("messages")}><SectionIcon symbol="✉" /><span>伝言</span></button>
+        <button onClick={() => window.location.assign("./reservations.html?room=m6")}><SectionIcon symbol="▤" /><span>予約</span></button>
         <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>設定</span></button>
       </nav>
 

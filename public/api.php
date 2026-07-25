@@ -65,6 +65,23 @@ function initial_state(): array {
     ];
 }
 
+function room_demo_schedules(): array {
+    return [
+        ['id'=>'room-demo-m6-july','memberId'=>'m6','date'=>'2026-07-01','endDate'=>'2026-07-01','start'=>'00:00','end'=>'23:59','timePreset'=>'all-day','title'=>'電波暗室 予約済み','category'=>'会議','repeat'=>'daily','repeatUntil'=>'2026-07-31'],
+        ['id'=>'room-demo-m7-1','memberId'=>'m7','date'=>'2026-07-27','start'=>'09:00','end'=>'12:00','timePreset'=>'morning','title'=>'材料評価','category'=>'会議'],
+        ['id'=>'room-demo-m7-2','memberId'=>'m7','date'=>'2026-07-28','start'=>'13:00','end'=>'17:00','timePreset'=>'afternoon','title'=>'耐久試験','category'=>'会議'],
+        ['id'=>'room-demo-m7-3','memberId'=>'m7','date'=>'2026-07-29','start'=>'09:00','end'=>'17:00','title'=>'終日試験','category'=>'会議'],
+        ['id'=>'room-demo-m7-4','memberId'=>'m7','date'=>'2026-07-30','start'=>'09:00','end'=>'17:00','title'=>'設備点検','category'=>'作業'],
+        ['id'=>'room-demo-m7-5','memberId'=>'m7','date'=>'2026-08-05','start'=>'09:00','end'=>'12:00','timePreset'=>'morning','title'=>'部材試験','category'=>'会議'],
+        ['id'=>'room-demo-m7-6','memberId'=>'m7','date'=>'2026-08-12','start'=>'09:00','end'=>'17:00','title'=>'定期メンテナンス','category'=>'作業'],
+        ['id'=>'room-demo-m8-1','memberId'=>'m8','date'=>'2026-07-27','start'=>'13:00','end'=>'17:00','timePreset'=>'afternoon','title'=>'通信評価','category'=>'会議'],
+        ['id'=>'room-demo-m8-2','memberId'=>'m8','date'=>'2026-08-03','start'=>'09:00','end'=>'17:00','title'=>'情報機器試験','category'=>'会議'],
+        ['id'=>'room-demo-m8-3','memberId'=>'m8','date'=>'2026-08-18','start'=>'09:00','end'=>'17:00','title'=>'設備校正','category'=>'作業'],
+        ['id'=>'room-demo-m8-4','memberId'=>'m8','date'=>'2026-09-07','start'=>'09:00','end'=>'12:00','timePreset'=>'morning','title'=>'EMC事前評価','category'=>'会議'],
+        ['id'=>'room-demo-m8-5','memberId'=>'m8','date'=>'2026-09-15','start'=>'13:00','end'=>'17:00','timePreset'=>'afternoon','title'=>'電子情報評価','category'=>'会議'],
+    ];
+}
+
 function db(): PDO {
     static $pdo;
     if ($pdo instanceof PDO) return $pdo;
@@ -75,10 +92,23 @@ function db(): PDO {
     $pdo->exec('PRAGMA journal_mode=WAL');
     $pdo->exec('CREATE TABLE IF NOT EXISTS app_state (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)');
     $pdo->exec('CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id TEXT NOT NULL, actor_name TEXT NOT NULL, action TEXT NOT NULL, summary TEXT NOT NULL, before_json TEXT, after_json TEXT, created_at TEXT NOT NULL, undone INTEGER NOT NULL DEFAULT 0)');
+    $pdo->exec('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
     $count = (int)$pdo->query('SELECT COUNT(*) FROM app_state')->fetchColumn();
     if ($count === 0) {
         $stmt = $pdo->prepare('INSERT INTO app_state(id,payload,version,updated_at) VALUES(1,?,1,?)');
         $stmt->execute([json_encode(initial_state(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), date(DATE_ATOM)]);
+    }
+    $seeded = $pdo->query("SELECT value FROM app_meta WHERE key='room_demo_v1'")->fetchColumn();
+    if ($seeded === false) {
+        $row = $pdo->query('SELECT payload,version FROM app_state WHERE id=1')->fetch(PDO::FETCH_ASSOC);
+        $state = json_decode($row['payload'], true);
+        $known = array_column($state['schedules'] ?? [], 'id');
+        foreach (room_demo_schedules() as $schedule) {
+            if (!in_array($schedule['id'], $known, true)) $state['schedules'][] = $schedule;
+        }
+        $stmt = $pdo->prepare('UPDATE app_state SET payload=?,version=?,updated_at=? WHERE id=1');
+        $stmt->execute([json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), (int)$row['version'] + 1, date(DATE_ATOM)]);
+        $pdo->prepare("INSERT INTO app_meta(key,value) VALUES('room_demo_v1','1')")->execute();
     }
     return $pdo;
 }

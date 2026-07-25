@@ -49,3 +49,25 @@ test("Group Watcher の主要機能を提供する", async () => {
 test("共有用画像を同梱する", async () => {
   await access(new URL("public/og.png", root));
 });
+
+test("試験室3室の予約状況ページを提供する", async () => {
+  const [page, styles, vite, phpApi] = await Promise.all([
+    readFile(new URL("app/reservations-page.tsx", root), "utf8"),
+    readFile(new URL("app/reservations.css", root), "utf8"),
+    readFile(new URL("vite.sakura.config.ts", root), "utf8"),
+    readFile(new URL("public/api.php", root), "utf8"),
+  ]);
+  assert.match(page, /電波暗室/);
+  assert.match(page, /電材室/);
+  assert.match(page, /電子情報研究室/);
+  assert.match(page, /▲/);
+  assert.match(page, /▼/);
+  assert.match(page, /メンテナンス/);
+  assert.match(page, /キャンセル待ち/);
+  assert.match(page, /length: 3/);
+  assert.match(styles, /sold-out-overlay/);
+  assert.match(styles, /reservation-day\.saturday/);
+  assert.match(styles, /reservation-day\.sunday/);
+  assert.match(vite, /reservations\.html/);
+  assert.match(phpApi, /room_demo_v1/);
+});

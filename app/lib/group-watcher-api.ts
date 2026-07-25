@@ -163,6 +163,18 @@ export const demoSchedules: ScheduleItem[] = [
   { id: "s12", memberId: "m4", date: "2026-07-24", start: "10:00", end: "12:00", title: "データ移行検証", category: "作業" },
   { id: "s13", memberId: "m5", date: "2026-07-21", start: "09:00", end: "18:00", title: "有給休暇", category: "休暇", private: true },
   { id: "s14", memberId: "m5", date: "2026-07-23", start: "10:00", end: "11:00", title: "採用面談", category: "会議" },
+  { id: "room-demo-m6-july", memberId: "m6", date: "2026-07-01", endDate: "2026-07-01", start: "00:00", end: "23:59", timePreset: "all-day", title: "電波暗室 予約済み", category: "会議", repeat: "daily", repeatUntil: "2026-07-31" },
+  { id: "room-demo-m7-1", memberId: "m7", date: "2026-07-27", start: "09:00", end: "12:00", timePreset: "morning", title: "材料評価", category: "会議" },
+  { id: "room-demo-m7-2", memberId: "m7", date: "2026-07-28", start: "13:00", end: "17:00", timePreset: "afternoon", title: "耐久試験", category: "会議" },
+  { id: "room-demo-m7-3", memberId: "m7", date: "2026-07-29", start: "09:00", end: "17:00", title: "終日試験", category: "会議" },
+  { id: "room-demo-m7-4", memberId: "m7", date: "2026-07-30", start: "09:00", end: "17:00", title: "設備点検", category: "作業" },
+  { id: "room-demo-m7-5", memberId: "m7", date: "2026-08-05", start: "09:00", end: "12:00", timePreset: "morning", title: "部材試験", category: "会議" },
+  { id: "room-demo-m7-6", memberId: "m7", date: "2026-08-12", start: "09:00", end: "17:00", title: "定期メンテナンス", category: "作業" },
+  { id: "room-demo-m8-1", memberId: "m8", date: "2026-07-27", start: "13:00", end: "17:00", timePreset: "afternoon", title: "通信評価", category: "会議" },
+  { id: "room-demo-m8-2", memberId: "m8", date: "2026-08-03", start: "09:00", end: "17:00", title: "情報機器試験", category: "会議" },
+  { id: "room-demo-m8-3", memberId: "m8", date: "2026-08-18", start: "09:00", end: "17:00", title: "設備校正", category: "作業" },
+  { id: "room-demo-m8-4", memberId: "m8", date: "2026-09-07", start: "09:00", end: "12:00", timePreset: "morning", title: "EMC事前評価", category: "会議" },
+  { id: "room-demo-m8-5", memberId: "m8", date: "2026-09-15", start: "13:00", end: "17:00", timePreset: "afternoon", title: "電子情報評価", category: "会議" },
 ];
 
 export const japaneseHolidays: Holiday[] = [
