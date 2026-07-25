@@ -5,8 +5,8 @@ import "./reservations.css";
 const roomIds = ["m6", "m7", "m8"];
 const fallbackRooms: Pick<Member, "id" | "name" | "initials">[] = [
   { id: "m6", name: "電波暗室", initials: "電波" },
-  { id: "m7", name: "電材室", initials: "電材" },
-  { id: "m8", name: "電子情報研究室", initials: "電子" },
+  { id: "m7", name: "電磁波妨害評価装置(G-TEM)", initials: "G-TEM" },
+  { id: "m8", name: "パルスサージシステム", initials: "サージ" },
 ];
 const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -117,11 +117,14 @@ export default function ReservationsPage() {
   const months = useMemo(() => Array.from({ length: 3 }, (_, index) => addMonths(new Date(), index)), []);
 
   useEffect(() => {
-    document.title = `${room.name} 予約状況 | Group Watcher`;
+    document.title = `${room.name} 空き状況 | Group Watcher`;
     groupWatcherApi.bootstrap().then((payload) => {
       setSchedules(payload.state.schedules);
       const dbRooms = payload.state.members.filter((member) => roomIds.includes(member.id));
-      if (dbRooms.length === 3) setRooms(dbRooms);
+      if (dbRooms.length === 3) setRooms(dbRooms.map((member) => {
+        const display = fallbackRooms.find((item) => item.id === member.id);
+        return { ...member, name: display?.name ?? member.name, initials: display?.initials ?? member.initials };
+      }));
     }).catch(() => setError("予約データを取得できませんでした。時間をおいて再読み込みしてください。"))
       .finally(() => setLoading(false));
   }, [room.name]);
@@ -132,7 +135,7 @@ export default function ReservationsPage() {
       <section className="reservation-board">
         <header className="reservation-header">
           <span className="room-emblem">{room.initials}</span>
-          <div><small>GROUP WATCHER / LAB RESERVATION</small><h1>{room.name} 予約状況</h1><p>「会議」を予約済み、「作業」をメンテナンスとして表示しています</p></div>
+          <div><small>GROUP WATCHER / LAB AVAILABILITY</small><h1>{room.name} 空き状況</h1>{roomId === "m8" && <p className="equipment-note">(入力インパルス試験機、静電気試験機、サージイミュニティ試験機、FTB試験機、低周波EMC試験機)</p>}</div>
           <time>更新：{new Date().toLocaleString("ja-JP", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
         </header>
 
@@ -154,7 +157,12 @@ export default function ReservationsPage() {
           <span><b>ー</b>メンテナンス</span>
         </div>
 
-        <footer><a href="./">Group Watcherへ戻る</a><p>予約の登録・変更はGroup Watcherのスケジュール画面から行ってください。</p></footer>
+        <div className="reservation-contact"><strong>ご予約・お問い合わせ:xxx@yyy/075-xxx-xxxx</strong><small>ご利用の際には必ずメールか電話でお問い合わせをお願いします。</small></div>
+
+        <footer>{/* 静的なSakura向けViteページのため、添付PNGを直接表示します。 */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="./technology-center-logo-white.png" alt="技術センター" />
+        </footer>
       </section>
     </main>
   );

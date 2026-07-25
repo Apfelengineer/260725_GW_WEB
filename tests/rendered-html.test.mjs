@@ -50,7 +50,7 @@ test("共有用画像を同梱する", async () => {
   await access(new URL("public/og.png", root));
 });
 
-test("試験室3室の予約状況ページを提供する", async () => {
+test("試験室3室の空き状況ページを提供する", async () => {
   const [page, styles, vite, phpApi] = await Promise.all([
     readFile(new URL("app/reservations-page.tsx", root), "utf8"),
     readFile(new URL("app/reservations.css", root), "utf8"),
@@ -58,8 +58,13 @@ test("試験室3室の予約状況ページを提供する", async () => {
     readFile(new URL("public/api.php", root), "utf8"),
   ]);
   assert.match(page, /電波暗室/);
-  assert.match(page, /電材室/);
-  assert.match(page, /電子情報研究室/);
+  assert.match(page, /電磁波妨害評価装置\(G-TEM\)/);
+  assert.match(page, /パルスサージシステム/);
+  assert.match(page, /入力インパルス試験機/);
+  assert.match(page, /ご予約・お問い合わせ:xxx@yyy\/075-xxx-xxxx/);
+  assert.match(page, /必ずメールか電話でお問い合わせ/);
+  assert.match(page, /technology-center-logo-white\.png/);
+  assert.doesNotMatch(page, /Group Watcherへ戻る|予約の登録・変更/);
   assert.match(page, /▲/);
   assert.match(page, /▼/);
   assert.match(page, /メンテナンス/);
@@ -74,4 +79,5 @@ test("試験室3室の予約状況ページを提供する", async () => {
   assert.match(styles, /reservation-day\.sunday/);
   assert.match(vite, /reservations\.html/);
   assert.match(phpApi, /room_demo_v1/);
+  await access(new URL("public/technology-center-logo-white.png", root));
 });
