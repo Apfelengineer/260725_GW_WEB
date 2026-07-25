@@ -91,10 +91,12 @@ function MonthCalendar({ month, roomId, schedules }: { month: Date; roomId: stri
           const holiday = japaneseHolidays.find((item) => item.date === key);
           const status = dayStatus(schedules, roomId, key);
           const both = status.morning && status.afternoon;
+          const marker = status.maintenance ? "ー" : both ? "" : status.morning ? "▼" : status.afternoon ? "▲" : "";
+          const hideDate = status.maintenance || Boolean(marker);
           return (
-            <span className={`reservation-day ${date.getDay() === 6 ? "saturday" : ""} ${date.getDay() === 0 || holiday ? "sunday holiday" : ""} ${both ? "both" : ""} ${status.maintenance ? "maintenance" : ""}`} key={key} title={holiday?.name ?? ""}>
-              <b>{date.getDate()}</b>
-              <i>{status.maintenance ? "ー" : both ? "▲▼" : status.morning ? "▲" : status.afternoon ? "▼" : ""}</i>
+            <span className={`reservation-day ${date.getDay() === 6 ? "saturday" : ""} ${date.getDay() === 0 || holiday ? "sunday holiday" : ""} ${both ? "both" : ""} ${status.maintenance ? "maintenance" : ""} ${hideDate ? "marker-only" : ""}`} key={key} title={holiday?.name ?? ""}>
+              {!hideDate && <b>{date.getDate()}</b>}
+              <i>{marker}</i>
             </span>
           );
         })}
@@ -145,10 +147,10 @@ export default function ReservationsPage() {
         )}
 
         <div className="reservation-legend">
-          <span><i className="legend-box full" />午前・午後とも予約済み</span>
+          <span><i className="legend-box full" />予約済み</span>
           <span><i className="legend-box open" />予約なし</span>
-          <span><b className="up">▲</b>9:00〜12:00に予約</span>
-          <span><b className="down">▼</b>13:00〜17:00に予約</span>
+          <span><b className="up">▲</b>予約可（午前のみ）</span>
+          <span><b className="down">▼</b>予約可（午後のみ）</span>
           <span><b>ー</b>メンテナンス</span>
         </div>
 

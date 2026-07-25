@@ -64,6 +64,10 @@ test("試験室3室の予約状況ページを提供する", async () => {
   assert.match(page, /▼/);
   assert.match(page, /メンテナンス/);
   assert.match(page, /キャンセル待ち/);
+  assert.match(page, /予約可（午前のみ）/);
+  assert.match(page, /予約可（午後のみ）/);
+  assert.match(page, /status\.morning \? "▼"/);
+  assert.match(page, /status\.afternoon \? "▲"/);
   assert.match(page, /length: 3/);
   assert.match(styles, /sold-out-overlay/);
   assert.match(styles, /reservation-day\.saturday/);
