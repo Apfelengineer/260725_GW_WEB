@@ -1,5 +1,5 @@
 {
-  "name": "group-watcher-web",
+  "name": "kptc-scheduler-web",
   "version": "0.1.0",
   "private": true,
   "engines": {

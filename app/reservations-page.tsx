@@ -117,7 +117,7 @@ export default function ReservationsPage() {
   const months = useMemo(() => Array.from({ length: 3 }, (_, index) => addMonths(new Date(), index)), []);
 
   useEffect(() => {
-    document.title = `${room.name} 空き状況 | Group Watcher`;
+    document.title = `${room.name} 空き状況 | KPTC Scheduler`;
     groupWatcherApi.bootstrap().then((payload) => {
       setSchedules(payload.state.schedules);
       const dbRooms = payload.state.members.filter((member) => roomIds.includes(member.id));
@@ -135,7 +135,7 @@ export default function ReservationsPage() {
       <section className="reservation-board">
         <header className="reservation-header">
           <span className="room-emblem">{room.initials}</span>
-          <div><small>GROUP WATCHER / LAB AVAILABILITY</small><h1>{room.name} 空き状況</h1>{roomId === "m8" && <p className="equipment-note">(入力インパルス試験機、静電気試験機、サージイミュニティ試験機、FTB試験機、低周波EMC試験機)</p>}</div>
+          <div><small>KPTC SCHEDULER / LAB AVAILABILITY</small><h1>{room.name} 空き状況</h1>{roomId === "m8" && <p className="equipment-note">(入力インパルス試験機、静電気試験機、サージイミュニティ試験機、FTB試験機、低周波EMC試験機)</p>}</div>
           <time>更新：{new Date().toLocaleString("ja-JP", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
         </header>
 

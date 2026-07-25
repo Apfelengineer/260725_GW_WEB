@@ -147,9 +147,9 @@ function StatusDot({ status }: { status: PresenceState }) {
 
 function Logo() {
   return (
-    <div className="brand-lockup" aria-label="Group Watcher">
-      <span className="brand-mark"><span>G</span></span>
-      <span className="brand-copy"><b>Group Watcher</b><small>チームの今を、ひと目で。</small></span>
+    <div className="brand-lockup" aria-label="KPTC Scheduler">
+      <span className="brand-mark"><span>K</span></span>
+      <span className="brand-copy"><b>KPTC Scheduler</b><small>チームの今を、ひと目で。</small></span>
     </div>
   );
 }

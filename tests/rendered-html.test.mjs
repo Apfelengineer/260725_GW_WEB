@@ -4,7 +4,7 @@ import test from "node:test";
 
 const root = new URL("../", import.meta.url);
 
-test("Group Watcher の主要機能を提供する", async () => {
+test("KPTC Scheduler の主要機能を提供する", async () => {
   const [page, layout, api, phpApi] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/layout.tsx", root), "utf8"),
@@ -42,7 +42,7 @@ test("Group Watcher の主要機能を提供する", async () => {
   assert.match(phpApi, /pdo_sqlite|sqlite:/);
   assert.match(phpApi, /audit_logs/);
   assert.match(phpApi, /CSRF|csrf/i);
-  assert.match(layout, /Group Watcher/);
+  assert.match(layout, /KPTC Scheduler/);
   assert.doesNotMatch(page, /SkeletonPreview|codex-preview/);
 });
 
@@ -64,7 +64,7 @@ test("試験室3室の空き状況ページを提供する", async () => {
   assert.match(page, /ご予約・お問い合わせ:xxx@yyy\/075-xxx-xxxx/);
   assert.match(page, /必ずメールか電話でお問い合わせ/);
   assert.match(page, /technology-center-logo-white\.png/);
-  assert.doesNotMatch(page, /Group Watcherへ戻る|予約の登録・変更/);
+  assert.doesNotMatch(page, /KPTC Schedulerへ戻る|予約の登録・変更/);
   assert.match(page, /▲/);
   assert.match(page, /▼/);
   assert.match(page, /メンテナンス/);

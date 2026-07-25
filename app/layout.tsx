@@ -26,19 +26,19 @@ export async function generateMetadata(): Promise<Metadata> {
   const origin = `${protocol}://${host}`;
 
   return {
-    title: "Group Watcher｜チームの予定と行き先をひと目で",
-    description: "予定共有、在席・行き先、伝言メモをひとつにまとめた Group Watcher のWEBブラウザ版です。",
-    applicationName: "Group Watcher",
+    title: "KPTC Scheduler｜チームの予定と行き先をひと目で",
+    description: "予定共有、在席・行き先、伝言メモをひとつにまとめた KPTC Scheduler のWEBブラウザ版です。",
+    applicationName: "KPTC Scheduler",
     openGraph: {
-      title: "Group Watcher",
+      title: "KPTC Scheduler",
       description: "チームの今を、ひと目で。予定・行き先・伝言をまとめて共有。",
       type: "website",
       locale: "ja_JP",
-      images: [{ url: new URL("/og.png", origin).toString(), width: 1200, height: 630, alt: "Group Watcher WEBブラウザ版" }],
+      images: [{ url: new URL("/og.png", origin).toString(), width: 1200, height: 630, alt: "KPTC Scheduler WEBブラウザ版" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Group Watcher",
+      title: "KPTC Scheduler",
       description: "チームの今を、ひと目で。",
       images: [new URL("/og.png", origin).toString()],
     },
