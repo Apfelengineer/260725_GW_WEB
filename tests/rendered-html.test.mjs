@@ -77,6 +77,7 @@ test("試験室3室の空き状況ページを提供する", async () => {
   assert.match(styles, /sold-out-overlay/);
   assert.match(styles, /reservation-day\.saturday/);
   assert.match(styles, /reservation-day\.sunday/);
+  assert.match(styles, /reservation-day\.both \{ color: #111; background: #555b60; \}/);
   assert.match(styles, /width: min\(340px,46%\)/);
   assert.match(vite, /reservations\.html/);
   assert.match(phpApi, /room_demo_v1/);
