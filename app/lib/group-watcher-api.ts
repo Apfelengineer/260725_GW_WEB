@@ -3,7 +3,7 @@ export type PresenceState = "在席" | "外出" | "会議中" | "休暇" | "離�
 export type Member = {
   id: string;
   name: string;
-  group: "営業部" | "開発部" | "管理部";
+  group: string;
   initials: string;
   color: string;
   presence: PresenceState;
@@ -17,12 +17,16 @@ export type ScheduleItem = {
   id: string;
   memberId: string;
   date: string;
+  endDate?: string;
   start: string;
   end: string;
   title: string;
   category: string;
   private?: boolean;
   memo?: string;
+  repeat?: "none" | "daily" | "weekly" | "monthly";
+  repeatUntil?: string;
+  reminderMinutes?: number;
 };
 
 export type ScheduleCategory = {
@@ -42,7 +46,34 @@ export type MessageItem = {
   kind: "message" | "memo";
 };
 
-export const groups = ["すべてのグループ", "営業部", "開発部", "管理部"] as const;
+export type Holiday = { date: string; name: string };
+
+export type SharedState = {
+  members: Member[];
+  schedules: ScheduleItem[];
+  categories: ScheduleCategory[];
+  messages: MessageItem[];
+};
+
+export type AuditEntry = {
+  id: number;
+  actorId: string;
+  actorName: string;
+  action: string;
+  summary: string;
+  createdAt: string;
+  canUndo: boolean;
+};
+
+export type BootstrapResponse = {
+  state: SharedState;
+  version: number;
+  currentUserId: string | null;
+  csrfToken: string;
+  audit: AuditEntry[];
+};
+
+export const groups = ["すべてのグループ", "営業部", "開発部", "管理部", "試験室"] as const;
 
 export const demoCategories: ScheduleCategory[] = [
   { id: "cat-meeting", name: "会議", color: "#5086bd" },
@@ -111,6 +142,9 @@ export const demoMembers: Member[] = [
     phone: "03-1234-5692",
     email: "yuki.ito@example.jp",
   },
+  { id: "m6", name: "電波暗室", group: "試験室", initials: "電波", color: "#536f91", presence: "在席", destination: "電波暗室", phone: "03-1234-5701", email: "anechoic@example.jp" },
+  { id: "m7", name: "電材室", group: "試験室", initials: "電材", color: "#417e72", presence: "在席", destination: "電材室", phone: "03-1234-5702", email: "materials@example.jp" },
+  { id: "m8", name: "電子情報研究室", group: "試験室", initials: "電子", color: "#765f9a", presence: "在席", destination: "電子情報研究室", phone: "03-1234-5703", email: "electronics@example.jp" },
 ];
 
 export const demoSchedules: ScheduleItem[] = [
@@ -128,6 +162,27 @@ export const demoSchedules: ScheduleItem[] = [
   { id: "s12", memberId: "m4", date: "2026-07-24", start: "10:00", end: "12:00", title: "データ移行検証", category: "作業" },
   { id: "s13", memberId: "m5", date: "2026-07-21", start: "09:00", end: "18:00", title: "有給休暇", category: "休暇", private: true },
   { id: "s14", memberId: "m5", date: "2026-07-23", start: "10:00", end: "11:00", title: "採用面談", category: "会議" },
+];
+
+export const japaneseHolidays: Holiday[] = [
+  { date: "2026-01-01", name: "元日" }, { date: "2026-01-12", name: "成人の日" },
+  { date: "2026-02-11", name: "建国記念の日" }, { date: "2026-02-23", name: "天皇誕生日" },
+  { date: "2026-03-20", name: "春分の日" }, { date: "2026-04-29", name: "昭和の日" },
+  { date: "2026-05-03", name: "憲法記念日" }, { date: "2026-05-04", name: "みどりの日" },
+  { date: "2026-05-05", name: "こどもの日" }, { date: "2026-05-06", name: "休日" },
+  { date: "2026-07-20", name: "海の日" }, { date: "2026-08-11", name: "山の日" },
+  { date: "2026-09-21", name: "敬老の日" }, { date: "2026-09-22", name: "休日" },
+  { date: "2026-09-23", name: "秋分の日" }, { date: "2026-10-12", name: "スポーツの日" },
+  { date: "2026-11-03", name: "文化の日" }, { date: "2026-11-23", name: "勤労感謝の日" },
+  { date: "2027-01-01", name: "元日" }, { date: "2027-01-11", name: "成人の日" },
+  { date: "2027-02-11", name: "建国記念の日" }, { date: "2027-02-23", name: "天皇誕生日" },
+  { date: "2027-03-21", name: "春分の日" }, { date: "2027-03-22", name: "休日" },
+  { date: "2027-04-29", name: "昭和の日" }, { date: "2027-05-03", name: "憲法記念日" },
+  { date: "2027-05-04", name: "みどりの日" }, { date: "2027-05-05", name: "こどもの日" },
+  { date: "2027-07-19", name: "海の日" }, { date: "2027-08-11", name: "山の日" },
+  { date: "2027-09-20", name: "敬老の日" }, { date: "2027-09-23", name: "秋分の日" },
+  { date: "2027-10-11", name: "スポーツの日" }, { date: "2027-11-03", name: "文化の日" },
+  { date: "2027-11-23", name: "勤労感謝の日" },
 ];
 
 export const demoMessages: MessageItem[] = [
@@ -167,13 +222,29 @@ export const demoMessages: MessageItem[] = [
  * 実API受領後は、UIを変更せずこのオブジェクトの実装を HTTP 通信へ置き換えます。
  */
 export const groupWatcherApi = {
-  async getMembers() {
-    return demoMembers;
+  async request<T>(action: string, options?: RequestInit): Promise<T> {
+    const response = await fetch(`./api.php?action=${encodeURIComponent(action)}`, {
+      credentials: "same-origin",
+      ...options,
+      headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
+    });
+    const payload = await response.json();
+    if (!response.ok) throw Object.assign(new Error(payload.error || "通信に失敗しました"), { status: response.status, payload });
+    return payload as T;
   },
-  async getSchedules() {
-    return demoSchedules;
+  bootstrap() {
+    return this.request<BootstrapResponse>("bootstrap");
   },
-  async getMessages() {
-    return demoMessages;
+  login(memberId: string) {
+    return this.request<BootstrapResponse>("login", { method: "POST", body: JSON.stringify({ memberId }) });
+  },
+  logout(csrfToken: string) {
+    return this.request<{ ok: boolean }>("logout", { method: "POST", headers: { "X-CSRF-Token": csrfToken } });
+  },
+  save(state: SharedState, version: number, csrfToken: string, action: string, summary: string) {
+    return this.request<BootstrapResponse>("save", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ state, version, action, summary }) });
+  },
+  undo(auditId: number, version: number, csrfToken: string) {
+    return this.request<BootstrapResponse>("undo", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ auditId, version }) });
   },
 };
