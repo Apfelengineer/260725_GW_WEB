@@ -116,6 +116,7 @@ test("共有用画像を同梱する", async () => {
 
 test("システム資料を同梱する", async () => {
   await access(new URL("docs/KPTC_Scheduler_現行アプリケーション仕様書.pdf", root));
+  await access(new URL("docs/KPTC_Scheduler_独立Linuxサーバー構築・移行手順書.pdf", root));
   await access(new URL("docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf", root));
 });
 
