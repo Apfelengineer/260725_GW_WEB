@@ -54,23 +54,13 @@ function occursOn(item: ScheduleItem, targetKey: string) {
   return false;
 }
 
-function minutes(value: string) {
-  const [hour, minute] = value.split(":").map(Number);
-  return hour * 60 + minute;
-}
-
-type DayStatus = { morning: boolean; afternoon: boolean; maintenance: boolean };
+type DayStatus = { reserved: boolean; maintenance: boolean };
 
 function dayStatus(schedules: ScheduleItem[], roomId: string, key: string): DayStatus {
-  // 「機器利用」は予約、「機器点検」はメンテナンスとして午前・午後の占有状況へ変換します。
+  // 予定表の予定種別を優先し、機器点検はメンテナンス、機器利用・キャンセル待ちは予約済みにします。
   const items = schedules.filter((item) => item.memberId === roomId && occursOn(item, key));
-  if (items.some((item) => item.category === "機器点検")) return { morning: false, afternoon: false, maintenance: true };
-  const bookings = items.filter((item) => item.category === "機器利用");
-  return {
-    morning: bookings.some((item) => minutes(item.start) < 12 * 60 && minutes(item.end) > 9 * 60),
-    afternoon: bookings.some((item) => minutes(item.start) < 17 * 60 && minutes(item.end) > 13 * 60),
-    maintenance: false,
-  };
+  if (items.some((item) => item.category === "機器点検")) return { reserved: false, maintenance: true };
+  return { reserved: items.some((item) => item.category === "機器利用" || item.category === "キャンセル待ち"), maintenance: false };
 }
 
 function MonthCalendar({ month, roomId, schedules }: { month: Date; roomId: string; schedules: ScheduleItem[] }) {
@@ -85,7 +75,7 @@ function MonthCalendar({ month, roomId, schedules }: { month: Date; roomId: stri
   const fullyBooked = businessDays.length > 0 && businessDays.every((date) => {
     // 土日祝を除く全営業日が埋まった月だけ、キャンセル待ち表示を重ねます。
     const status = dayStatus(schedules, roomId, dateKey(date));
-    return status.maintenance || (status.morning && status.afternoon);
+    return status.maintenance || status.reserved;
   });
 
   return (
@@ -98,11 +88,10 @@ function MonthCalendar({ month, roomId, schedules }: { month: Date; roomId: stri
           const key = dateKey(date);
           const holiday = japaneseHolidays.find((item) => item.date === key);
           const status = dayStatus(schedules, roomId, key);
-          const both = status.morning && status.afternoon;
-          const marker = status.maintenance ? "ー" : both ? "" : status.morning ? "▼" : status.afternoon ? "▲" : "";
-          const hideDate = status.maintenance || Boolean(marker);
+          const marker = status.maintenance ? "ー" : "";
+          const hideDate = status.maintenance;
           return (
-            <span className={`reservation-day ${date.getDay() === 6 ? "saturday" : ""} ${date.getDay() === 0 || holiday ? "sunday holiday" : ""} ${both ? "both" : ""} ${status.maintenance ? "maintenance" : ""} ${hideDate ? "marker-only" : ""}`} key={key} title={holiday?.name ?? ""}>
+            <span className={`reservation-day ${date.getDay() === 6 ? "saturday" : ""} ${date.getDay() === 0 || holiday ? "sunday holiday" : ""} ${status.reserved ? "reserved" : ""} ${status.maintenance ? "maintenance" : ""} ${hideDate ? "marker-only" : ""}`} key={key} title={holiday?.name ?? ""}>
               {!hideDate && <b>{date.getDate()}</b>}
               <i>{marker}</i>
             </span>
@@ -160,8 +149,6 @@ export default function ReservationsPage() {
         <div className="reservation-legend">
           <span><i className="legend-box full" />予約済み</span>
           <span><i className="legend-box open" />予約なし</span>
-          <span><b className="up">▲</b>予約可（午前のみ）</span>
-          <span><b className="down">▼</b>予約可（午後のみ）</span>
           <span><b>ー</b>メンテナンス</span>
         </div>
 
