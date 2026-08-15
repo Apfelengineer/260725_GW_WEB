@@ -59,7 +59,7 @@ pnpm test
 - `dist-internal`: スケジューラー画面、内部API、認証、送信・再送・監視コマンド
 - `dist-public`: 空き状況画面、署名付きJSON受信API、公開JSON読取API
 
-外部用には `api.php`、`auth.php`、管理コマンド、SQLite接続処理を含めません。内部画面の「試験室予約」リンク先は、ビルド時に `VITE_KPTC_PUBLIC_AVAILABILITY_URL=https://availability.example.jp/calendar/?room=m6` を設定します。開発用の一体表示は `pnpm run dev`、旧来の一体型出力は `pnpm run build:combined` で利用できます。
+外部用には `api.php`、`auth.php`、管理コマンド、SQLite接続処理を含めません。内部画面の「試験室予約」リンク先は、内部サーバー設定の `KPTC_PUBLIC_AVAILABILITY_PAGE_URL=https://availability.example.jp/calendar` で指定します。本番URLが変わっても再ビルドは不要です。値がない開発環境では、ビルド時の `VITE_KPTC_PUBLIC_AVAILABILITY_URL`、続いて相対URL `../calendar` を使用します。開発用の一体表示は `pnpm run dev`、旧来の一体型出力は `pnpm run build:combined` で利用できます。
 
 ## 正式ログイン認証
 

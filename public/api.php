@@ -355,6 +355,14 @@ function member_name(array $state, string $memberId): string {
     return '削除済みユーザー';
 }
 
+function public_availability_page_url(): string {
+    // 配置先が変わっても再ビルドせず、内部サーバー設定だけで外部公開URLを切り替えられます。
+    $url = trim((string)(getenv('KPTC_PUBLIC_AVAILABILITY_PAGE_URL') ?: ''));
+    if ($url === '') return '';
+    $scheme = strtolower((string)(parse_url($url, PHP_URL_SCHEME) ?: ''));
+    return filter_var($url, FILTER_VALIDATE_URL) !== false && in_array($scheme, ['https', 'http'], true) ? $url : '';
+}
+
 function bootstrap_payload(PDO $pdo): array {
     $record = current_record($pdo);
     $user = kptc_auth_active_session_user($pdo);
@@ -375,6 +383,7 @@ function bootstrap_payload(PDO $pdo): array {
         'username'=>(string)$user['username'],
         'role'=>(string)$user['role'],
         'csrfToken'=>csrf(),
+        'publicAvailabilityPageUrl'=>public_availability_page_url(),
         'authAccounts'=>$user['role'] === 'admin' ? kptc_auth_account_list($pdo) : [],
         'audit'=>audit_list($pdo),
         'availabilityPublish'=>[

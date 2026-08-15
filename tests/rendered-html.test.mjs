@@ -62,6 +62,7 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.doesNotMatch(page, /name="repeat"|name="repeatUntil"|name="reminderMinutes"|繰り返し|リマインダー|shownRemindersRef/);
   assert.match(page, /addMonths/);
   assert.match(page, /VITE_KPTC_PUBLIC_AVAILABILITY_URL/);
+  assert.match(page, /KPTC_PUBLIC_AVAILABILITY_PAGE_URL|defaultPublicAvailabilityUrl/);
   assert.match(page, /window\.open\(publicUrl, "_blank", "noopener,noreferrer"\)/);
   assert.doesNotMatch(page, /window\.location\.assign\("\.\/reservations\.html\?room=m6"\)/);
   assert.match(page, /useState\(\(\) => dateAtNoon\(new Date\(\)\)\)/);
@@ -228,6 +229,7 @@ test("認証情報を予定データから分離して正式ログインを提�
   assert.match(auth, /auth_login_attempts/);
   assert.match(auth, />= 5/);
   assert.match(api, /require_admin\(\)/);
+  assert.match(api, /KPTC_PUBLIC_AVAILABILITY_PAGE_URL/);
   assert.match(api, /最後の管理者を一般ユーザーへ変更できません/);
   assert.doesNotMatch(accountListSection, /password_hash/);
   assert.match(page, /パスワードの現在値は安全上表示できません/);

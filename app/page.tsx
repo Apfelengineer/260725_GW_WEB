@@ -77,9 +77,10 @@ function weekDates(value: Date) {
   return Array.from({ length: 7 }, (_, index) => addDays(monday, index));
 }
 
-function openRoomAvailability() {
+const defaultPublicAvailabilityUrl = import.meta.env.VITE_KPTC_PUBLIC_AVAILABILITY_URL || "../calendar";
+
+function openRoomAvailability(publicUrl: string) {
   // スケジューラーを保持したまま、公開用の空き状況を独立したタブで開きます。
-  const publicUrl = import.meta.env.VITE_KPTC_PUBLIC_AVAILABILITY_URL || "../calendar/?room=m6";
   window.open(publicUrl, "_blank", "noopener,noreferrer");
 }
 
@@ -202,6 +203,7 @@ export default function Home() {
   const [currentUsername, setCurrentUsername] = useState("");
   const [currentRole, setCurrentRole] = useState<"admin" | "user">("user");
   const [authAccounts, setAuthAccounts] = useState<AuthAccount[]>([]);
+  const [publicAvailabilityUrl, setPublicAvailabilityUrl] = useState(defaultPublicAvailabilityUrl);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
   const [availabilityPublish, setAvailabilityPublish] = useState<AvailabilityPublishStatus | null>(null);
   const [syncStatus, setSyncStatus] = useState<"saved" | "saving" | "offline">("saving");
@@ -223,6 +225,7 @@ export default function Home() {
     setCurrentUserId(payload.currentUserId);
     setCurrentUsername(payload.username);
     setCurrentRole(payload.role);
+    setPublicAvailabilityUrl(payload.publicAvailabilityPageUrl || defaultPublicAvailabilityUrl);
     setAuthAccounts(payload.authAccounts);
     if (payload.role !== "admin") setManagementTab((tab) => tab === "accounts" ? "members" : tab);
     setAuditLogs(payload.audit);
@@ -702,7 +705,7 @@ export default function Home() {
         <Logo />
         <nav className="main-nav" aria-label="メインメニュー">
           <button className={section === "schedule" ? "active" : ""} onClick={() => setSection("schedule")}><SectionIcon symbol="▦" /><span>スケジュール</span></button>
-          <button onClick={openRoomAvailability}><SectionIcon symbol="▤" /><span>試験室予約</span></button>
+          <button onClick={() => openRoomAvailability(publicAvailabilityUrl)}><SectionIcon symbol="▤" /><span>試験室予約</span></button>
           <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>ユーザー・設定</span></button>
         </nav>
 
@@ -788,7 +791,7 @@ export default function Home() {
       <nav className="mobile-nav" aria-label="モバイルメニュー">
         <button className={section === "schedule" ? "active" : ""} onClick={() => setSection("schedule")}><SectionIcon symbol="▦" /><span>予定</span></button>
         <button className="mobile-add" onClick={() => openCreateSchedule()} aria-label="予定を登録">＋</button>
-        <button onClick={openRoomAvailability}><SectionIcon symbol="▤" /><span>予約</span></button>
+        <button onClick={() => openRoomAvailability(publicAvailabilityUrl)}><SectionIcon symbol="▤" /><span>予約</span></button>
         <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>設定</span></button>
       </nav>
 

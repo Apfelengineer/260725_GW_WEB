@@ -77,6 +77,7 @@ export type AuthenticatedBootstrapResponse = {
   username: string;
   role: "admin" | "user";
   csrfToken: string;
+  publicAvailabilityPageUrl: string;
   authAccounts: AuthAccount[];
   audit: AuditEntry[];
   availabilityPublish: AvailabilityPublishStatus;
