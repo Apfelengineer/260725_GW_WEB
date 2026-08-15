@@ -22,6 +22,15 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /非公開にする/);
   assert.match(page, /月曜始まり/);
   assert.match(page, /Ctrl\+C/);
+  assert.match(page, /useState<string\[\]>\(\[\]\)/);
+  assert.match(page, /onSelect\(item, event\.shiftKey\)/);
+  assert.match(page, /selectedScheduleIds\.includes\(item\.id\)/);
+  assert.match(page, /clipboard\.items/);
+  assert.match(page, /function copySchedules/);
+  assert.match(page, /function deleteSchedules/);
+  assert.match(page, /setSelectedScheduleIds\(\[\]\)/);
+  assert.match(page, /event\.key === "Escape"/);
+  assert.match(page, /Shift<\/kbd>＋クリックで複数選択/);
   assert.match(page, /onDoubleClick/);
   assert.match(page, /onDrop/);
   assert.match(page, /予定種別を追加/);

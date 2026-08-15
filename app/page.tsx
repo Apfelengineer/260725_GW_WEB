@@ -24,7 +24,7 @@ import {
 type Section = "schedule" | "members";
 type CalendarView = "day" | "week" | "month";
 type EditorState = { mode: "create"; memberId: string; date: string } | { mode: "edit"; item: ScheduleItem };
-type ClipboardState = { mode: "copy" | "cut"; item: ScheduleItem };
+type ClipboardState = { mode: "copy" | "cut"; items: ScheduleItem[] };
 type CellTarget = { memberId: string; date: string };
 type ContextMenuState = { scheduleId: string; x: number; y: number };
 type CellContextMenuState = { target: CellTarget; x: number; y: number };
@@ -177,7 +177,7 @@ export default function Home() {
   const [memberEditor, setMemberEditor] = useState<Member | "new" | null>(null);
   const [categoryEditor, setCategoryEditor] = useState<ScheduleCategory | "new" | null>(null);
   const [managementTab, setManagementTab] = useState<ManagementTab>("members");
-  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
+  const [selectedScheduleIds, setSelectedScheduleIds] = useState<string[]>([]);
   const [selectedCell, setSelectedCell] = useState<CellTarget | null>(null);
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -291,7 +291,8 @@ export default function Home() {
   }, [group, members, search]);
 
   const currentMember = members.find((member) => member.id === currentUserId) ?? members[0];
-  const selectedSchedule = schedules.find((item) => item.id === selectedScheduleId) ?? null;
+  const selectedSchedules = selectedScheduleIds.map((id) => schedules.find((item) => item.id === id)).filter((item): item is ScheduleItem => Boolean(item));
+  const selectedSchedule = selectedSchedules.length === 1 ? selectedSchedules[0] : null;
 
   async function login(memberId: string) {
     if (!serverAvailable) {
@@ -377,45 +378,65 @@ export default function Home() {
     };
     markMutation(scheduleEditor.mode === "edit" ? "予定編集" : "予定作成", `${nextItem.title}（${nextItem.date}〜${nextItem.endDate}）`);
     setSchedules((items) => scheduleEditor.mode === "edit" ? items.map((item) => item.id === nextItem.id ? nextItem : item) : [...items, nextItem]);
-    setSelectedScheduleId(nextItem.id);
+    setSelectedScheduleIds([nextItem.id]);
     setSelectedCell({ memberId: nextItem.memberId, date: nextItem.date });
     setScheduleEditor(null);
     setToast(scheduleEditor.mode === "edit" ? "予定を更新しました" : "予定を登録しました");
   }
 
-  function deleteSchedule(id: string, confirmDelete = true) {
-    const item = schedules.find((schedule) => schedule.id === id);
-    if (!item) return;
-    if (confirmDelete && !window.confirm(`「${item.title}」を削除しますか？`)) return;
-    markMutation("予定削除", `${item.title}を削除`);
-    setSchedules((items) => items.filter((schedule) => schedule.id !== id));
-    if (selectedScheduleId === id) setSelectedScheduleId(null);
-    if (scheduleEditor?.mode === "edit" && scheduleEditor.item.id === id) setScheduleEditor(null);
-    if (clipboard?.item.id === id) setClipboard(null);
-    setContextMenu(null);
-    setToast("予定を削除しました");
+  function actionScheduleIds(anchorId?: string) {
+    if (!anchorId) return selectedScheduleIds;
+    return selectedScheduleIds.includes(anchorId) ? selectedScheduleIds : [anchorId];
   }
 
-  function selectSchedule(item: ScheduleItem) {
-    setSelectedScheduleId(item.id);
+  function schedulesByIds(ids: string[]) {
+    return ids.map((id) => schedules.find((item) => item.id === id)).filter((item): item is ScheduleItem => Boolean(item));
+  }
+
+  function sortForClipboard(items: ScheduleItem[]) {
+    return [...items].sort((a, b) => a.date.localeCompare(b.date) || members.findIndex((member) => member.id === a.memberId) - members.findIndex((member) => member.id === b.memberId) || a.start.localeCompare(b.start));
+  }
+
+  function deleteSchedules(ids: string[] = selectedScheduleIds, confirmDelete = true) {
+    const targetItems = schedulesByIds([...new Set(ids)]);
+    if (!targetItems.length) return;
+    const message = targetItems.length === 1 ? `「${targetItems[0].title}」を削除しますか？` : `選択した${targetItems.length}件の予定を削除しますか？`;
+    if (confirmDelete && !window.confirm(message)) return;
+    const targetIds = new Set(targetItems.map((item) => item.id));
+    markMutation("予定削除", targetItems.length === 1 ? `${targetItems[0].title}を削除` : `${targetItems.length}件の予定を一括削除`);
+    setSchedules((items) => items.filter((item) => !targetIds.has(item.id)));
+    setSelectedScheduleIds([]);
+    if (scheduleEditor?.mode === "edit" && targetIds.has(scheduleEditor.item.id)) setScheduleEditor(null);
+    if (clipboard?.mode === "cut" && clipboard.items.some((item) => targetIds.has(item.id))) setClipboard(null);
+    setContextMenu(null);
+    setToast(targetItems.length === 1 ? "予定を削除しました" : `${targetItems.length}件の予定を削除しました`);
+  }
+
+  function selectSchedule(item: ScheduleItem, additive = false) {
+    setSelectedScheduleIds((ids) => additive ? (ids.includes(item.id) ? ids.filter((id) => id !== item.id) : [...ids, item.id]) : [item.id]);
     setSelectedCell({ memberId: item.memberId, date: item.date });
   }
 
-  function copySchedule(id: string) {
-    const item = schedules.find((schedule) => schedule.id === id);
-    if (!item) return;
-    setClipboard({ mode: "copy", item: { ...item } });
-    setContextMenu(null);
-    setToast("予定をコピーしました。貼り付け先の日付を選択してください");
+  function selectCell(target: CellTarget) {
+    setSelectedScheduleIds([]);
+    setSelectedCell(target);
   }
 
-  function cutSchedule(id: string) {
-    const item = schedules.find((schedule) => schedule.id === id);
-    if (!item) return;
-    setClipboard({ mode: "cut", item: { ...item } });
-    setSelectedScheduleId(id);
+  function copySchedules(ids: string[] = selectedScheduleIds) {
+    const items = sortForClipboard(schedulesByIds(ids));
+    if (!items.length) return;
+    setClipboard({ mode: "copy", items: items.map((item) => ({ ...item })) });
     setContextMenu(null);
-    setToast("予定を切り取りました。貼り付け先の日付を選択してください");
+    setToast(`${items.length}件の予定をコピーしました。貼り付け先の日付を選択してください`);
+  }
+
+  function cutSchedules(ids: string[] = selectedScheduleIds) {
+    const items = sortForClipboard(schedulesByIds(ids));
+    if (!items.length) return;
+    setClipboard({ mode: "cut", items: items.map((item) => ({ ...item })) });
+    setSelectedScheduleIds(items.map((item) => item.id));
+    setContextMenu(null);
+    setToast(`${items.length}件の予定を切り取りました。貼り付け先の日付を選択してください`);
   }
 
   function pasteSchedule(target: CellTarget | null = selectedCell) {
@@ -427,21 +448,37 @@ export default function Home() {
       setToast("貼り付け先の日付欄を選択してください");
       return;
     }
+    const sourceItems = clipboard.items;
+    if (!sourceItems.length) return;
+    const anchor = sourceItems[0];
+    const anchorMemberIndex = members.findIndex((member) => member.id === anchor.memberId);
+    const targetMemberIndex = members.findIndex((member) => member.id === target.memberId);
+    const transformed = sourceItems.map((item, index) => {
+      const dateOffset = daysBetween(anchor.date, item.date);
+      const nextDate = dateKey(addDays(new Date(`${target.date}T12:00:00`), dateOffset));
+      const duration = Math.max(0, daysBetween(item.date, item.endDate || item.date));
+      const sourceMemberIndex = members.findIndex((member) => member.id === item.memberId);
+      const shiftedMemberIndex = anchorMemberIndex >= 0 && targetMemberIndex >= 0 && sourceMemberIndex >= 0 ? Math.max(0, Math.min(members.length - 1, targetMemberIndex + sourceMemberIndex - anchorMemberIndex)) : targetMemberIndex;
+      return {
+        ...item,
+        id: clipboard.mode === "copy" ? `s-${Date.now()}-${index}` : item.id,
+        memberId: members[shiftedMemberIndex]?.id ?? target.memberId,
+        date: nextDate,
+        endDate: dateKey(addDays(new Date(`${nextDate}T12:00:00`), duration)),
+      };
+    });
     if (clipboard.mode === "copy") {
-      const duration = Math.max(0, daysBetween(clipboard.item.date, clipboard.item.endDate || clipboard.item.date));
-      const nextItem = { ...clipboard.item, id: `s-${Date.now()}`, memberId: target.memberId, date: target.date, endDate: dateKey(addDays(new Date(`${target.date}T12:00:00`), duration)) };
-      markMutation("予定貼り付け", `${nextItem.title}を${target.date}へコピー`);
-      setSchedules((items) => [...items, nextItem]);
-      setSelectedScheduleId(nextItem.id);
+      markMutation("予定貼り付け", `${transformed.length}件の予定を${target.date}からコピー`);
+      setSchedules((items) => [...items, ...transformed]);
     } else {
-      const duration = Math.max(0, daysBetween(clipboard.item.date, clipboard.item.endDate || clipboard.item.date));
-      markMutation("予定移動", `${clipboard.item.title}を${target.date}へ移動`);
-      setSchedules((items) => items.map((item) => item.id === clipboard.item.id ? { ...item, memberId: target.memberId, date: target.date, endDate: dateKey(addDays(new Date(`${target.date}T12:00:00`), duration)) } : item));
-      setSelectedScheduleId(clipboard.item.id);
+      const moved = new Map(transformed.map((item) => [item.id, item]));
+      markMutation("予定移動", `${transformed.length}件の予定を${target.date}から移動`);
+      setSchedules((items) => items.map((item) => moved.get(item.id) ?? item));
       setClipboard(null);
     }
+    setSelectedScheduleIds(transformed.map((item) => item.id));
     setSelectedCell(target);
-    setToast("予定を貼り付けました");
+    setToast(`${transformed.length}件の予定を貼り付けました`);
   }
 
   function moveSchedule(id: string, target: CellTarget) {
@@ -450,9 +487,9 @@ export default function Home() {
     const duration = Math.max(0, daysBetween(source.date, source.endDate || source.date));
     markMutation("予定移動", `${source.title}を${target.date}へ移動`);
     setSchedules((items) => items.map((item) => item.id === id ? { ...item, memberId: target.memberId, date: target.date, endDate: dateKey(addDays(new Date(`${target.date}T12:00:00`), duration)) } : item));
-    setSelectedScheduleId(id);
+    setSelectedScheduleIds([id]);
     setSelectedCell(target);
-    setClipboard((value) => value?.mode === "cut" && value.item.id === id ? null : value);
+    setClipboard((value) => value?.mode === "cut" && value.items.some((item) => item.id === id) ? null : value);
     setToast("予定を移動しました");
   }
 
@@ -465,19 +502,20 @@ export default function Home() {
         setMemberEditor(null);
         setCategoryEditor(null);
         setContextMenu(null);
-        setSelectedScheduleId(null);
+        setCellContextMenu(null);
+        setSelectedScheduleIds([]);
         return;
       }
       if (section !== "schedule" || scheduleEditor) return;
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c" && selectedScheduleId) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c" && selectedScheduleIds.length) {
         event.preventDefault();
-        copySchedule(selectedScheduleId);
+        copySchedules();
       } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
         event.preventDefault();
         pasteSchedule();
-      } else if ((event.key === "Delete" || event.key === "Backspace") && selectedScheduleId) {
+      } else if ((event.key === "Delete" || event.key === "Backspace") && selectedScheduleIds.length) {
         event.preventDefault();
-        deleteSchedule(selectedScheduleId);
+        deleteSchedules();
       } else if (event.key === "Enter" && selectedSchedule) {
         event.preventDefault();
         setScheduleEditor({ mode: "edit", item: selectedSchedule });
@@ -487,7 +525,7 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKeyDown);
   // クリップボード操作関数は最新の予定一覧と選択状態を参照するため、関連状態を依存に含めています。
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clipboard, scheduleEditor, schedules, section, selectedCell, selectedSchedule, selectedScheduleId]);
+  }, [clipboard, scheduleEditor, schedules, section, selectedCell, selectedSchedule, selectedScheduleIds]);
 
   function saveMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -592,7 +630,8 @@ export default function Home() {
   function openContextMenu(event: React.MouseEvent, item: ScheduleItem) {
     event.preventDefault();
     event.stopPropagation();
-    selectSchedule(item);
+    // 複数選択中の予定を右クリックした場合は、その選択全体を操作対象として維持します。
+    if (!selectedScheduleIds.includes(item.id)) selectSchedule(item);
     setCellContextMenu(null);
     setContextMenu({ scheduleId: item.id, x: Math.min(event.clientX, window.innerWidth - 180), y: Math.min(event.clientY, window.innerHeight - 150) });
   }
@@ -601,7 +640,7 @@ export default function Home() {
     if ((event.target as HTMLElement).closest("button")) return;
     event.preventDefault();
     event.stopPropagation();
-    setSelectedCell(target);
+    selectCell(target);
     setContextMenu(null);
     setCellContextMenu({ target, x: Math.min(event.clientX, window.innerWidth - 190), y: Math.min(event.clientY, window.innerHeight - 120) });
   }
@@ -659,10 +698,10 @@ export default function Home() {
             allMembers={members}
             schedules={schedules}
             categories={categories}
-            selectedScheduleId={selectedScheduleId}
-            cutScheduleId={clipboard?.mode === "cut" ? clipboard.item.id : null}
+            selectedScheduleIds={selectedScheduleIds}
+            cutScheduleIds={clipboard?.mode === "cut" ? clipboard.items.map((item) => item.id) : []}
             selectedCell={selectedCell}
-            onSelectCell={setSelectedCell}
+            onSelectCell={selectCell}
             onSelectSchedule={selectSchedule}
             onEditSchedule={(item) => setScheduleEditor({ mode: "edit", item })}
             onCreateSchedule={openCreateSchedule}
@@ -699,15 +738,15 @@ export default function Home() {
         <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>設定</span></button>
       </nav>
 
-      {scheduleEditor && <ScheduleModal editor={scheduleEditor} members={members} categories={categories} onClose={() => setScheduleEditor(null)} onSubmit={saveSchedule} onDelete={scheduleEditor.mode === "edit" ? () => deleteSchedule(scheduleEditor.item.id) : undefined} />}
+      {scheduleEditor && <ScheduleModal editor={scheduleEditor} members={members} categories={categories} onClose={() => setScheduleEditor(null)} onSubmit={saveSchedule} onDelete={scheduleEditor.mode === "edit" ? () => deleteSchedules([scheduleEditor.item.id]) : undefined} />}
       {memberEditor && <MemberModal member={memberEditor === "new" ? null : memberEditor} onClose={() => setMemberEditor(null)} onSubmit={saveMember} />}
       {categoryEditor && <CategoryModal category={categoryEditor === "new" ? null : categoryEditor} onClose={() => setCategoryEditor(null)} onSubmit={saveCategory} />}
       {contextMenu && (
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} role="menu">
-          <button role="menuitem" onClick={() => copySchedule(contextMenu.scheduleId)}><span>□</span>コピー<kbd>Ctrl+C</kbd></button>
-          <button role="menuitem" onClick={() => cutSchedule(contextMenu.scheduleId)}><span>✂</span>切り取り</button>
+          <button role="menuitem" onClick={() => copySchedules(actionScheduleIds(contextMenu.scheduleId))}><span>□</span>コピー<kbd>Ctrl+C</kbd></button>
+          <button role="menuitem" onClick={() => cutSchedules(actionScheduleIds(contextMenu.scheduleId))}><span>✂</span>切り取り</button>
           <hr />
-          <button className="danger" role="menuitem" onClick={() => deleteSchedule(contextMenu.scheduleId)}><span>×</span>削除<kbd>Delete</kbd></button>
+          <button className="danger" role="menuitem" onClick={() => deleteSchedules(actionScheduleIds(contextMenu.scheduleId))}><span>×</span>削除<kbd>Delete</kbd></button>
         </div>
       )}
       {cellContextMenu && (
@@ -725,11 +764,11 @@ type CalendarInteractionProps = {
   members: Member[];
   schedules: ScheduleItem[];
   categories: ScheduleCategory[];
-  selectedScheduleId: string | null;
-  cutScheduleId: string | null;
+  selectedScheduleIds: string[];
+  cutScheduleIds: string[];
   selectedCell: CellTarget | null;
   onSelectCell: (target: CellTarget) => void;
-  onSelectSchedule: (item: ScheduleItem) => void;
+  onSelectSchedule: (item: ScheduleItem, additive?: boolean) => void;
   onEditSchedule: (item: ScheduleItem) => void;
   onCreateSchedule: (target: CellTarget) => void;
   onMoveSchedule: (id: string, target: CellTarget) => void;
@@ -779,7 +818,7 @@ function SchedulePage({ view, setView, calendarDate, onPrevious, onNext, onToday
           {categories.map((category) => <span key={category.id}><i className="legend" style={{ background: category.color }} />{category.name}</span>)}
           <span><b>◆</b> メモあり</span><span><b>鍵</b> 非公開</span>
         </div>
-        <div className="shortcut-guide"><b>操作:</b> 日付欄をダブルクリックで登録 ・ 予定をドラッグして移動 ・ 右クリックでコピー／切り取り／削除 ・ <kbd>Ctrl+C</kbd> <kbd>Ctrl+V</kbd> <kbd>Delete</kbd></div>
+        <div className="shortcut-guide"><b>操作:</b> <kbd>Shift</kbd>＋クリックで複数選択 ・ 日付／別予定を通常クリックまたは <kbd>Esc</kbd> で解除 ・ 日付欄をダブルクリックで登録 ・ 右クリックでコピー／切り取り／削除 ・ <kbd>Ctrl+C</kbd> <kbd>Ctrl+V</kbd> <kbd>Delete</kbd></div>
       </section>
     </div>
   );
@@ -791,7 +830,7 @@ function ScheduleEventButton({ item, categories, selected, cutting, compact = fa
   selected: boolean;
   cutting: boolean;
   compact?: boolean;
-  onSelect: (item: ScheduleItem) => void;
+  onSelect: (item: ScheduleItem, additive?: boolean) => void;
   onEdit: (item: ScheduleItem) => void;
   onContextMenu: (event: React.MouseEvent, item: ScheduleItem) => void;
 }) {
@@ -799,9 +838,10 @@ function ScheduleEventButton({ item, categories, selected, cutting, compact = fa
     <button
       className={`${compact ? "month-event" : "schedule-event"} ${selected ? "selected" : ""} ${cutting ? "cutting" : ""}`}
       style={categoryStyle(item.category, categories)}
+      aria-pressed={selected}
       draggable
-      onDragStart={(event) => { event.dataTransfer.setData("text/group-watcher-schedule", item.id); event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; onSelect(item); }}
-      onClick={(event) => { event.stopPropagation(); onSelect(item); }}
+      onDragStart={(event) => { event.dataTransfer.setData("text/group-watcher-schedule", item.id); event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; if (!selected) onSelect(item); }}
+      onClick={(event) => { event.stopPropagation(); onSelect(item, event.shiftKey); }}
       onDoubleClick={(event) => { event.stopPropagation(); onEdit(item); }}
       onContextMenu={(event) => onContextMenu(event, item)}
       title={`${item.timePreset === "all-day" ? "終日" : `${item.start}–${item.end}`} ${item.title}（ダブルクリックで編集）`}
@@ -835,7 +875,7 @@ function DropCell({ target, selected, className, onSelectCell, onCreateSchedule,
   );
 }
 
-function WeekGrid({ calendarDate, members, schedules, categories, selectedScheduleId, cutScheduleId, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
+function WeekGrid({ calendarDate, members, schedules, categories, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
   const dates = weekDates(calendarDate);
   const today = dateAtNoon(new Date());
   return (
@@ -855,7 +895,7 @@ function WeekGrid({ calendarDate, members, schedules, categories, selectedSchedu
               const items = schedules.filter((item) => item.memberId === member.id && scheduleOccursOn(item, key)).sort((a, b) => a.start.localeCompare(b.start));
               return (
                 <DropCell key={key} target={target} selected={selectedCell?.memberId === member.id && selectedCell.date === key} className={`schedule-cell ${sameDate(date, today) ? "is-today" : ""} ${date.getDay() === 0 || date.getDay() === 6 ? "weekend" : ""} ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
-                  {items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} selected={selectedScheduleId === item.id} cutting={cutScheduleId === item.id} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />)}
+                  {items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />)}
                 </DropCell>
               );
             })}
@@ -866,7 +906,7 @@ function WeekGrid({ calendarDate, members, schedules, categories, selectedSchedu
   );
 }
 
-function DayView({ calendarDate, members, schedules, categories, selectedScheduleId, cutScheduleId, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
+function DayView({ calendarDate, members, schedules, categories, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
   const key = dateKey(calendarDate);
   const holiday = japaneseHolidays.find((item) => item.date === key);
   return (
@@ -879,7 +919,7 @@ function DayView({ calendarDate, members, schedules, categories, selectedSchedul
           <div className="day-member" key={member.id}>
             <div className="day-member-profile"><Avatar member={member} small /><span><b>{member.name}</b><small>{member.group}</small></span></div>
             <DropCell target={target} selected={selectedCell?.memberId === member.id && selectedCell.date === key} className={`day-events ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
-              {items.length ? items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} selected={selectedScheduleId === item.id} cutting={cutScheduleId === item.id} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />) : <span className="no-plan">予定はありません</span>}
+              {items.length ? items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />) : <span className="no-plan">予定はありません</span>}
             </DropCell>
           </div>
         );
@@ -888,7 +928,7 @@ function DayView({ calendarDate, members, schedules, categories, selectedSchedul
   );
 }
 
-function MonthView({ calendarDate, members, schedules, categories, selectedScheduleId, cutScheduleId, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
+function MonthView({ calendarDate, members, schedules, categories, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
   const dates = monthGridDates(calendarDate);
   const today = dateAtNoon(new Date());
   const visibleMemberIds = new Set(members.map((member) => member.id));
@@ -907,7 +947,7 @@ function MonthView({ calendarDate, members, schedules, categories, selectedSched
             <DropCell key={key} target={target} selected={selectedCell?.date === key} className={`month-day ${!inMonth ? "outside" : ""} ${sameDate(date, today) ? "today" : ""} ${date.getDay() === 0 || date.getDay() === 6 ? "weekend" : ""} ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
               <b>{date.getDate()}</b>
               {holiday && <small className="holiday-name">{holiday.name}</small>}
-              {items.slice(0, 4).map((item) => <ScheduleEventButton compact key={item.id} item={item} categories={categories} selected={selectedScheduleId === item.id} cutting={cutScheduleId === item.id} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />)}
+              {items.slice(0, 4).map((item) => <ScheduleEventButton compact key={item.id} item={item} categories={categories} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />)}
               {items.length > 4 && <span className="more-events">ほか {items.length - 4}件</span>}
             </DropCell>
           );
