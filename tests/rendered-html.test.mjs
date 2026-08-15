@@ -114,6 +114,11 @@ test("共有用画像を同梱する", async () => {
   await access(new URL("public/og.png", root));
 });
 
+test("システム資料を同梱する", async () => {
+  await access(new URL("docs/KPTC_Scheduler_現行アプリケーション仕様書.pdf", root));
+  await access(new URL("docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf", root));
+});
+
 test("試験室3室の空き状況ページを提供する", async () => {
   // 表示記号、配色、3画面の入口、3か月分の公開専用JSON連携を確認します。
   const [page, styles, vite, phpApi, publicApi, jsonPublisher, monthlyPublisher] = await Promise.all([

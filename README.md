@@ -6,6 +6,7 @@ Group Watcher 3.65 の主要機能を、PC・タブレット・スマートフ�
 
 ## システム資料
 
+- [現行アプリケーション仕様書（PDF）](docs/KPTC_Scheduler_現行アプリケーション仕様書.pdf)
 - [ファイル機能・役割一覧とファイル間関係図（PDF）](docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf)
 
 ## 実装済み
