@@ -116,19 +116,21 @@ function db(): PDO {
         $stmt->execute([json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), (int)$row['version'] + 1, date(DATE_ATOM)]);
         $pdo->prepare("INSERT INTO app_meta(key,value) VALUES('room_demo_v1','1')")->execute();
     }
-    $trimmed = $pdo->query("SELECT value FROM app_meta WHERE key='remove_presence_messages_v1'")->fetchColumn();
+    $trimmed = $pdo->query("SELECT value FROM app_meta WHERE key='remove_presence_fields_v2'")->fetchColumn();
     if ($trimmed === false) {
         // 廃止した在席・行き先・メッセージのデータを既存DBから一度だけ除去します。
         $row = $pdo->query('SELECT payload,version FROM app_state WHERE id=1')->fetch(PDO::FETCH_ASSOC);
         $state = json_decode($row['payload'], true);
         unset($state['messages']);
-        foreach ($state['members'] ?? [] as &$member) {
-            unset($member['presence'], $member['destination'], $member['returnAt']);
+        if (isset($state['members']) && is_array($state['members'])) {
+            foreach ($state['members'] as &$member) {
+                unset($member['presence'], $member['destination'], $member['returnAt']);
+            }
+            unset($member);
         }
-        unset($member);
         $stmt = $pdo->prepare('UPDATE app_state SET payload=?,version=?,updated_at=? WHERE id=1');
         $stmt->execute([json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), (int)$row['version'] + 1, date(DATE_ATOM)]);
-        $pdo->prepare("INSERT INTO app_meta(key,value) VALUES('remove_presence_messages_v1','1')")->execute();
+        $pdo->prepare("INSERT INTO app_meta(key,value) VALUES('remove_presence_fields_v2','1')")->execute();
     }
     return $pdo;
 }

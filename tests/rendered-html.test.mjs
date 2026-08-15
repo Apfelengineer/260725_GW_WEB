@@ -45,6 +45,7 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(phpApi, /pdo_sqlite|sqlite:/);
   assert.match(phpApi, /audit_logs/);
   assert.match(phpApi, /CSRF|csrf/i);
+  assert.match(phpApi, /foreach \(\$state\['members'\] as &\$member\)/);
   assert.match(layout, /KPTC Scheduler/);
   assert.doesNotMatch(page, /SkeletonPreview|codex-preview/);
 });
