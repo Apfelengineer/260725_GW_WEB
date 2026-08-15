@@ -97,8 +97,11 @@ test("試験室3室の空き状況ページを提供する", async () => {
   assert.match(page, /item\.category === "機器点検"/);
   assert.match(page, /item\.category === "機器利用"/);
   assert.match(page, /item\.category === "キャンセル待ち"/);
-  assert.match(page, /status\.reserved \? "reserved"/);
-  assert.doesNotMatch(page, /予約可（午前のみ）|予約可（午後のみ）|status\.morning|status\.afternoon/);
+  assert.match(page, /午前空きあり/);
+  assert.match(page, /午後空きあり/);
+  assert.match(page, /status\.morning \? "▼"/);
+  assert.match(page, /status\.afternoon \? "▲"/);
+  assert.match(page, /status\.morning && status\.afternoon/);
   assert.doesNotMatch(page, /item\.category === "会議"|item\.category === "作業"/);
   assert.match(page, /length: 3/);
   assert.match(styles, /sold-out-overlay/);

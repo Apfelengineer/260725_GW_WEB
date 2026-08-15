@@ -38,7 +38,7 @@ body { margin: 0; }
 /* 凡例、お問い合わせ、フッター */
 .reservation-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 24px; margin: 20px 0 15px; font-size: 11px; font-weight: 650; }
 .reservation-legend span { display: flex; align-items: center; gap: 6px; }.legend-box { width: 14px; height: 14px; border: 1px solid #afbac0; background: #fff; }.legend-box.full { border-color: #51575d; background: #51575d; }
-.reservation-legend b { min-width: 14px; text-align: center; }
+.reservation-legend b { min-width: 14px; text-align: center; }.reservation-legend .up,.reservation-legend .down { color: #176d38; }
 .reservation-contact { display: flex; flex-direction: column; align-items: center; gap: 5px; margin: 2px 0 18px; text-align: center; }
 .reservation-contact strong { font-size: 16px; letter-spacing: .01em; }.reservation-contact small { color: #5b6f7b; font-size: 10px; }
 .reservation-message { min-height: 320px; display: grid; place-items: center; color: #5f7784; background: rgba(255,255,255,.75); }.reservation-message.error { color: #bd4935; }
