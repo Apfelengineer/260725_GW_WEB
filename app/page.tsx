@@ -566,6 +566,19 @@ export default function Home() {
     setToast("ユーザーを削除しました");
   }
 
+  function moveMember(member: Member, direction: -1 | 1) {
+    const index = members.findIndex((item) => item.id === member.id);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= members.length) return;
+    markMutation("ユーザー表示順変更", `${member.name}の表示順を変更`);
+    setMembers((items) => {
+      const reordered = [...items];
+      [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
+      return reordered;
+    });
+    setToast(`${member.name}の表示順を変更しました`);
+  }
+
   function saveCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -599,6 +612,19 @@ export default function Home() {
     setCategories((items) => items.filter((item) => item.id !== category.id));
     setSchedules((items) => items.map((item) => item.category === category.name ? { ...item, category: fallback.name } : item));
     setToast("予定種別を削除しました");
+  }
+
+  function moveCategory(category: ScheduleCategory, direction: -1 | 1) {
+    const index = categories.findIndex((item) => item.id === category.id);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= categories.length) return;
+    markMutation("予定種別表示順変更", `${category.name}の表示順を変更`);
+    setCategories((items) => {
+      const reordered = [...items];
+      [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
+      return reordered;
+    });
+    setToast(`${category.name}の表示順を変更しました`);
   }
 
   function navigateCalendar(direction: -1 | 1) {
@@ -691,15 +717,17 @@ export default function Home() {
           <ManagementPage
             tab={managementTab}
             setTab={setManagementTab}
-            members={filteredMembers}
+            members={members}
             categories={categories}
             schedules={schedules}
             onAddMember={() => setMemberEditor("new")}
             onEditMember={setMemberEditor}
             onDeleteMember={deleteMember}
+            onMoveMember={moveMember}
             onAddCategory={() => setCategoryEditor("new")}
             onEditCategory={setCategoryEditor}
             onDeleteCategory={deleteCategory}
+            onMoveCategory={moveCategory}
             auditLogs={auditLogs}
             onUndo={undoAudit}
           />
@@ -866,9 +894,10 @@ function WeekGrid({ calendarDate, members, schedules, categories, selectedSchedu
             {dates.map((date) => {
               const key = dateKey(date);
               const target = { memberId: member.id, date: key };
+              const holiday = japaneseHolidays.some((item) => item.date === key);
               const items = schedules.filter((item) => item.memberId === member.id && scheduleOccursOn(item, key)).sort((a, b) => a.start.localeCompare(b.start));
               return (
-                <DropCell key={key} target={target} selected={selectedCell?.memberId === member.id && selectedCell.date === key} className={`schedule-cell ${sameDate(date, today) ? "is-today" : ""} ${date.getDay() === 0 || date.getDay() === 6 ? "weekend" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
+                <DropCell key={key} target={target} selected={selectedCell?.memberId === member.id && selectedCell.date === key} className={`schedule-cell ${sameDate(date, today) ? "is-today" : ""} ${date.getDay() === 0 || date.getDay() === 6 ? "weekend" : ""} ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
                   {items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} selected={selectedScheduleId === item.id} cutting={cutScheduleId === item.id} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />)}
                 </DropCell>
               );
@@ -885,14 +914,14 @@ function DayView({ calendarDate, members, schedules, categories, selectedSchedul
   const holiday = japaneseHolidays.find((item) => item.date === key);
   return (
     <div className="day-view">
-      <div className="day-view-heading"><span>{formatLongDate(calendarDate)}</span>{holiday && <em>{holiday.name}</em>}<small>ダブルクリック／右クリックで予定登録</small></div>
+      <div className={`day-view-heading ${holiday ? "holiday" : ""}`}><span>{formatLongDate(calendarDate)}</span>{holiday && <em>{holiday.name}</em>}<small>ダブルクリック／右クリックで予定登録</small></div>
       {members.map((member) => {
         const target = { memberId: member.id, date: key };
         const items = schedules.filter((item) => item.memberId === member.id && scheduleOccursOn(item, key)).sort((a, b) => a.start.localeCompare(b.start));
         return (
           <div className="day-member" key={member.id}>
             <div className="day-member-profile"><Avatar member={member} small /><span><b>{member.name}</b><small>{member.group}</small></span></div>
-            <DropCell target={target} selected={selectedCell?.memberId === member.id && selectedCell.date === key} className="day-events" onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
+            <DropCell target={target} selected={selectedCell?.memberId === member.id && selectedCell.date === key} className={`day-events ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
               {items.length ? items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} selected={selectedScheduleId === item.id} cutting={cutScheduleId === item.id} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />) : <span className="no-plan">予定はありません</span>}
             </DropCell>
           </div>
@@ -945,7 +974,7 @@ function TodayCard({ members, schedules }: { members: Member[]; schedules: Sched
   );
 }
 
-function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs, onUndo, onAddMember, onEditMember, onDeleteMember, onAddCategory, onEditCategory, onDeleteCategory }: {
+function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs, onUndo, onAddMember, onEditMember, onDeleteMember, onMoveMember, onAddCategory, onEditCategory, onDeleteCategory, onMoveCategory }: {
   tab: ManagementTab;
   setTab: (tab: ManagementTab) => void;
   members: Member[];
@@ -956,18 +985,20 @@ function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs
   onAddMember: () => void;
   onEditMember: (member: Member) => void;
   onDeleteMember: (member: Member) => void;
+  onMoveMember: (member: Member, direction: -1 | 1) => void;
   onAddCategory: () => void;
   onEditCategory: (category: ScheduleCategory) => void;
   onDeleteCategory: (category: ScheduleCategory) => void;
+  onMoveCategory: (category: ScheduleCategory, direction: -1 | 1) => void;
 }) {
   return (
     <div className="standard-page management-page">
       <div className="page-heading"><div><span className="eyebrow">MANAGEMENT</span><h1>ユーザー・予定種別・操作履歴</h1><p>共同編集の変更者を確認し、必要に応じて変更を取り消せます</p></div>{tab !== "audit" && <button className="primary-button" onClick={tab === "members" ? onAddMember : onAddCategory}>＋ {tab === "members" ? "ユーザーを追加" : "予定種別を追加"}</button>}</div>
       <div className="management-tabs"><button className={tab === "members" ? "active" : ""} onClick={() => setTab("members")}>ユーザー <span>{members.length}</span></button><button className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}>予定種別 <span>{categories.length}</span></button><button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>操作履歴 <span>{auditLogs.length}</span></button></div>
       {tab === "members" ? (
-        <div className="members-table-wrap"><table className="members-table"><thead><tr><th>ユーザー</th><th>所属</th><th>内線</th><th>操作</th></tr></thead><tbody>{members.map((member) => <tr key={member.id}><td><Avatar member={member} small /><b>{member.name}</b></td><td>{member.group}</td><td><span>{member.extension || "—"}</span></td><td className="table-actions"><button onClick={() => onEditMember(member)}>編集</button><button className="danger" onClick={() => onDeleteMember(member)}>削除</button></td></tr>)}</tbody></table></div>
+        <div className="members-table-wrap"><table className="members-table"><thead><tr><th>表示順</th><th>ユーザー</th><th>所属</th><th>内線</th><th>操作</th></tr></thead><tbody>{members.map((member, index) => <tr key={member.id}><td><div className="order-control"><b>{index + 1}</b><button type="button" aria-label={`${member.name}を上へ`} disabled={index === 0} onClick={() => onMoveMember(member, -1)}>↑</button><button type="button" aria-label={`${member.name}を下へ`} disabled={index === members.length - 1} onClick={() => onMoveMember(member, 1)}>↓</button></div></td><td><Avatar member={member} small /><b>{member.name}</b></td><td>{member.group}</td><td><span>{member.extension || "—"}</span></td><td className="table-actions"><button onClick={() => onEditMember(member)}>編集</button><button className="danger" onClick={() => onDeleteMember(member)}>削除</button></td></tr>)}</tbody></table></div>
       ) : tab === "categories" ? (
-        <div className="category-management-list">{categories.map((category) => <article key={category.id}><span className="category-swatch" style={{ background: category.color }} /><div><h2>{category.name}</h2><p>使用中の予定 {schedules.filter((item) => item.category === category.name).length}件</p></div><button onClick={() => onEditCategory(category)}>編集</button><button className="danger" onClick={() => onDeleteCategory(category)}>削除</button></article>)}</div>
+        <div className="category-management-list">{categories.map((category, index) => <article key={category.id}><div className="order-control category-order"><b>{index + 1}</b><button type="button" aria-label={`${category.name}を上へ`} disabled={index === 0} onClick={() => onMoveCategory(category, -1)}>↑</button><button type="button" aria-label={`${category.name}を下へ`} disabled={index === categories.length - 1} onClick={() => onMoveCategory(category, 1)}>↓</button></div><span className="category-swatch" style={{ background: category.color }} /><div><h2>{category.name}</h2><p>使用中の予定 {schedules.filter((item) => item.category === category.name).length}件</p></div><button onClick={() => onEditCategory(category)}>編集</button><button className="danger" onClick={() => onDeleteCategory(category)}>削除</button></article>)}</div>
       ) : (
         <div className="audit-list">{auditLogs.length ? auditLogs.map((entry) => <article key={entry.id}><span className="audit-icon">↺</span><div><b>{entry.summary}</b><small>{entry.actorName} ・ {new Date(entry.createdAt).toLocaleString("ja-JP")}</small></div><em>{entry.action}</em>{entry.canUndo && <button onClick={() => onUndo(entry)}>取り消す</button>}</article>) : <EmptyState>操作履歴はまだありません</EmptyState>}</div>
       )}
