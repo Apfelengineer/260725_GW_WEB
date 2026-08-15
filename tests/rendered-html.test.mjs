@@ -35,6 +35,9 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /onDrop/);
   assert.match(page, /予定種別を追加/);
   assert.match(page, /LoginScreen/);
+  assert.match(page, /autoComplete="username"/);
+  assert.match(page, /autoComplete="current-password"/);
+  assert.doesNotMatch(page, /利用者を選択してログイン|デモ認証/);
   assert.match(page, /新規予定作成/);
   assert.match(page, /name="endDate"/);
   assert.match(page, /name="timePreset"/);
@@ -58,7 +61,8 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /scheduleOccursOn/);
   assert.doesNotMatch(page, /name="repeat"|name="repeatUntil"|name="reminderMinutes"|繰り返し|リマインダー|shownRemindersRef/);
   assert.match(page, /addMonths/);
-  assert.match(page, /window\.open\("\.\/reservations\.html\?room=m6", "_blank", "noopener,noreferrer"\)/);
+  assert.match(page, /VITE_KPTC_PUBLIC_AVAILABILITY_URL/);
+  assert.match(page, /window\.open\(publicUrl, "_blank", "noopener,noreferrer"\)/);
   assert.doesNotMatch(page, /window\.location\.assign\("\.\/reservations\.html\?room=m6"\)/);
   assert.match(page, /useState\(\(\) => dateAtNoon\(new Date\(\)\)\)/);
   assert.doesNotMatch(page, /new Date\(2026, 6, 24/);
@@ -71,17 +75,17 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(styles, /schedule-event \{[^}]*min-height: 40\.5px;/);
   assert.doesNotMatch(styles, /schedule-event \{[^}]*min-height: 54px;/);
   assert.match(api, /groupWatcherApi/);
-  assert.match(api, /demoCategories/);
+  assert.doesNotMatch(api, /demoCategories|demoMembers|demoSchedules/);
   assert.match(api, /\["すべてのグループ", "電気通信係", "試験室"\]/);
   for (const category of ["休暇", "機器点検", "機器利用", "キャンセル待ち", "所内会議", "出張・外出", "その他"]) {
-    assert.match(api, new RegExp(`name: "${category}"`));
+    assert.match(phpApi, new RegExp(`'name'=>'${category}'`));
   }
   assert.match(page, /<th>内線<\/th>/);
   assert.match(page, /name="extension"/);
   assert.doesNotMatch(page, /name="phone"|name="email"|電話番号|メールアドレス|<th>連絡先<\/th>/);
   assert.doesNotMatch(api, /group: "営業部"|group: "開発部"|group: "管理部"|phone:|email:/);
-  assert.match(api, /試験室/);
-  assert.match(api, /電波暗室/);
+  assert.match(phpApi, /試験室/);
+  assert.match(phpApi, /電波暗室/);
   assert.match(api, /japaneseHolidays/);
   assert.doesNotMatch(page, /行き先・在席|メッセージ・伝言|PresencePage|MessagesPage|MessageModal/);
   assert.doesNotMatch(page, /TodayCard|今日の予定|today-card|right-rail/);
@@ -104,7 +108,10 @@ test("実運用に必要なVite・React・PHP構成だけを保持する", async
   const packageJson = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
   assert.deepEqual(Object.keys(packageJson.dependencies).sort(), ["react", "react-dom"]);
   assert.deepEqual(Object.keys(packageJson.devDependencies).sort(), ["@types/node", "@types/react", "@types/react-dom", "@vitejs/plugin-react", "typescript", "vite"]);
-  assert.match(packageJson.scripts.build, /vite build --config vite\.sakura\.config\.ts/);
+  assert.match(packageJson.scripts.build, /build:internal/);
+  assert.match(packageJson.scripts.build, /build:public/);
+  assert.match(packageJson.scripts["build:internal"], /vite\.internal\.config\.ts/);
+  assert.match(packageJson.scripts["build:public"], /vite\.public\.config\.ts/);
   for (const unused of ["app/layout.tsx", "app/chatgpt-auth.ts", "vite.config.ts", "next.config.ts", "drizzle.config.ts", "postcss.config.mjs", "worker/index.ts", "db/index.ts", "examples/d1/db/schema.ts"]) {
     await assert.rejects(access(new URL(unused, root)));
   }
@@ -120,16 +127,22 @@ test("システム資料を同梱する", async () => {
   await access(new URL("docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf", root));
 });
 
-test("試験室3室の空き状況ページを提供する", async () => {
-  // 表示記号、配色、3画面の入口、3か月分の公開専用JSON連携を確認します。
-  const [page, styles, vite, phpApi, publicApi, jsonPublisher, monthlyPublisher] = await Promise.all([
+test("試験室3室の空き状況ページと署名付きJSON連携を提供する", async () => {
+  // 表示記号、配色、用途別画面、署名付き3か月JSON連携を確認します。
+  const [page, styles, internalVite, publicVite, phpApi, publicApi, jsonPublisher, jsonContract, publisher, receiver, retryPublisher, monitor, publicHealth] = await Promise.all([
     readFile(new URL("app/reservations-page.tsx", root), "utf8"),
     readFile(new URL("app/reservations.css", root), "utf8"),
-    readFile(new URL("vite.sakura.config.ts", root), "utf8"),
+    readFile(new URL("vite.internal.config.ts", root), "utf8"),
+    readFile(new URL("vite.public.config.ts", root), "utf8"),
     readFile(new URL("public/api.php", root), "utf8"),
     readFile(new URL("public/public-availability.php", root), "utf8"),
     readFile(new URL("public/availability-json.php", root), "utf8"),
+    readFile(new URL("public/availability-contract.php", root), "utf8"),
+    readFile(new URL("public/availability-publisher.php", root), "utf8"),
+    readFile(new URL("public/receive-availability.php", root), "utf8"),
     readFile(new URL("public/publish-availability-cli.php", root), "utf8"),
+    readFile(new URL("public/monitor-availability-cli.php", root), "utf8"),
+    readFile(new URL("public/health-availability.php", root), "utf8"),
   ]);
   assert.match(page, /電波暗室/);
   assert.match(page, /電磁波妨害評価装置\(G-TEM\)/);
@@ -155,12 +168,14 @@ test("試験室3室の空き状況ページを提供する", async () => {
   assert.match(styles, /reservation-day\.sunday/);
   assert.match(styles, /reservation-day\.reserved \{ color: #111; background: #555b60; \}/);
   assert.match(styles, /width: min\(340px,46%\)/);
-  assert.match(vite, /reservations\.html/);
+  assert.doesNotMatch(internalVite, /reservations\.html/);
+  assert.match(publicVite, /reservations\.html/);
+  assert.doesNotMatch(publicVite, /sakura\/index\.html/);
   assert.match(phpApi, /room_demo_v1/);
   assert.match(phpApi, /public_availability_pending/);
   assert.match(phpApi, /kptc_publish_availability/);
   assert.match(phpApi, /public_availability_json_v1/);
-  assert.match(jsonPublisher, /public-availability\.json/);
+  assert.match(jsonContract, /public-availability\.json/);
   assert.match(jsonPublisher, /\+3 months/);
   assert.doesNotMatch(jsonPublisher, /\+12 months/);
   assert.match(jsonPublisher, /機器利用/);
@@ -168,12 +183,65 @@ test("試験室3室の空き状況ページを提供する", async () => {
   assert.match(jsonPublisher, /機器点検/);
   assert.match(jsonPublisher, /sourceVersion/);
   assert.doesNotMatch(jsonPublisher, /repeatUntil|\$repeat/);
-  assert.match(jsonPublisher, /JSON_PRETTY_PRINT/);
-  assert.match(jsonPublisher, /rename\(\$temporary, \$path\)/);
+  assert.match(jsonContract, /JSON_PRETTY_PRINT/);
+  assert.match(jsonContract, /rename\(\$temporary, \$path\)/);
+  assert.match(jsonContract, /kptc_validate_public_availability/);
   assert.doesNotMatch(jsonPublisher, /PDO|sqlite:|CREATE TABLE|public_meta/);
+  assert.doesNotMatch(jsonContract, /PDO|sqlite:|CREATE TABLE|public_meta/);
   assert.doesNotMatch(publicApi, /app_state|audit_logs|group-watcher\.sqlite/);
-  assert.match(monthlyPublisher, /PHP_SAPI !== 'cli'/);
-  assert.match(monthlyPublisher, /kptc_publish_availability/);
+  assert.match(publisher, /hash_hmac\('sha256'/);
+  assert.match(publisher, /X-KPTC-Timestamp/);
+  assert.match(publisher, /X-KPTC-Signature/);
+  assert.match(publisher, /CURLOPT_FOLLOWLOCATION => false/);
+  assert.match(receiver, /hash_equals/);
+  assert.match(receiver, /131072/);
+  assert.match(receiver, /kptc_validate_public_availability/);
+  assert.match(receiver, /kptc_compare_public_availability/);
+  assert.match(retryPublisher, /PHP_SAPI !== 'cli'/);
+  assert.match(retryPublisher, /public_availability_consecutive_failures/);
+  assert.match(retryPublisher, /exit\(1\)/);
+  assert.match(monitor, /public_availability_last_success_at/);
+  assert.match(monitor, /exit\(\$healthy \? 0 : 1\)/);
+  assert.match(publicHealth, /http_response_code\(\$healthy \? 200 : 503\)/);
+  assert.match(publicHealth, /KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS/);
   await assert.rejects(access(new URL("public/availability-store.php", root)));
   await access(new URL("public/technology-center-logo-white.png", root));
+});
+
+test("認証情報を予定データから分離して正式ログインを提供する", async () => {
+  const [api, auth, client, manager] = await Promise.all([
+    readFile(new URL("public/api.php", root), "utf8"),
+    readFile(new URL("public/auth.php", root), "utf8"),
+    readFile(new URL("app/lib/group-watcher-api.ts", root), "utf8"),
+    readFile(new URL("public/manage-auth-user-cli.php", root), "utf8"),
+  ]);
+  assert.match(api, /authenticated'=>false/);
+  assert.match(api, /kptc_auth_verify/);
+  assert.match(api, /session_regenerate_id\(true\)/);
+  assert.doesNotMatch(api, /デモ版へログイン|\$input\['memberId'\]/);
+  assert.match(auth, /CREATE TABLE IF NOT EXISTS auth_users/);
+  assert.match(auth, /password_hash/);
+  assert.match(auth, /password_verify/);
+  assert.match(auth, /auth_login_attempts/);
+  assert.match(auth, />= 5/);
+  assert.match(client, /JSON\.stringify\(\{ username, password \}\)/);
+  assert.match(manager, /--password-stdin/);
+  assert.doesNotMatch(manager, /SELECT \*/);
+});
+
+test("内部用と外部用の配布ファイルを許可リストで分離する", async () => {
+  const copier = await readFile(new URL("scripts/copy-distribution-files.mjs", root), "utf8");
+  const internalSection = copier.slice(copier.indexOf("internal:"), copier.indexOf("public:"));
+  const publicSection = copier.slice(copier.indexOf("public:"));
+  assert.match(internalSection, /public\/api\.php/);
+  assert.match(internalSection, /public\/auth\.php/);
+  assert.match(internalSection, /publish-availability-cli\.php/);
+  assert.match(publicSection, /receive-availability\.php/);
+  assert.match(publicSection, /public-availability\.php/);
+  assert.match(publicSection, /health-availability\.php/);
+  assert.match(publicSection, /availability-contract\.php/);
+  assert.doesNotMatch(publicSection, /availability-json\.php/);
+  assert.doesNotMatch(publicSection, /api\.php|auth\.php|manage-auth-user|publish-availability-cli|group-watcher\.sqlite/);
+  await access(new URL("deploy/kptc-availability-publish.timer", root));
+  await access(new URL("deploy/kptc-availability-monitor.timer", root));
 });

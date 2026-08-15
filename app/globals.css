@@ -136,6 +136,9 @@ button, select { cursor: pointer; }
 .sync-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 0 9px; border-radius: 13px; color: #0b7569; background: #e5f5f1; font-size: 8px; font-weight: 730; white-space: nowrap; }
 .sync-badge.saving { color: #7b6822; background: #fff7d9; }
 .sync-badge.offline { color: #b14f3c; background: #fff0eb; }
+.publish-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 0 9px; border-radius: 13px; font-size: 8px; font-weight: 730; white-space: nowrap; }
+.publish-badge.ok { color: #0b7569; background: #e5f5f1; }
+.publish-badge.pending { color: #a44734; background: #fff0eb; }
 .primary-button,
 .secondary-button,
 .compact-add {
@@ -308,6 +311,7 @@ button, select { cursor: pointer; }
 .login-card .brand-copy b { color: var(--ink); }.login-card .brand-copy small { color: #7d8c99; }
 .login-card h1 { margin: 4px 0 7px; font-size: 23px; letter-spacing: -.04em; }.login-card p { margin: 0; color: #71808c; font-size: 10px; line-height: 1.7; }
 .login-card .primary-button { min-height: 43px; }.login-card > small { color: #909aa3; font-size: 8px; text-align: center; }
+.login-card .login-error { padding: 9px 11px; border: 1px solid #efc2b8; border-radius: 8px; color: #a43e2d; background: #fff2ef; font-size: 9px; font-weight: 650; }
 
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
@@ -337,6 +341,7 @@ button, select { cursor: pointer; }
   .global-search { width: min(48vw,300px); height: 35px; margin-left: 10px; }
   .global-search kbd { display: none; }
   .topbar-actions { margin-left: auto; }
+  .publish-badge { display: none; }
   .page-layout,.standard-page { padding: 22px 14px 30px; }
   .page-heading h1 { font-size: 23px; }
   .page-heading p { line-height: 1.5; }

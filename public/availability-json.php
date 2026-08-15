@@ -6,21 +6,7 @@ declare(strict_types=1);
  * 同じJSONファイルを毎回置き換えるため、公開側に過去月の履歴やデータベースは残りません。
  */
 
-const KPTC_PUBLIC_ROOM_IDS = ['m6', 'm7', 'm8'];
-
-function kptc_availability_json_path(): string {
-    $configured = trim((string)(getenv('KPTC_PUBLIC_AVAILABILITY_JSON') ?: ''));
-    if ($configured !== '') return $configured;
-    return dirname(__DIR__, 2) . '/GW/public-availability.json';
-}
-
-function kptc_date(string $value): DateTimeImmutable {
-    return new DateTimeImmutable($value . ' 12:00:00', new DateTimeZone('Asia/Tokyo'));
-}
-
-function kptc_days_between(DateTimeImmutable $from, DateTimeImmutable $to): int {
-    return (int)$from->diff($to)->format('%r%a');
-}
+require_once __DIR__ . '/availability-contract.php';
 
 function kptc_schedule_occurs_on(array $schedule, string $targetKey): bool {
     $startKey = (string)($schedule['date'] ?? '');
@@ -81,42 +67,6 @@ function kptc_build_public_availability(array $state, int $sourceVersion): array
         'rangeEnd'=>$rangeEnd->format('Y-m-d'),
         'availability'=>$availability,
     ];
-}
-
-function kptc_read_public_availability(): ?array {
-    $path = kptc_availability_json_path();
-    if (!is_file($path)) return null;
-    $contents = file_get_contents($path);
-    if ($contents === false) return null;
-    $payload = json_decode($contents, true);
-    return is_array($payload) && isset($payload['updatedAt'], $payload['availability']) ? $payload : null;
-}
-
-function kptc_publish_availability(array $state, int $sourceVersion): array {
-    $payload = kptc_build_public_availability($state, $sourceVersion);
-    $existing = kptc_read_public_availability();
-    if ($existing !== null) {
-        $existingVersion = (int)($existing['sourceVersion'] ?? 0);
-        $existingRangeStart = (string)($existing['rangeStart'] ?? '');
-        if ($existingVersion > $sourceVersion || ($existingVersion === $sourceVersion && $existingRangeStart >= $payload['rangeStart'])) return $existing;
-    }
-
-    $path = kptc_availability_json_path();
-    $directory = dirname($path);
-    if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)) throw new RuntimeException('公開JSONの保存先を作成できません');
-    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
-    if ($json === false) throw new RuntimeException('公開JSONを生成できません');
-
-    // 一時ファイルを同じ場所へ書いてから置換し、閲覧中に不完全なJSONが見えないようにします。
-    $temporary = $path . '.tmp.' . bin2hex(random_bytes(6));
-    try {
-        if (file_put_contents($temporary, $json . PHP_EOL, LOCK_EX) === false) throw new RuntimeException('公開JSONを書き込めません');
-        chmod($temporary, 0600);
-        if (!rename($temporary, $path)) throw new RuntimeException('公開JSONを置き換えられません');
-    } finally {
-        if (is_file($temporary)) unlink($temporary);
-    }
-    return $payload;
 }
 
 // 補助ファイル単体へのアクセスではデータを返しません。

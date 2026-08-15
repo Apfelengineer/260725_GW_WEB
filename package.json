@@ -7,7 +7,10 @@
   },
   "scripts": {
     "dev": "vite --config vite.sakura.config.ts",
-    "build": "vite build --config vite.sakura.config.ts",
+    "build": "pnpm run build:internal && pnpm run build:public",
+    "build:internal": "vite build --config vite.internal.config.ts && node scripts/copy-distribution-files.mjs internal",
+    "build:public": "vite build --config vite.public.config.ts && node scripts/copy-distribution-files.mjs public",
+    "build:combined": "vite build --config vite.sakura.config.ts",
     "test": "node --test tests/rendered-html.test.mjs",
     "check": "tsc --noEmit"
   },

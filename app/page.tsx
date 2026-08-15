@@ -6,13 +6,11 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   groupWatcherApi,
-  demoCategories,
-  demoMembers,
-  demoSchedules,
   groups,
   japaneseHolidays,
   type AuditEntry,
-  type BootstrapResponse,
+  type AuthenticatedBootstrapResponse,
+  type AvailabilityPublishStatus,
   type Member,
   type ScheduleCategory,
   type ScheduleItem,
@@ -80,7 +78,8 @@ function weekDates(value: Date) {
 
 function openRoomAvailability() {
   // スケジューラーを保持したまま、公開用の空き状況を独立したタブで開きます。
-  window.open("./reservations.html?room=m6", "_blank", "noopener,noreferrer");
+  const publicUrl = import.meta.env.VITE_KPTC_PUBLIC_AVAILABILITY_URL || "./reservations.html?room=m6";
+  window.open(publicUrl, "_blank", "noopener,noreferrer");
 }
 
 function monthGridDates(value: Date) {
@@ -145,18 +144,30 @@ function EmptyState({ children }: { children: React.ReactNode }) {
   return <div className="empty-state"><span aria-hidden="true">○</span><p>{children}</p></div>;
 }
 
-function LoginScreen({ members, serverAvailable, onLogin }: { members: Member[]; serverAvailable: boolean; onLogin: (memberId: string) => Promise<void> }) {
-  const [memberId, setMemberId] = useState(members[0]?.id ?? "");
+function LoginScreen({ serverAvailable, setupRequired, onLogin }: { serverAvailable: boolean; setupRequired: boolean; onLogin: (username: string, password: string) => Promise<void> }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    try { await onLogin(username, password); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "ログインできませんでした"); }
+    finally { setSubmitting(false); }
+  }
   return (
     <main className="auth-screen">
-      <section className="login-card">
+      <form className="login-card" onSubmit={submit}>
         <Logo />
-        <div><span className="eyebrow">TEAM SIGN IN</span><h1>利用者を選択してログイン</h1><p>変更内容は共有保存され、操作履歴に利用者名が記録されます。</p></div>
-        <label className="field"><span>利用者</span><select value={memberId} onChange={(event) => setMemberId(event.target.value)}>{members.map((member) => <option key={member.id} value={member.id}>{member.name}（{member.group}）</option>)}</select></label>
-        <button className="primary-button" disabled={!memberId || submitting} onClick={async () => { setSubmitting(true); await onLogin(memberId); setSubmitting(false); }}>{submitting ? "ログイン中…" : "ログイン"}</button>
-        <small>{serverAvailable ? "デモ認証：パスワードはAPI仕様確定後に接続します" : "共有サーバーへ接続できないため、端末内デモとして起動します"}</small>
-      </section>
+        <div><span className="eyebrow">SECURE SIGN IN</span><h1>KPTC Schedulerへログイン</h1><p>管理者から発行されたユーザー名とパスワードを入力してください。</p></div>
+        <label className="field"><span>ユーザー名</span><input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required /></label>
+        <label className="field"><span>パスワード</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+        {error && <p className="login-error" role="alert">{error}</p>}
+        <button className="primary-button" type="submit" disabled={!serverAvailable || !username || !password || submitting}>{submitting ? "ログイン中…" : "ログイン"}</button>
+        <small>{!serverAvailable ? "内部サーバーへ接続できません。管理者へお問い合わせください。" : setupRequired ? "初期アカウントが未設定です。管理用コマンドで管理者を作成してください。" : "通信とセッションはサーバー側で安全に管理されます。"}</small>
+      </form>
     </main>
   );
 }
@@ -168,9 +179,9 @@ export default function Home() {
   const [calendarDate, setCalendarDate] = useState(() => dateAtNoon(new Date()));
   const [group, setGroup] = useState<string>("すべてのグループ");
   const [search, setSearch] = useState("");
-  const [schedules, setSchedules] = useState<ScheduleItem[]>(demoSchedules);
-  const [members, setMembers] = useState<Member[]>(demoMembers);
-  const [categories, setCategories] = useState<ScheduleCategory[]>(demoCategories);
+  const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [categories, setCategories] = useState<ScheduleCategory[]>([]);
   const [scheduleEditor, setScheduleEditor] = useState<EditorState | null>(null);
   const [memberEditor, setMemberEditor] = useState<Member | "new" | null>(null);
   const [categoryEditor, setCategoryEditor] = useState<ScheduleCategory | "new" | null>(null);
@@ -184,8 +195,10 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [setupRequired, setSetupRequired] = useState(false);
   const [csrfToken, setCsrfToken] = useState("");
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
+  const [availabilityPublish, setAvailabilityPublish] = useState<AvailabilityPublishStatus | null>(null);
   const [syncStatus, setSyncStatus] = useState<"saved" | "saving" | "offline">("saving");
   const versionRef = useRef(0);
   const lastSyncedRef = useRef("");
@@ -198,12 +211,13 @@ export default function Home() {
     setCategories(state.categories);
   }
 
-  function applyServerPayload(payload: BootstrapResponse) {
+  function applyServerPayload(payload: AuthenticatedBootstrapResponse) {
     lastSyncedRef.current = JSON.stringify(payload.state);
     versionRef.current = payload.version;
     setCsrfToken(payload.csrfToken);
     setCurrentUserId(payload.currentUserId);
     setAuditLogs(payload.audit);
+    setAvailabilityPublish(payload.availabilityPublish);
     applySharedState(payload.state);
     setSyncStatus("saved");
   }
@@ -217,11 +231,11 @@ export default function Home() {
     let active = true;
     groupWatcherApi.bootstrap().then((payload) => {
       if (!active) return;
-      applyServerPayload(payload);
+      if (payload.authenticated) applyServerPayload(payload);
+      else setSetupRequired(payload.setupRequired);
       setAuthReady(true);
     }).catch(() => {
       if (!active) return;
-      lastSyncedRef.current = JSON.stringify({ members: demoMembers, schedules: demoSchedules, categories: demoCategories });
       setServerAvailable(false);
       setSyncStatus("offline");
       setAuthReady(true);
@@ -246,8 +260,8 @@ export default function Home() {
           const payload = await groupWatcherApi.save(state, versionRef.current, csrfToken, mutation.action, mutation.summary);
           applyServerPayload(payload);
         } catch (error) {
-          const conflict = (error as { status?: number; payload?: BootstrapResponse }).status === 409;
-          const payload = (error as { payload?: BootstrapResponse }).payload;
+          const conflict = (error as { status?: number; payload?: AuthenticatedBootstrapResponse }).status === 409;
+          const payload = (error as { payload?: AuthenticatedBootstrapResponse }).payload;
           if (conflict && payload?.state) {
             applyServerPayload(payload);
             setToast("他の利用者の更新を反映しました。もう一度操作してください");
@@ -292,19 +306,11 @@ export default function Home() {
   const selectedSchedules = selectedScheduleIds.map((id) => schedules.find((item) => item.id === id)).filter((item): item is ScheduleItem => Boolean(item));
   const selectedSchedule = selectedSchedules.length === 1 ? selectedSchedules[0] : null;
 
-  async function login(memberId: string) {
-    if (!serverAvailable) {
-      setCurrentUserId(memberId);
-      setToast("オフラインのデモモードでログインしました");
-      return;
-    }
-    try {
-      const payload = await groupWatcherApi.login(memberId);
-      applyServerPayload(payload);
-      setToast(`${payload.state.members.find((member) => member.id === memberId)?.name ?? "ユーザー"}としてログインしました`);
-    } catch {
-      setToast("ログインできませんでした");
-    }
+  async function login(username: string, password: string) {
+    if (!serverAvailable) throw new Error("内部サーバーへ接続できません");
+    const payload = await groupWatcherApi.login(username, password);
+    applyServerPayload(payload);
+    setToast(`${payload.state.members.find((member) => member.id === payload.currentUserId)?.name ?? "ユーザー"}としてログインしました`);
   }
 
   async function logout() {
@@ -324,7 +330,7 @@ export default function Home() {
       applyServerPayload(payload);
       setToast("操作を取り消して以前の状態に戻しました");
     } catch (error) {
-      const payload = (error as { payload?: BootstrapResponse }).payload;
+      const payload = (error as { payload?: AuthenticatedBootstrapResponse }).payload;
       if (payload?.state) applyServerPayload(payload);
       setToast("取り消せませんでした。最新状態を確認してください");
     }
@@ -644,7 +650,7 @@ export default function Home() {
   }
 
   if (!authReady) return <div className="auth-screen"><Logo /><p>共有データを読み込んでいます…</p></div>;
-  if (!currentUserId) return <LoginScreen members={members} serverAvailable={serverAvailable} onLogin={login} />;
+  if (!currentUserId) return <LoginScreen serverAvailable={serverAvailable} setupRequired={setupRequired} onLogin={login} />;
 
   return (
     <div className="app-shell">
@@ -677,6 +683,7 @@ export default function Home() {
           <div className="mobile-brand"><Logo /></div>
           <label className="global-search"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="予定・メンバーを検索" aria-label="予定・メンバーを検索" /><kbd>⌘ K</kbd></label>
           <div className="topbar-actions">
+            {availabilityPublish && <span className={`publish-badge ${availabilityPublish.pending ? "pending" : "ok"}`} title={availabilityPublish.lastSuccessAt ? `最終送信: ${new Date(availabilityPublish.lastSuccessAt).toLocaleString("ja-JP")}` : "送信実績なし"}>{availabilityPublish.pending ? `△ 公開JSON再送待ち${availabilityPublish.consecutiveFailures ? ` (${availabilityPublish.consecutiveFailures})` : ""}` : "● 公開JSON送信済み"}</span>}
             <span className={`sync-badge ${syncStatus}`}>{syncStatus === "saved" ? "● 共有済み" : syncStatus === "saving" ? "○ 保存中" : "△ オフライン"}</span>
             <button className="primary-button" onClick={() => openCreateSchedule()}><span>＋</span> 予定を登録</button>
           </div>

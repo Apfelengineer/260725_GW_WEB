@@ -1,21 +1,26 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/availability-json.php';
+require_once __DIR__ . '/availability-publisher.php';
+require_once __DIR__ . '/auth.php';
 
 /*
- * さくらインターネット上で動作する共有APIです。
+ * 内部Linuxサーバー上で動作する共有APIです。
  * PHPセッションで利用者を識別し、SQLiteへ予定・ユーザー・予定種別・操作履歴を保存します。
  */
 
 // API応答をJSONに統一し、共有データをブラウザや中継キャッシュへ残さないようにします。
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
-session_name('GW_SESSION');
+$scriptDirectory = rtrim(str_replace('\\', '/', dirname((string)($_SERVER['SCRIPT_NAME'] ?? '/'))), '/');
+$cookiePath = trim((string)(getenv('KPTC_SESSION_COOKIE_PATH') ?: '')) ?: ($scriptDirectory === '' || $scriptDirectory === '.' ? '/' : $scriptDirectory . '/');
+$cookieSecureSetting = getenv('KPTC_SESSION_COOKIE_SECURE');
+$cookieSecure = $cookieSecureSetting === false ? !empty($_SERVER['HTTPS']) : $cookieSecureSetting === '1';
+session_name('KPTC_SCHEDULER_SESSION');
 session_set_cookie_params([
-    'lifetime' => 60 * 60 * 12,
-    'path' => '/GW/',
-    'secure' => !empty($_SERVER['HTTPS']),
+    'lifetime' => 0,
+    'path' => $cookiePath,
+    'secure' => $cookieSecure,
     'httponly' => true,
     'samesite' => 'Strict',
 ]);
@@ -28,7 +33,12 @@ function respond(array $payload, int $status = 200): never {
 }
 
 function body(): array {
-    $decoded = json_decode(file_get_contents('php://input') ?: '{}', true);
+    if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 2 * 1024 * 1024) respond(['error'=>'送信データが大きすぎます'], 413);
+    try {
+        $decoded = json_decode(file_get_contents('php://input') ?: '{}', true, 64, JSON_THROW_ON_ERROR);
+    } catch (JsonException $error) {
+        respond(['error'=>'JSONの形式が不正です'], 400);
+    }
     return is_array($decoded) ? $decoded : [];
 }
 
@@ -159,20 +169,38 @@ function strip_schedule_automation_fields(array $state): array {
 }
 
 function mark_availability_publish_pending(PDO $pdo): void {
-    // 内部DBの更新と同じ取引で未送信印を付け、公開DBへの連携失敗を次回アクセス時に再試行します。
+    // 内部DBの更新と同じ取引で未送信印を付け、外部サーバーへの連携失敗を再試行できるようにします。
     $pdo->prepare("INSERT OR REPLACE INTO app_meta(key,value) VALUES('public_availability_pending','1')")->execute();
+}
+
+function set_meta(PDO $pdo, string $key, string $value): void {
+    $pdo->prepare('INSERT OR REPLACE INTO app_meta(key,value) VALUES(?,?)')->execute([$key, $value]);
+}
+
+function get_meta(PDO $pdo, string $key): ?string {
+    $statement = $pdo->prepare('SELECT value FROM app_meta WHERE key=?');
+    $statement->execute([$key]);
+    $value = $statement->fetchColumn();
+    return $value === false ? null : (string)$value;
 }
 
 function attempt_availability_publish(PDO $pdo, array $state, int $sourceVersion): bool {
     // 公開情報の連携失敗は予定保存を巻き戻さず、内部DBに再送待ちとして記録します。
+    set_meta($pdo, 'public_availability_last_attempt_at', date(DATE_ATOM));
+    set_meta($pdo, 'public_availability_source_version', (string)$sourceVersion);
     try {
         $published = kptc_publish_availability($state, $sourceVersion);
-        $meta = $pdo->prepare('INSERT OR REPLACE INTO app_meta(key,value) VALUES(?,?)');
-        $meta->execute(['public_availability_pending', '0']);
-        $meta->execute(['public_availability_updated_at', (string)$published['updatedAt']]);
+        set_meta($pdo, 'public_availability_pending', '0');
+        set_meta($pdo, 'public_availability_updated_at', (string)$published['updatedAt']);
+        set_meta($pdo, 'public_availability_last_success_at', date(DATE_ATOM));
+        set_meta($pdo, 'public_availability_last_error', '');
+        set_meta($pdo, 'public_availability_consecutive_failures', '0');
         return true;
     } catch (Throwable $error) {
         mark_availability_publish_pending($pdo);
+        $failureCount = (int)(get_meta($pdo, 'public_availability_consecutive_failures') ?? '0') + 1;
+        set_meta($pdo, 'public_availability_consecutive_failures', (string)$failureCount);
+        set_meta($pdo, 'public_availability_last_error', substr($error->getMessage(), 0, 500));
         error_log('Public availability publish failed: ' . $error->getMessage());
         return false;
     }
@@ -182,14 +210,17 @@ function db(): PDO {
     // Web公開フォルダの外側へSQLiteを置き、WALモードで同時アクセスを扱います。
     static $pdo;
     if ($pdo instanceof PDO) return $pdo;
-    $dataDir = dirname(__DIR__, 2) . '/GW';
+    $configuredPath = trim((string)(getenv('KPTC_INTERNAL_SCHEDULER_DB') ?: ''));
+    $databasePath = $configuredPath !== '' ? $configuredPath : dirname(__DIR__, 2) . '/GW/group-watcher.sqlite';
+    $dataDir = dirname($databasePath);
     if (!is_dir($dataDir)) mkdir($dataDir, 0700, true);
-    $pdo = new PDO('sqlite:' . $dataDir . '/group-watcher.sqlite');
+    $pdo = new PDO('sqlite:' . $databasePath);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->exec('PRAGMA journal_mode=WAL');
     $pdo->exec('CREATE TABLE IF NOT EXISTS app_state (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL)');
     $pdo->exec('CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id TEXT NOT NULL, actor_name TEXT NOT NULL, action TEXT NOT NULL, summary TEXT NOT NULL, before_json TEXT, after_json TEXT, created_at TEXT NOT NULL, undone INTEGER NOT NULL DEFAULT 0)');
     $pdo->exec('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    kptc_auth_create_tables($pdo);
     $count = (int)$pdo->query('SELECT COUNT(*) FROM app_state')->fetchColumn();
     if ($count === 0) {
         // アプリ状態は1行にまとめ、version列を楽観ロックへ利用します。
@@ -297,11 +328,14 @@ function require_post(): void {
 
 function require_auth(): string {
     // 更新系APIはログイン済みセッションとCSRFトークンの両方を要求します。
-    $memberId = $_SESSION['member_id'] ?? '';
-    if ($memberId === '') respond(['error'=>'ログインが必要です'], 401);
+    $user = kptc_auth_active_session_user(db());
+    if ($user === null) {
+        $_SESSION = [];
+        respond(['error'=>'ログインが必要です'], 401);
+    }
     $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     if ($token === '' || !hash_equals(csrf(), $token)) respond(['error'=>'セッションを確認できません'], 403);
-    return $memberId;
+    return (string)$user['member_id'];
 }
 
 function member_name(array $state, string $memberId): string {
@@ -311,9 +345,32 @@ function member_name(array $state, string $memberId): string {
 
 function bootstrap_payload(PDO $pdo): array {
     $record = current_record($pdo);
-    $memberId = $_SESSION['member_id'] ?? null;
-    if ($memberId && member_name($record['state'], $memberId) === '削除済みユーザー') $memberId = null;
-    return $record + ['currentUserId'=>$memberId, 'csrfToken'=>csrf(), 'audit'=>audit_list($pdo)];
+    $user = kptc_auth_active_session_user($pdo);
+    if ($user === null && !empty($_SESSION['auth_user_id'])) {
+        $_SESSION = [];
+        session_regenerate_id(true);
+    }
+    $memberId = $user === null ? null : (string)$user['member_id'];
+    if ($memberId && member_name($record['state'], $memberId) === '削除済みユーザー') {
+        $_SESSION = [];
+        $memberId = null;
+    }
+    if ($memberId === null) return ['authenticated'=>false, 'setupRequired'=>kptc_auth_user_count($pdo) === 0];
+    return $record + [
+        'authenticated'=>true,
+        'setupRequired'=>false,
+        'currentUserId'=>$memberId,
+        'username'=>(string)$user['username'],
+        'role'=>(string)$user['role'],
+        'csrfToken'=>csrf(),
+        'audit'=>audit_list($pdo),
+        'availabilityPublish'=>[
+            'pending'=>get_meta($pdo, 'public_availability_pending') === '1',
+            'lastAttemptAt'=>get_meta($pdo, 'public_availability_last_attempt_at'),
+            'lastSuccessAt'=>get_meta($pdo, 'public_availability_last_success_at'),
+            'consecutiveFailures'=>(int)(get_meta($pdo, 'public_availability_consecutive_failures') ?? '0'),
+        ],
+    ];
 }
 
 $pdo = db();
@@ -322,19 +379,31 @@ $action = $_GET['action'] ?? 'bootstrap';
 // 初期データ取得とログイン状態確認。
 if ($action === 'bootstrap') respond(bootstrap_payload($pdo));
 
-// デモ認証：選択された有効なユーザーをセッションへ記録します。
+// ユーザー名とパスワードを検証し、固定攻撃を避けるためセッションIDを更新します。
 if ($action === 'login') {
     require_post();
     $input = body();
-    $memberId = (string)($input['memberId'] ?? '');
+    $username = (string)($input['username'] ?? '');
+    $password = (string)($input['password'] ?? '');
+    if (strlen($username) < 3 || strlen($username) > 64 || strlen($password) < 12 || strlen($password) > 256) respond(['error'=>'ユーザー名またはパスワードが正しくありません'], 401);
+    if (kptc_auth_user_count($pdo) === 0) respond(['error'=>'管理者による初期アカウント設定が必要です', 'setupRequired'=>true], 503);
+    try {
+        $user = kptc_auth_verify($pdo, $username, $password, (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+    } catch (OverflowException $error) {
+        respond(['error'=>$error->getMessage()], 429);
+    }
+    if ($user === null) respond(['error'=>'ユーザー名またはパスワードが正しくありません'], 401);
+    $memberId = (string)$user['member_id'];
     $record = current_record($pdo);
     $name = member_name($record['state'], $memberId);
-    if ($memberId === '' || $name === '削除済みユーザー') respond(['error'=>'ユーザーが見つかりません'], 404);
+    if ($memberId === '' || $name === '削除済みユーザー') respond(['error'=>'対応するスケジューラーユーザーが見つかりません'], 403);
     session_regenerate_id(true);
-    $_SESSION['member_id'] = $memberId;
+    $_SESSION['auth_user_id'] = (int)$user['id'];
+    $_SESSION['authenticated_at'] = time();
+    $_SESSION['last_activity_at'] = time();
     $_SESSION['csrf'] = bin2hex(random_bytes(24));
     $stmt = $pdo->prepare('INSERT INTO audit_logs(actor_id,actor_name,action,summary,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?)');
-    $stmt->execute([$memberId,$name,'ログイン','デモ版へログイン',null,null,date(DATE_ATOM)]);
+    $stmt->execute([$memberId,$name,'ログイン','ログイン',null,null,date(DATE_ATOM)]);
     respond(bootstrap_payload($pdo));
 }
 

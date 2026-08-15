@@ -39,6 +39,8 @@ next-env.d.ts
 *.tsbuildinfo
 /dist/
 /dist-sakura/
+/dist-internal/
+/dist-public/
 /.wrangler/
 /outputs/
 /work/
