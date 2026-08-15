@@ -34,35 +34,39 @@ function initial_state(): array {
     // DBを初めて作成したときだけ使用する、画面確認用の初期データです。
     return [
         'members' => [
-            ['id'=>'m1','name'=>'佐藤 美咲','group'=>'営業部','initials'=>'佐','color'=>'#e96f51','phone'=>'03-1234-5678','email'=>'misaki.sato@example.jp'],
-            ['id'=>'m2','name'=>'鈴木 健太','group'=>'営業部','initials'=>'鈴','color'=>'#3c82c8','phone'=>'03-1234-5681','email'=>'kenta.suzuki@example.jp'],
-            ['id'=>'m3','name'=>'高橋 直子','group'=>'開発部','initials'=>'高','color'=>'#8a67c8','phone'=>'03-1234-5686','email'=>'naoko.takahashi@example.jp'],
-            ['id'=>'m4','name'=>'田中 悠真','group'=>'開発部','initials'=>'田','color'=>'#268b7d','phone'=>'03-1234-5688','email'=>'yuma.tanaka@example.jp'],
-            ['id'=>'m5','name'=>'伊藤 由紀','group'=>'管理部','initials'=>'伊','color'=>'#d18b2f','phone'=>'03-1234-5692','email'=>'yuki.ito@example.jp'],
-            ['id'=>'m6','name'=>'電波暗室','group'=>'試験室','initials'=>'電波','color'=>'#536f91','phone'=>'03-1234-5701','email'=>'anechoic@example.jp'],
-            ['id'=>'m7','name'=>'電材室','group'=>'試験室','initials'=>'電材','color'=>'#417e72','phone'=>'03-1234-5702','email'=>'materials@example.jp'],
-            ['id'=>'m8','name'=>'電子情報研究室','group'=>'試験室','initials'=>'電子','color'=>'#765f9a','phone'=>'03-1234-5703','email'=>'electronics@example.jp'],
+            ['id'=>'m1','name'=>'佐藤 美咲','group'=>'電気通信係','initials'=>'佐','color'=>'#e96f51','extension'=>'03-1234-5678'],
+            ['id'=>'m2','name'=>'鈴木 健太','group'=>'電気通信係','initials'=>'鈴','color'=>'#3c82c8','extension'=>'03-1234-5681'],
+            ['id'=>'m3','name'=>'高橋 直子','group'=>'電気通信係','initials'=>'高','color'=>'#8a67c8','extension'=>'03-1234-5686'],
+            ['id'=>'m4','name'=>'田中 悠真','group'=>'電気通信係','initials'=>'田','color'=>'#268b7d','extension'=>'03-1234-5688'],
+            ['id'=>'m5','name'=>'伊藤 由紀','group'=>'電気通信係','initials'=>'伊','color'=>'#d18b2f','extension'=>'03-1234-5692'],
+            ['id'=>'m6','name'=>'電波暗室','group'=>'試験室','initials'=>'電波','color'=>'#536f91','extension'=>'03-1234-5701'],
+            ['id'=>'m7','name'=>'電材室','group'=>'試験室','initials'=>'電材','color'=>'#417e72','extension'=>'03-1234-5702'],
+            ['id'=>'m8','name'=>'電子情報研究室','group'=>'試験室','initials'=>'電子','color'=>'#765f9a','extension'=>'03-1234-5703'],
         ],
         'categories' => [
-            ['id'=>'cat-meeting','name'=>'会議','color'=>'#5086bd'], ['id'=>'cat-visit','name'=>'訪問','color'=>'#e87556'],
-            ['id'=>'cat-work','name'=>'作業','color'=>'#209885'], ['id'=>'cat-vacation','name'=>'休暇','color'=>'#9a83c8'],
-            ['id'=>'cat-other','name'=>'その他','color'=>'#d09839'],
+            ['id'=>'cat-vacation','name'=>'休暇','color'=>'#9a83c8'],
+            ['id'=>'cat-maintenance','name'=>'機器点検','color'=>'#687783'],
+            ['id'=>'cat-equipment-use','name'=>'機器利用','color'=>'#209885'],
+            ['id'=>'cat-waiting','name'=>'キャンセル待ち','color'=>'#d09839'],
+            ['id'=>'cat-internal-meeting','name'=>'所内会議','color'=>'#5086bd'],
+            ['id'=>'cat-outside','name'=>'出張・外出','color'=>'#e87556'],
+            ['id'=>'cat-other','name'=>'その他','color'=>'#718096'],
         ],
         'schedules' => [
-            ['id'=>'s1','memberId'=>'m1','date'=>'2026-07-20','endDate'=>'2026-07-20','start'=>'09:30','end'=>'10:30','title'=>'営業定例','category'=>'会議','memo'=>'週次の案件レビュー','repeat'=>'weekly','repeatUntil'=>'2026-09-30','reminderMinutes'=>10],
-            ['id'=>'s2','memberId'=>'m1','date'=>'2026-07-21','endDate'=>'2026-07-21','start'=>'13:00','end'=>'15:00','title'=>'山田商事 訪問','category'=>'訪問'],
-            ['id'=>'s3','memberId'=>'m1','date'=>'2026-07-23','endDate'=>'2026-07-23','start'=>'11:00','end'=>'12:00','title'=>'提案書レビュー','category'=>'作業'],
-            ['id'=>'s4','memberId'=>'m2','date'=>'2026-07-20','endDate'=>'2026-07-20','start'=>'10:00','end'=>'11:00','title'=>'新規案件MTG','category'=>'会議'],
-            ['id'=>'s5','memberId'=>'m2','date'=>'2026-07-22','endDate'=>'2026-07-22','start'=>'14:30','end'=>'16:30','title'=>'江東物流 訪問','category'=>'訪問','memo'=>'見積書を持参'],
-            ['id'=>'s6','memberId'=>'m2','date'=>'2026-07-24','endDate'=>'2026-07-24','start'=>'09:00','end'=>'11:30','title'=>'月次レポート','category'=>'作業'],
-            ['id'=>'s7','memberId'=>'m3','date'=>'2026-07-20','endDate'=>'2026-07-20','start'=>'13:00','end'=>'14:00','title'=>'開発スプリント計画','category'=>'会議'],
-            ['id'=>'s8','memberId'=>'m3','date'=>'2026-07-21','endDate'=>'2026-07-21','start'=>'10:00','end'=>'12:00','title'=>'API設計','category'=>'作業','memo'=>'認証方式を確定'],
-            ['id'=>'s9','memberId'=>'m3','date'=>'2026-07-23','endDate'=>'2026-07-23','start'=>'15:00','end'=>'16:00','title'=>'リリース判定','category'=>'会議','private'=>true],
-            ['id'=>'s10','memberId'=>'m4','date'=>'2026-07-21','endDate'=>'2026-07-21','start'=>'09:30','end'=>'11:30','title'=>'画面実装','category'=>'作業'],
-            ['id'=>'s11','memberId'=>'m4','date'=>'2026-07-22','endDate'=>'2026-07-22','start'=>'13:30','end'=>'14:30','title'=>'コードレビュー','category'=>'会議'],
-            ['id'=>'s12','memberId'=>'m4','date'=>'2026-07-24','endDate'=>'2026-07-24','start'=>'10:00','end'=>'12:00','title'=>'データ移行検証','category'=>'作業'],
+            ['id'=>'s1','memberId'=>'m1','date'=>'2026-07-20','endDate'=>'2026-07-20','start'=>'09:30','end'=>'10:30','title'=>'営業定例','category'=>'所内会議','memo'=>'週次の案件レビュー','repeat'=>'weekly','repeatUntil'=>'2026-09-30','reminderMinutes'=>10],
+            ['id'=>'s2','memberId'=>'m1','date'=>'2026-07-21','endDate'=>'2026-07-21','start'=>'13:00','end'=>'15:00','title'=>'山田商事 訪問','category'=>'出張・外出'],
+            ['id'=>'s3','memberId'=>'m1','date'=>'2026-07-23','endDate'=>'2026-07-23','start'=>'11:00','end'=>'12:00','title'=>'提案書レビュー','category'=>'その他'],
+            ['id'=>'s4','memberId'=>'m2','date'=>'2026-07-20','endDate'=>'2026-07-20','start'=>'10:00','end'=>'11:00','title'=>'新規案件MTG','category'=>'所内会議'],
+            ['id'=>'s5','memberId'=>'m2','date'=>'2026-07-22','endDate'=>'2026-07-22','start'=>'14:30','end'=>'16:30','title'=>'江東物流 訪問','category'=>'出張・外出','memo'=>'見積書を持参'],
+            ['id'=>'s6','memberId'=>'m2','date'=>'2026-07-24','endDate'=>'2026-07-24','start'=>'09:00','end'=>'11:30','title'=>'月次レポート','category'=>'その他'],
+            ['id'=>'s7','memberId'=>'m3','date'=>'2026-07-20','endDate'=>'2026-07-20','start'=>'13:00','end'=>'14:00','title'=>'開発スプリント計画','category'=>'所内会議'],
+            ['id'=>'s8','memberId'=>'m3','date'=>'2026-07-21','endDate'=>'2026-07-21','start'=>'10:00','end'=>'12:00','title'=>'API設計','category'=>'その他','memo'=>'認証方式を確定'],
+            ['id'=>'s9','memberId'=>'m3','date'=>'2026-07-23','endDate'=>'2026-07-23','start'=>'15:00','end'=>'16:00','title'=>'リリース判定','category'=>'所内会議','private'=>true],
+            ['id'=>'s10','memberId'=>'m4','date'=>'2026-07-21','endDate'=>'2026-07-21','start'=>'09:30','end'=>'11:30','title'=>'画面実装','category'=>'その他'],
+            ['id'=>'s11','memberId'=>'m4','date'=>'2026-07-22','endDate'=>'2026-07-22','start'=>'13:30','end'=>'14:30','title'=>'コードレビュー','category'=>'所内会議'],
+            ['id'=>'s12','memberId'=>'m4','date'=>'2026-07-24','endDate'=>'2026-07-24','start'=>'10:00','end'=>'12:00','title'=>'データ移行検証','category'=>'その他'],
             ['id'=>'s13','memberId'=>'m5','date'=>'2026-07-21','endDate'=>'2026-07-21','start'=>'09:00','end'=>'18:00','title'=>'有給休暇','category'=>'休暇','private'=>true],
-            ['id'=>'s14','memberId'=>'m5','date'=>'2026-07-23','endDate'=>'2026-07-23','start'=>'10:00','end'=>'11:00','title'=>'採用面談','category'=>'会議'],
+            ['id'=>'s14','memberId'=>'m5','date'=>'2026-07-23','endDate'=>'2026-07-23','start'=>'10:00','end'=>'11:00','title'=>'採用面談','category'=>'所内会議'],
         ],
     ];
 }
@@ -70,19 +74,77 @@ function initial_state(): array {
 function room_demo_schedules(): array {
     // 試験室の空き状況表示を確認するための予約・メンテナンス例です。
     return [
-        ['id'=>'room-demo-m6-july','memberId'=>'m6','date'=>'2026-07-01','endDate'=>'2026-07-01','start'=>'00:00','end'=>'23:59','timePreset'=>'all-day','title'=>'電波暗室 予約済み','category'=>'会議','repeat'=>'daily','repeatUntil'=>'2026-07-31'],
-        ['id'=>'room-demo-m7-1','memberId'=>'m7','date'=>'2026-07-27','start'=>'09:00','end'=>'12:00','timePreset'=>'morning','title'=>'材料評価','category'=>'会議'],
-        ['id'=>'room-demo-m7-2','memberId'=>'m7','date'=>'2026-07-28','start'=>'13:00','end'=>'17:00','timePreset'=>'afternoon','title'=>'耐久試験','category'=>'会議'],
-        ['id'=>'room-demo-m7-3','memberId'=>'m7','date'=>'2026-07-29','start'=>'09:00','end'=>'17:00','title'=>'終日試験','category'=>'会議'],
-        ['id'=>'room-demo-m7-4','memberId'=>'m7','date'=>'2026-07-30','start'=>'09:00','end'=>'17:00','title'=>'設備点検','category'=>'作業'],
-        ['id'=>'room-demo-m7-5','memberId'=>'m7','date'=>'2026-08-05','start'=>'09:00','end'=>'12:00','timePreset'=>'morning','title'=>'部材試験','category'=>'会議'],
-        ['id'=>'room-demo-m7-6','memberId'=>'m7','date'=>'2026-08-12','start'=>'09:00','end'=>'17:00','title'=>'定期メンテナンス','category'=>'作業'],
-        ['id'=>'room-demo-m8-1','memberId'=>'m8','date'=>'2026-07-27','start'=>'13:00','end'=>'17:00','timePreset'=>'afternoon','title'=>'通信評価','category'=>'会議'],
-        ['id'=>'room-demo-m8-2','memberId'=>'m8','date'=>'2026-08-03','start'=>'09:00','end'=>'17:00','title'=>'情報機器試験','category'=>'会議'],
-        ['id'=>'room-demo-m8-3','memberId'=>'m8','date'=>'2026-08-18','start'=>'09:00','end'=>'17:00','title'=>'設備校正','category'=>'作業'],
-        ['id'=>'room-demo-m8-4','memberId'=>'m8','date'=>'2026-09-07','start'=>'09:00','end'=>'12:00','timePreset'=>'morning','title'=>'EMC事前評価','category'=>'会議'],
-        ['id'=>'room-demo-m8-5','memberId'=>'m8','date'=>'2026-09-15','start'=>'13:00','end'=>'17:00','timePreset'=>'afternoon','title'=>'電子情報評価','category'=>'会議'],
+        ['id'=>'room-demo-m6-july','memberId'=>'m6','date'=>'2026-07-01','endDate'=>'2026-07-01','start'=>'00:00','end'=>'23:59','timePreset'=>'all-day','title'=>'電波暗室 予約済み','category'=>'機器利用','repeat'=>'daily','repeatUntil'=>'2026-07-31'],
+        ['id'=>'room-demo-m7-1','memberId'=>'m7','date'=>'2026-07-27','start'=>'09:00','end'=>'12:00','timePreset'=>'morning','title'=>'材料評価','category'=>'機器利用'],
+        ['id'=>'room-demo-m7-2','memberId'=>'m7','date'=>'2026-07-28','start'=>'13:00','end'=>'17:00','timePreset'=>'afternoon','title'=>'耐久試験','category'=>'機器利用'],
+        ['id'=>'room-demo-m7-3','memberId'=>'m7','date'=>'2026-07-29','start'=>'09:00','end'=>'17:00','title'=>'終日試験','category'=>'機器利用'],
+        ['id'=>'room-demo-m7-4','memberId'=>'m7','date'=>'2026-07-30','start'=>'09:00','end'=>'17:00','title'=>'設備点検','category'=>'機器点検'],
+        ['id'=>'room-demo-m7-5','memberId'=>'m7','date'=>'2026-08-05','start'=>'09:00','end'=>'12:00','timePreset'=>'morning','title'=>'部材試験','category'=>'機器利用'],
+        ['id'=>'room-demo-m7-6','memberId'=>'m7','date'=>'2026-08-12','start'=>'09:00','end'=>'17:00','title'=>'定期メンテナンス','category'=>'機器点検'],
+        ['id'=>'room-demo-m8-1','memberId'=>'m8','date'=>'2026-07-27','start'=>'13:00','end'=>'17:00','timePreset'=>'afternoon','title'=>'通信評価','category'=>'機器利用'],
+        ['id'=>'room-demo-m8-2','memberId'=>'m8','date'=>'2026-08-03','start'=>'09:00','end'=>'17:00','title'=>'情報機器試験','category'=>'機器利用'],
+        ['id'=>'room-demo-m8-3','memberId'=>'m8','date'=>'2026-08-18','start'=>'09:00','end'=>'17:00','title'=>'設備校正','category'=>'機器点検'],
+        ['id'=>'room-demo-m8-4','memberId'=>'m8','date'=>'2026-09-07','start'=>'09:00','end'=>'12:00','timePreset'=>'morning','title'=>'EMC事前評価','category'=>'機器利用'],
+        ['id'=>'room-demo-m8-5','memberId'=>'m8','date'=>'2026-09-15','start'=>'13:00','end'=>'17:00','timePreset'=>'afternoon','title'=>'電子情報評価','category'=>'機器利用'],
     ];
+}
+
+function standard_categories(): array {
+    // 運用で使用する予定種別を、画面と同じ順序・配色で返します。
+    return [
+        ['id'=>'cat-vacation','name'=>'休暇','color'=>'#9a83c8'],
+        ['id'=>'cat-maintenance','name'=>'機器点検','color'=>'#687783'],
+        ['id'=>'cat-equipment-use','name'=>'機器利用','color'=>'#209885'],
+        ['id'=>'cat-waiting','name'=>'キャンセル待ち','color'=>'#d09839'],
+        ['id'=>'cat-internal-meeting','name'=>'所内会議','color'=>'#5086bd'],
+        ['id'=>'cat-outside','name'=>'出張・外出','color'=>'#e87556'],
+        ['id'=>'cat-other','name'=>'その他','color'=>'#718096'],
+    ];
+}
+
+function uses_legacy_organization_categories(array $state): bool {
+    // 移行後に追加された独自予定種別は保護し、旧形式の履歴だけを再変換します。
+    foreach ($state['members'] ?? [] as $member) {
+        if (isset($member['phone']) || isset($member['email'])) return true;
+        if (!in_array(($member['group'] ?? ''), ['電気通信係', '試験室'], true)) return true;
+    }
+    foreach ($state['schedules'] ?? [] as $schedule) {
+        if (in_array(($schedule['category'] ?? ''), ['会議', '訪問', '作業'], true)) return true;
+    }
+    return false;
+}
+
+function migrate_organization_categories(array $state): array {
+    // 既存の利用者・予定を保持したまま、所属、内線、予定種別を新しい体系へ変換します。
+    $roomMemberIds = [];
+    if (isset($state['members']) && is_array($state['members'])) {
+        foreach ($state['members'] as $member) {
+            if (($member['group'] ?? '') === '試験室') $roomMemberIds[(string)($member['id'] ?? '')] = true;
+        }
+        foreach ($state['members'] as &$member) {
+            $member['group'] = ($member['group'] ?? '') === '試験室' ? '試験室' : '電気通信係';
+            $member['extension'] = (string)($member['extension'] ?? $member['phone'] ?? '');
+            unset($member['phone'], $member['email']);
+        }
+        unset($member);
+    }
+
+    $state['categories'] = standard_categories();
+    $allowed = array_fill_keys(array_column($state['categories'], 'name'), true);
+    if (isset($state['schedules']) && is_array($state['schedules'])) {
+        foreach ($state['schedules'] as &$schedule) {
+            $category = (string)($schedule['category'] ?? 'その他');
+            if (isset($allowed[$category])) continue;
+            $isRoom = isset($roomMemberIds[(string)($schedule['memberId'] ?? '')]);
+            if ($category === '会議') $schedule['category'] = $isRoom ? '機器利用' : '所内会議';
+            elseif ($category === '作業') $schedule['category'] = $isRoom ? '機器点検' : 'その他';
+            elseif ($category === '訪問') $schedule['category'] = '出張・外出';
+            elseif ($category === '休暇') $schedule['category'] = '休暇';
+            else $schedule['category'] = 'その他';
+        }
+        unset($schedule);
+    }
+    return $state;
 }
 
 function db(): PDO {
@@ -131,6 +193,15 @@ function db(): PDO {
         $stmt = $pdo->prepare('UPDATE app_state SET payload=?,version=?,updated_at=? WHERE id=1');
         $stmt->execute([json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), (int)$row['version'] + 1, date(DATE_ATOM)]);
         $pdo->prepare("INSERT INTO app_meta(key,value) VALUES('remove_presence_fields_v2','1')")->execute();
+    }
+    $organizationMigrated = $pdo->query("SELECT value FROM app_meta WHERE key='organization_categories_extension_v1'")->fetchColumn();
+    if ($organizationMigrated === false) {
+        // 保存済みの件数や予定内容は変えず、今回変更した分類と連絡先項目だけを一度移行します。
+        $row = $pdo->query('SELECT payload,version FROM app_state WHERE id=1')->fetch(PDO::FETCH_ASSOC);
+        $state = migrate_organization_categories(json_decode($row['payload'], true));
+        $stmt = $pdo->prepare('UPDATE app_state SET payload=?,version=?,updated_at=? WHERE id=1');
+        $stmt->execute([json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), (int)$row['version'] + 1, date(DATE_ATOM)]);
+        $pdo->prepare("INSERT INTO app_meta(key,value) VALUES('organization_categories_extension_v1','1')")->execute();
     }
     return $pdo;
 }
@@ -260,7 +331,9 @@ if ($action === 'undo') {
     $stmt->execute([$auditId]);
     $target = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$target) { $pdo->rollBack(); respond(['error'=>'取り消せない操作です'], 422); }
+    // 旧体系の履歴を取り消した場合も、現在の所属・内線・予定種別へ正規化してから復元します。
     $restored = json_decode($target['before_json'], true);
+    if (uses_legacy_organization_categories($restored)) $restored = migrate_organization_categories($restored);
     $restoredJson = json_encode($restored, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $nextVersion = $record['version'] + 1;
     $update = $pdo->prepare('UPDATE app_state SET payload=?,version=?,updated_at=? WHERE id=1');

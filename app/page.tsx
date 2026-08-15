@@ -543,8 +543,7 @@ export default function Home() {
       group: String(form.get("group")) as Member["group"],
       initials: String(form.get("initials") ?? name.slice(0, 1)).trim().slice(0, 2) || name.slice(0, 1),
       color: String(form.get("color")),
-      phone: String(form.get("phone") ?? ""),
-      email: String(form.get("email") ?? ""),
+      extension: String(form.get("extension") ?? ""),
     };
     markMutation(existing ? "ユーザー編集" : "ユーザー追加", member.name);
     setMembers((items) => existing ? items.map((item) => item.id === member.id ? member : item) : [...items, member]);
@@ -966,7 +965,7 @@ function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs
       <div className="page-heading"><div><span className="eyebrow">MANAGEMENT</span><h1>ユーザー・予定種別・操作履歴</h1><p>共同編集の変更者を確認し、必要に応じて変更を取り消せます</p></div>{tab !== "audit" && <button className="primary-button" onClick={tab === "members" ? onAddMember : onAddCategory}>＋ {tab === "members" ? "ユーザーを追加" : "予定種別を追加"}</button>}</div>
       <div className="management-tabs"><button className={tab === "members" ? "active" : ""} onClick={() => setTab("members")}>ユーザー <span>{members.length}</span></button><button className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}>予定種別 <span>{categories.length}</span></button><button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>操作履歴 <span>{auditLogs.length}</span></button></div>
       {tab === "members" ? (
-        <div className="members-table-wrap"><table className="members-table"><thead><tr><th>ユーザー</th><th>所属</th><th>連絡先</th><th>操作</th></tr></thead><tbody>{members.map((member) => <tr key={member.id}><td><Avatar member={member} small /><b>{member.name}</b></td><td>{member.group}</td><td><span>{member.phone || "—"}</span><small>{member.email}</small></td><td className="table-actions"><button onClick={() => onEditMember(member)}>編集</button><button className="danger" onClick={() => onDeleteMember(member)}>削除</button></td></tr>)}</tbody></table></div>
+        <div className="members-table-wrap"><table className="members-table"><thead><tr><th>ユーザー</th><th>所属</th><th>内線</th><th>操作</th></tr></thead><tbody>{members.map((member) => <tr key={member.id}><td><Avatar member={member} small /><b>{member.name}</b></td><td>{member.group}</td><td><span>{member.extension || "—"}</span></td><td className="table-actions"><button onClick={() => onEditMember(member)}>編集</button><button className="danger" onClick={() => onDeleteMember(member)}>削除</button></td></tr>)}</tbody></table></div>
       ) : tab === "categories" ? (
         <div className="category-management-list">{categories.map((category) => <article key={category.id}><span className="category-swatch" style={{ background: category.color }} /><div><h2>{category.name}</h2><p>使用中の予定 {schedules.filter((item) => item.category === category.name).length}件</p></div><button onClick={() => onEditCategory(category)}>編集</button><button className="danger" onClick={() => onDeleteCategory(category)}>削除</button></article>)}</div>
       ) : (
@@ -1022,9 +1021,8 @@ function MemberModal({ member, onClose, onSubmit }: { member: Member | null; onC
         <label className="field full"><span>氏名</span><input name="name" autoFocus defaultValue={member?.name ?? ""} required /></label>
         <label className="field"><span>表示文字</span><input name="initials" maxLength={2} defaultValue={member?.initials ?? ""} placeholder="例：佐" /></label>
         <label className="field color-field"><span>表示色</span><input name="color" type="color" defaultValue={member?.color ?? "#268b7d"} /></label>
-        <label className="field"><span>所属</span><select name="group" defaultValue={member?.group ?? "営業部"}>{groups.slice(1).map((groupName) => <option key={groupName}>{groupName}</option>)}</select></label>
-        <label className="field"><span>電話番号</span><input name="phone" type="tel" defaultValue={member?.phone ?? ""} /></label>
-        <label className="field full"><span>メールアドレス</span><input name="email" type="email" defaultValue={member?.email ?? ""} /></label>
+        <label className="field"><span>所属</span><select name="group" defaultValue={member?.group ?? "電気通信係"}>{groups.slice(1).map((groupName) => <option key={groupName}>{groupName}</option>)}</select></label>
+        <label className="field"><span>内線</span><input name="extension" type="text" inputMode="tel" defaultValue={member?.extension ?? ""} /></label>
         <footer><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button className="primary-button" type="submit">{member ? "変更を保存" : "ユーザーを追加"}</button></footer>
       </form>
     </ModalShell>

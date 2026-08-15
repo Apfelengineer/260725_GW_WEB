@@ -107,8 +107,7 @@ button, select { cursor: pointer; }
 .sidebar-section button.group-active { color: #e9f3f8; background: rgba(255,255,255,.05); }
 .sidebar-section button small { margin-left: auto; color: #688199; font-size: 10px; }
 .group-pip { width: 8px; height: 8px; border-radius: 50%; background: #4d81ba; box-shadow: 0 0 0 3px rgba(77,129,186,.12); }
-.group-開発部 { background: #8b67c8; box-shadow: 0 0 0 3px rgba(139,103,200,.12); }
-.group-管理部 { background: #d18b2f; box-shadow: 0 0 0 3px rgba(209,139,47,.12); }
+.group-電気通信係 { background: #8b67c8; box-shadow: 0 0 0 3px rgba(139,103,200,.12); }
 .group-試験室 { background: #537f8e; box-shadow: 0 0 0 3px rgba(83,127,142,.12); }
 
 .sidebar-user { display: grid; grid-template-columns: 32px minmax(0,1fr) 24px; gap: 10px; align-items: center; margin-top: auto; padding: 15px 8px 4px; border-top: 1px solid rgba(255,255,255,.08); }

@@ -62,10 +62,10 @@ function minutes(value: string) {
 type DayStatus = { morning: boolean; afternoon: boolean; maintenance: boolean };
 
 function dayStatus(schedules: ScheduleItem[], roomId: string, key: string): DayStatus {
-  // 「会議」は予約、「作業」はメンテナンスとして午前・午後の占有状況へ変換します。
+  // 「機器利用」は予約、「機器点検」はメンテナンスとして午前・午後の占有状況へ変換します。
   const items = schedules.filter((item) => item.memberId === roomId && occursOn(item, key));
-  if (items.some((item) => item.category === "作業")) return { morning: false, afternoon: false, maintenance: true };
-  const bookings = items.filter((item) => item.category === "会議");
+  if (items.some((item) => item.category === "機器点検")) return { morning: false, afternoon: false, maintenance: true };
+  const bookings = items.filter((item) => item.category === "機器利用");
   return {
     morning: bookings.some((item) => minutes(item.start) < 12 * 60 && minutes(item.end) > 9 * 60),
     afternoon: bookings.some((item) => minutes(item.start) < 17 * 60 && minutes(item.end) > 13 * 60),

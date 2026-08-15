@@ -41,6 +41,14 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(styles, /grid-template-columns: minmax\(110px,1\.15fr\) repeat\(7,minmax\(72px,1fr\)\)/);
   assert.match(api, /groupWatcherApi/);
   assert.match(api, /demoCategories/);
+  assert.match(api, /\["すべてのグループ", "電気通信係", "試験室"\]/);
+  for (const category of ["休暇", "機器点検", "機器利用", "キャンセル待ち", "所内会議", "出張・外出", "その他"]) {
+    assert.match(api, new RegExp(`name: "${category}"`));
+  }
+  assert.match(page, /<th>内線<\/th>/);
+  assert.match(page, /name="extension"/);
+  assert.doesNotMatch(page, /name="phone"|name="email"|電話番号|メールアドレス|<th>連絡先<\/th>/);
+  assert.doesNotMatch(api, /group: "営業部"|group: "開発部"|group: "管理部"|phone:|email:/);
   assert.match(api, /試験室/);
   assert.match(api, /電波暗室/);
   assert.match(api, /japaneseHolidays/);
@@ -50,6 +58,8 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(phpApi, /audit_logs/);
   assert.match(phpApi, /CSRF|csrf/i);
   assert.match(phpApi, /foreach \(\$state\['members'\] as &\$member\)/);
+  assert.match(phpApi, /organization_categories_extension_v1/);
+  assert.match(phpApi, /migrate_organization_categories/);
   assert.match(layout, /KPTC Scheduler/);
   assert.doesNotMatch(page, /SkeletonPreview|codex-preview/);
 });
@@ -82,6 +92,9 @@ test("試験室3室の空き状況ページを提供する", async () => {
   assert.match(page, /予約可（午後のみ）/);
   assert.match(page, /status\.morning \? "▼"/);
   assert.match(page, /status\.afternoon \? "▲"/);
+  assert.match(page, /item\.category === "機器点検"/);
+  assert.match(page, /item\.category === "機器利用"/);
+  assert.doesNotMatch(page, /item\.category === "会議"|item\.category === "作業"/);
   assert.match(page, /length: 3/);
   assert.match(styles, /sold-out-overlay/);
   assert.match(styles, /reservation-day\.saturday/);
