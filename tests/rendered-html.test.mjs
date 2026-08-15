@@ -234,12 +234,14 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   const internalSection = copier.slice(copier.indexOf("internal:"), copier.indexOf("public:"));
   const publicSection = copier.slice(copier.indexOf("public:"));
   assert.match(internalSection, /public\/api\.php/);
+  assert.match(internalSection, /runtime-config\.php/);
   assert.match(internalSection, /public\/auth\.php/);
   assert.match(internalSection, /publish-availability-cli\.php/);
   assert.match(publicSection, /receive-availability\.php/);
   assert.match(publicSection, /public-availability\.php/);
   assert.match(publicSection, /health-availability\.php/);
   assert.match(publicSection, /availability-contract\.php/);
+  assert.match(publicSection, /runtime-config\.php/);
   assert.doesNotMatch(publicSection, /availability-json\.php/);
   assert.doesNotMatch(publicSection, /api\.php|auth\.php|manage-auth-user|publish-availability-cli|group-watcher\.sqlite/);
   await access(new URL("deploy/kptc-availability-publish.timer", root));

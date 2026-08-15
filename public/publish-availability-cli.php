@@ -7,6 +7,8 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
+require_once __DIR__ . '/runtime-config.php';
+kptc_load_runtime_config('internal');
 require_once __DIR__ . '/availability-publisher.php';
 
 function kptc_cli_meta(PDO $pdo, string $key, string $value): void {

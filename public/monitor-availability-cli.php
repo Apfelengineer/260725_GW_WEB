@@ -7,6 +7,9 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
+require_once __DIR__ . '/runtime-config.php';
+kptc_load_runtime_config('internal');
+
 try {
     $configured = trim((string)(getenv('KPTC_INTERNAL_SCHEDULER_DB') ?: ''));
     $databasePath = $configured !== '' ? $configured : dirname(__DIR__, 2) . '/GW/group-watcher.sqlite';

@@ -4,6 +4,8 @@ declare(strict_types=1);
 /* 外部サーバー専用。内部サーバーから届く署名付き3か月JSONだけを検証して保存します。 */
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
+require_once __DIR__ . '/runtime-config.php';
+kptc_load_runtime_config('public');
 require_once __DIR__ . '/availability-contract.php';
 
 function kptc_receiver_respond(array $payload, int $status): never {

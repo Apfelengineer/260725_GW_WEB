@@ -93,6 +93,8 @@ php manage-auth-user-cli.php enable admin
 
 設定例は `deploy/internal-server.env.example` と `deploy/external-server.env.example` にあります。共有秘密鍵は `openssl rand -hex 32` などで個別に生成し、両サーバーのWeb用PHP環境と内部側の定期実行環境へ同じ値を設定します。リポジトリやWeb公開フォルダへ秘密鍵を保存しないでください。
 
+共有レンタルサーバーなどでWeb用PHPへ環境変数を設定できない場合は、内部側・外部側それぞれのホームディレクトリに `GW/config/internal-env.php` または `GW/config/public-env.php` を置けます。`runtime-config.php` が公開領域外のこのファイルを自動的に読み込みます。別の場所を使う場合は `KPTC_INTERNAL_CONFIG_FILE` または `KPTC_PUBLIC_CONFIG_FILE` で絶対パスを指定します。
+
 内部側の `publish-availability-cli.php` を5分間隔で実行すると、障害復旧後に自動再送されます。`monitor-availability-cli.php` は正常時0、再送待ち・連続失敗・30分超の未成功時1、DB等の設定異常時2を返します。外部側の `health-availability.php` は最終受信から30分以内かつ当月を含むJSONならHTTP 200、それ以外は503を返すため、一般的なURL監視から確認できます。systemdのサービス／タイマー例は `deploy/` に同梱しています。
 
 同一サーバー上で内部・外部を模擬する場合も、別の公開ディレクトリとURLへそれぞれ配置し、内部側の送信先を外部側の `receive-availability.php` にします。HTTPしか使えないローカル検証時だけ `KPTC_PUBLIC_AVAILABILITY_ALLOW_HTTP=1` を設定できます。本番では必ずHTTPSを使用してください。

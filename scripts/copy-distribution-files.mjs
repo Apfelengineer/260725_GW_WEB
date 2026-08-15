@@ -10,6 +10,7 @@ const distributions = {
     directory: "dist-internal",
     files: [
       "public/api.php",
+      "public/runtime-config.php",
       "public/auth.php",
       "public/availability-contract.php",
       "public/availability-json.php",
@@ -23,6 +24,7 @@ const distributions = {
   public: {
     directory: "dist-public",
     files: [
+      "public/runtime-config.php",
       "public/availability-contract.php",
       "public/receive-availability.php",
       "public/public-availability.php",

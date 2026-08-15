@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/runtime-config.php';
+kptc_load_runtime_config('internal');
 require_once __DIR__ . '/availability-publisher.php';
 require_once __DIR__ . '/auth.php';
 

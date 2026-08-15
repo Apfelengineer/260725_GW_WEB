@@ -4,6 +4,8 @@ declare(strict_types=1);
 /* 外部監視専用。公開JSONの存在、形式、最終受信時刻、対象月を検査します。 */
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
+require_once __DIR__ . '/runtime-config.php';
+kptc_load_runtime_config('public');
 require_once __DIR__ . '/availability-contract.php';
 
 try {
