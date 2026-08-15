@@ -95,6 +95,11 @@ function weekDates(value: Date) {
   return Array.from({ length: 7 }, (_, index) => addDays(monday, index));
 }
 
+function openRoomAvailability() {
+  // スケジューラーを保持したまま、公開用の空き状況を独立したタブで開きます。
+  window.open("./reservations.html?room=m6", "_blank", "noopener,noreferrer");
+}
+
 function monthGridDates(value: Date) {
   const first = new Date(value.getFullYear(), value.getMonth(), 1, 12);
   const start = mondayOf(first);
@@ -657,7 +662,7 @@ export default function Home() {
         <Logo />
         <nav className="main-nav" aria-label="メインメニュー">
           <button className={section === "schedule" ? "active" : ""} onClick={() => setSection("schedule")}><SectionIcon symbol="▦" /><span>スケジュール</span></button>
-          <button onClick={() => window.location.assign("./reservations.html?room=m6")}><SectionIcon symbol="▤" /><span>試験室予約</span></button>
+          <button onClick={openRoomAvailability}><SectionIcon symbol="▤" /><span>試験室予約</span></button>
           <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>ユーザー・設定</span></button>
         </nav>
 
@@ -737,7 +742,7 @@ export default function Home() {
       <nav className="mobile-nav" aria-label="モバイルメニュー">
         <button className={section === "schedule" ? "active" : ""} onClick={() => setSection("schedule")}><SectionIcon symbol="▦" /><span>予定</span></button>
         <button className="mobile-add" onClick={() => openCreateSchedule()} aria-label="予定を登録">＋</button>
-        <button onClick={() => window.location.assign("./reservations.html?room=m6")}><SectionIcon symbol="▤" /><span>予約</span></button>
+        <button onClick={openRoomAvailability}><SectionIcon symbol="▤" /><span>予約</span></button>
         <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>設定</span></button>
       </nav>
 

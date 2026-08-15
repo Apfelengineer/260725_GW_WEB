@@ -41,6 +41,8 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /を下へ/);
   assert.match(page, /scheduleOccursOn/);
   assert.match(page, /addMonths/);
+  assert.match(page, /window\.open\("\.\/reservations\.html\?room=m6", "_blank", "noopener,noreferrer"\)/);
+  assert.doesNotMatch(page, /window\.location\.assign\("\.\/reservations\.html\?room=m6"\)/);
   assert.match(page, /useState\(\(\) => dateAtNoon\(new Date\(\)\)\)/);
   assert.doesNotMatch(page, /new Date\(2026, 6, 24/);
   assert.match(styles, /grid-template-columns: minmax\(110px,1\.15fr\) repeat\(7,minmax\(72px,1fr\)\)/);
