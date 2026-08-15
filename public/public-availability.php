@@ -1,10 +1,10 @@
 <?php
 declare(strict_types=1);
 
-/* 外部公開ページ専用API。内部の利用者・予定・操作履歴にはアクセスしません。 */
+/* 外部公開ページ専用API。公開用JSONだけを読み、内部DBにはアクセスしません。 */
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: public, max-age=60');
-require_once __DIR__ . '/availability-store.php';
+require_once __DIR__ . '/availability-json.php';
 
 try {
     $payload = kptc_read_public_availability();

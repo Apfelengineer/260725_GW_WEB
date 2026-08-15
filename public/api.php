@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/availability-store.php';
+require_once __DIR__ . '/availability-json.php';
 
 /*
  * さくらインターネット上で動作する共有APIです。
@@ -225,17 +225,17 @@ function db(): PDO {
         $stmt->execute([json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), (int)$row['version'] + 1, date(DATE_ATOM)]);
         $pdo->prepare("INSERT INTO app_meta(key,value) VALUES('organization_categories_extension_v1','1')")->execute();
     }
-    $publicSplit = $pdo->query("SELECT value FROM app_meta WHERE key='public_availability_split_v1'")->fetchColumn();
+    $jsonPublished = $pdo->query("SELECT value FROM app_meta WHERE key='public_availability_json_v1'")->fetchColumn();
     $publishPending = $pdo->query("SELECT value FROM app_meta WHERE key='public_availability_pending'")->fetchColumn();
     $publishedRangeStart = $pdo->query("SELECT value FROM app_meta WHERE key='public_availability_range_start'")->fetchColumn();
     $currentRangeStart = (new DateTimeImmutable('first day of this month', new DateTimeZone('Asia/Tokyo')))->format('Y-m-d');
-    if ($publicSplit === false || $publishPending === '1' || $publishedRangeStart !== $currentRangeStart) {
-        // 初回、未送信、月替わりのいずれかで、公開用DBへ個人情報を含まない空き状態を再生成します。
+    if ($jsonPublished === false || $publishPending === '1' || $publishedRangeStart !== $currentRangeStart) {
+        // 初回、未送信、月替わりのいずれかで、公開用の3か月分JSONを上書き生成します。
         $row = $pdo->query('SELECT payload,version FROM app_state WHERE id=1')->fetch(PDO::FETCH_ASSOC);
         $state = json_decode($row['payload'], true);
         if (attempt_availability_publish($pdo, $state, (int)$row['version'])) {
             $meta = $pdo->prepare('INSERT OR REPLACE INTO app_meta(key,value) VALUES(?,?)');
-            $meta->execute(['public_availability_split_v1', '1']);
+            $meta->execute(['public_availability_json_v1', '1']);
             $meta->execute(['public_availability_range_start', $currentRangeStart]);
         }
     }

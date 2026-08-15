@@ -83,14 +83,15 @@ test("共有用画像を同梱する", async () => {
 });
 
 test("試験室3室の空き状況ページを提供する", async () => {
-  // 表示記号、配色、3画面の入口、公開専用DB/APIが欠落していないことを確認します。
-  const [page, styles, vite, phpApi, publicApi, store] = await Promise.all([
+  // 表示記号、配色、3画面の入口、3か月分の公開専用JSON連携を確認します。
+  const [page, styles, vite, phpApi, publicApi, jsonPublisher, monthlyPublisher] = await Promise.all([
     readFile(new URL("app/reservations-page.tsx", root), "utf8"),
     readFile(new URL("app/reservations.css", root), "utf8"),
     readFile(new URL("vite.sakura.config.ts", root), "utf8"),
     readFile(new URL("public/api.php", root), "utf8"),
     readFile(new URL("public/public-availability.php", root), "utf8"),
-    readFile(new URL("public/availability-store.php", root), "utf8"),
+    readFile(new URL("public/availability-json.php", root), "utf8"),
+    readFile(new URL("public/publish-availability-cli.php", root), "utf8"),
   ]);
   assert.match(page, /電波暗室/);
   assert.match(page, /電磁波妨害評価装置\(G-TEM\)/);
@@ -119,14 +120,20 @@ test("試験室3室の空き状況ページを提供する", async () => {
   assert.match(phpApi, /room_demo_v1/);
   assert.match(phpApi, /public_availability_pending/);
   assert.match(phpApi, /kptc_publish_availability/);
-  assert.match(store, /public-availability\.sqlite/);
-  assert.match(store, /public_availability/);
-  assert.match(store, /public_meta/);
-  assert.match(store, /\+12 months/);
-  assert.match(store, /機器利用/);
-  assert.match(store, /キャンセル待ち/);
-  assert.match(store, /機器点検/);
-  assert.match(store, /sourceVersion/);
+  assert.match(phpApi, /public_availability_json_v1/);
+  assert.match(jsonPublisher, /public-availability\.json/);
+  assert.match(jsonPublisher, /\+3 months/);
+  assert.doesNotMatch(jsonPublisher, /\+12 months/);
+  assert.match(jsonPublisher, /機器利用/);
+  assert.match(jsonPublisher, /キャンセル待ち/);
+  assert.match(jsonPublisher, /機器点検/);
+  assert.match(jsonPublisher, /sourceVersion/);
+  assert.match(jsonPublisher, /JSON_PRETTY_PRINT/);
+  assert.match(jsonPublisher, /rename\(\$temporary, \$path\)/);
+  assert.doesNotMatch(jsonPublisher, /PDO|sqlite:|CREATE TABLE|public_meta/);
   assert.doesNotMatch(publicApi, /app_state|audit_logs|group-watcher\.sqlite/);
+  assert.match(monthlyPublisher, /PHP_SAPI !== 'cli'/);
+  assert.match(monthlyPublisher, /kptc_publish_availability/);
+  await assert.rejects(access(new URL("public/availability-store.php", root)));
   await access(new URL("public/technology-center-logo-white.png", root));
 });
