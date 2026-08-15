@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/availability-store.php';
+
 /*
  * さくらインターネット上で動作する共有APIです。
  * PHPセッションで利用者を識別し、SQLiteへ予定・ユーザー・予定種別・操作履歴を保存します。
@@ -147,6 +149,26 @@ function migrate_organization_categories(array $state): array {
     return $state;
 }
 
+function mark_availability_publish_pending(PDO $pdo): void {
+    // 内部DBの更新と同じ取引で未送信印を付け、公開DBへの連携失敗を次回アクセス時に再試行します。
+    $pdo->prepare("INSERT OR REPLACE INTO app_meta(key,value) VALUES('public_availability_pending','1')")->execute();
+}
+
+function attempt_availability_publish(PDO $pdo, array $state, int $sourceVersion): bool {
+    // 公開情報の連携失敗は予定保存を巻き戻さず、内部DBに再送待ちとして記録します。
+    try {
+        $published = kptc_publish_availability($state, $sourceVersion);
+        $meta = $pdo->prepare('INSERT OR REPLACE INTO app_meta(key,value) VALUES(?,?)');
+        $meta->execute(['public_availability_pending', '0']);
+        $meta->execute(['public_availability_updated_at', (string)$published['updatedAt']]);
+        return true;
+    } catch (Throwable $error) {
+        mark_availability_publish_pending($pdo);
+        error_log('Public availability publish failed: ' . $error->getMessage());
+        return false;
+    }
+}
+
 function db(): PDO {
     // Web公開フォルダの外側へSQLiteを置き、WALモードで同時アクセスを扱います。
     static $pdo;
@@ -202,6 +224,20 @@ function db(): PDO {
         $stmt = $pdo->prepare('UPDATE app_state SET payload=?,version=?,updated_at=? WHERE id=1');
         $stmt->execute([json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), (int)$row['version'] + 1, date(DATE_ATOM)]);
         $pdo->prepare("INSERT INTO app_meta(key,value) VALUES('organization_categories_extension_v1','1')")->execute();
+    }
+    $publicSplit = $pdo->query("SELECT value FROM app_meta WHERE key='public_availability_split_v1'")->fetchColumn();
+    $publishPending = $pdo->query("SELECT value FROM app_meta WHERE key='public_availability_pending'")->fetchColumn();
+    $publishedRangeStart = $pdo->query("SELECT value FROM app_meta WHERE key='public_availability_range_start'")->fetchColumn();
+    $currentRangeStart = (new DateTimeImmutable('first day of this month', new DateTimeZone('Asia/Tokyo')))->format('Y-m-d');
+    if ($publicSplit === false || $publishPending === '1' || $publishedRangeStart !== $currentRangeStart) {
+        // 初回、未送信、月替わりのいずれかで、公開用DBへ個人情報を含まない空き状態を再生成します。
+        $row = $pdo->query('SELECT payload,version FROM app_state WHERE id=1')->fetch(PDO::FETCH_ASSOC);
+        $state = json_decode($row['payload'], true);
+        if (attempt_availability_publish($pdo, $state, (int)$row['version'])) {
+            $meta = $pdo->prepare('INSERT OR REPLACE INTO app_meta(key,value) VALUES(?,?)');
+            $meta->execute(['public_availability_split_v1', '1']);
+            $meta->execute(['public_availability_range_start', $currentRangeStart]);
+        }
     }
     return $pdo;
 }
@@ -310,7 +346,9 @@ if ($action === 'save') {
     $name = member_name($state, $actorId);
     $log = $pdo->prepare('INSERT INTO audit_logs(actor_id,actor_name,action,summary,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?)');
     $log->execute([$actorId,$name,(string)($input['action'] ?? '更新'),(string)($input['summary'] ?? 'データを更新'),$before,$after,date(DATE_ATOM)]);
+    mark_availability_publish_pending($pdo);
     $pdo->commit();
+    attempt_availability_publish($pdo, $state, $nextVersion);
     respond(bootstrap_payload($pdo));
 }
 
@@ -342,7 +380,9 @@ if ($action === 'undo') {
     $name = member_name($restored, $actorId);
     $log = $pdo->prepare('INSERT INTO audit_logs(actor_id,actor_name,action,summary,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?)');
     $log->execute([$actorId,$name,'取り消し','「'.$target['summary'].'」を取り消し',json_encode($record['state'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),$restoredJson,date(DATE_ATOM)]);
+    mark_availability_publish_pending($pdo);
     $pdo->commit();
+    attempt_availability_publish($pdo, $restored, $nextVersion);
     respond(bootstrap_payload($pdo));
 }
 

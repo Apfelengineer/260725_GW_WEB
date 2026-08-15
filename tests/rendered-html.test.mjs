@@ -83,12 +83,14 @@ test("共有用画像を同梱する", async () => {
 });
 
 test("試験室3室の空き状況ページを提供する", async () => {
-  // 表示記号、配色、3画面の入口、ロゴ素材が欠落していないことを確認します。
-  const [page, styles, vite, phpApi] = await Promise.all([
+  // 表示記号、配色、3画面の入口、公開専用DB/APIが欠落していないことを確認します。
+  const [page, styles, vite, phpApi, publicApi, store] = await Promise.all([
     readFile(new URL("app/reservations-page.tsx", root), "utf8"),
     readFile(new URL("app/reservations.css", root), "utf8"),
     readFile(new URL("vite.sakura.config.ts", root), "utf8"),
     readFile(new URL("public/api.php", root), "utf8"),
+    readFile(new URL("public/public-availability.php", root), "utf8"),
+    readFile(new URL("public/availability-store.php", root), "utf8"),
   ]);
   assert.match(page, /電波暗室/);
   assert.match(page, /電磁波妨害評価装置\(G-TEM\)/);
@@ -100,15 +102,13 @@ test("試験室3室の空き状況ページを提供する", async () => {
   assert.doesNotMatch(page, /KPTC Schedulerへ戻る|予約の登録・変更/);
   assert.match(page, /メンテナンス/);
   assert.match(page, /キャンセル待ち/);
-  assert.match(page, /item\.category === "機器点検"/);
-  assert.match(page, /item\.category === "機器利用"/);
-  assert.match(page, /item\.category === "キャンセル待ち"/);
   assert.match(page, /午前空きあり/);
   assert.match(page, /午後空きあり/);
-  assert.match(page, /status\.morning \? "▼"/);
-  assert.match(page, /status\.afternoon \? "▲"/);
-  assert.match(page, /status\.morning && status\.afternoon/);
-  assert.doesNotMatch(page, /item\.category === "会議"|item\.category === "作業"/);
+  assert.match(page, /status === "morning_available" \? "▲"/);
+  assert.match(page, /status === "afternoon_available" \? "▼"/);
+  assert.match(page, /status === "reserved"/);
+  assert.match(page, /public-availability\.php/);
+  assert.doesNotMatch(page, /groupWatcherApi|bootstrap\(|ScheduleItem|Member/);
   assert.match(page, /length: 3/);
   assert.match(styles, /sold-out-overlay/);
   assert.match(styles, /reservation-day\.saturday/);
@@ -117,5 +117,16 @@ test("試験室3室の空き状況ページを提供する", async () => {
   assert.match(styles, /width: min\(340px,46%\)/);
   assert.match(vite, /reservations\.html/);
   assert.match(phpApi, /room_demo_v1/);
+  assert.match(phpApi, /public_availability_pending/);
+  assert.match(phpApi, /kptc_publish_availability/);
+  assert.match(store, /public-availability\.sqlite/);
+  assert.match(store, /public_availability/);
+  assert.match(store, /public_meta/);
+  assert.match(store, /\+12 months/);
+  assert.match(store, /機器利用/);
+  assert.match(store, /キャンセル待ち/);
+  assert.match(store, /機器点検/);
+  assert.match(store, /sourceVersion/);
+  assert.doesNotMatch(publicApi, /app_state|audit_logs|group-watcher\.sqlite/);
   await access(new URL("public/technology-center-logo-white.png", root));
 });
