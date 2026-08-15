@@ -29,6 +29,14 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /新規予定作成/);
   assert.match(page, /name="endDate"/);
   assert.match(page, /name="timePreset"/);
+  const scheduleForm = page.slice(page.indexOf("function ScheduleModal"), page.indexOf("function MemberModal"));
+  const userField = scheduleForm.indexOf('name="memberId"');
+  const categoryField = scheduleForm.indexOf('name="category"');
+  const startDateField = scheduleForm.indexOf('name="date"');
+  const endDateField = scheduleForm.indexOf('name="endDate"');
+  const timePresetField = scheduleForm.indexOf('name="timePreset"');
+  assert.ok([userField, categoryField, startDateField, endDateField, timePresetField].every((index) => index >= 0));
+  assert.ok(userField < categoryField && categoryField < startDateField && startDateField < endDateField && endDateField < timePresetField);
   assert.match(page, /午前（9:00–12:00）/);
   assert.match(page, /午後（13:00–17:00）/);
   assert.match(page, /終日/);
