@@ -8,7 +8,6 @@ body { margin: 0; }
 .reservation-board { width: min(1120px,100%); margin: auto; padding: 26px 28px 0; overflow: hidden; border: 1px solid #c7e2ef; border-radius: 18px; background: rgba(255,255,255,.58); box-shadow: 0 22px 60px rgba(24,76,111,.12); }
 .reservation-header { display: grid; grid-template-columns: 84px minmax(0,1fr) auto; gap: 18px; align-items: center; margin-bottom: 18px; }
 .room-emblem { display: grid; width: 78px; height: 78px; place-items: center; border: 5px solid #fff; border-radius: 50%; color: #fff; background: radial-gradient(circle at 35% 25%,#6eb5d5,#164b6b 58%,#102d43); box-shadow: 0 5px 16px rgba(27,66,92,.25); font-size: 18px; font-weight: 850; }
-.reservation-header small { color: #477083; font-size: 10px; font-weight: 750; letter-spacing: .12em; }
 .reservation-header h1 { margin: 5px 0 4px; font-size: clamp(25px,3vw,36px); letter-spacing: -.04em; }
 .reservation-header p { margin: 0; color: #607582; font-size: 11px; }
 .reservation-header .equipment-note { max-width: 760px; font-size: 10px; font-weight: 650; line-height: 1.5; }

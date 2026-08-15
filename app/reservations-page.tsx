@@ -102,7 +102,7 @@ export default function ReservationsPage() {
       <section className="reservation-board">
         <header className="reservation-header">
           <span className="room-emblem">{room.initials}</span>
-          <div><small>KPTC SCHEDULER / LAB AVAILABILITY</small><h1>{room.name} 空き状況</h1>{roomId === "m8" && <p className="equipment-note">(入力インパルス試験機、静電気試験機、サージイミュニティ試験機、FTB試験機、低周波EMC試験機)</p>}</div>
+          <div><h1>{room.name} 空き状況</h1>{roomId === "m8" && <p className="equipment-note">(入力インパルス試験機、静電気試験機、サージイミュニティ試験機、FTB試験機、低周波EMC試験機)</p>}</div>
           <time>更新：{updatedAt ? new Date(updatedAt).toLocaleString("ja-JP", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</time>
         </header>
 

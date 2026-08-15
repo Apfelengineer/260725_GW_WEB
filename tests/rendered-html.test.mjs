@@ -98,6 +98,7 @@ test("試験室3室の空き状況ページを提供する", async () => {
   assert.match(page, /電波暗室/);
   assert.match(page, /電磁波妨害評価装置\(G-TEM\)/);
   assert.match(page, /パルスサージシステム/);
+  assert.doesNotMatch(page, /KPTC SCHEDULER \/ LAB AVAILABILITY/);
   assert.match(page, /入力インパルス試験機/);
   assert.match(page, /ご予約・お問い合わせ:xxx@yyy\/075-xxx-xxxx/);
   assert.match(page, /必ずメールか電話でお問い合わせ/);
