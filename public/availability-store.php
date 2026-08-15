@@ -126,7 +126,7 @@ function kptc_publish_availability(array $state, int $sourceVersion): array {
         $existingRangeStart = $pdo->query("SELECT value FROM public_meta WHERE key='rangeStart'")->fetchColumn();
         if ($existingVersion !== false && ((int)$existingVersion > $sourceVersion || ((int)$existingVersion === $sourceVersion && (string)$existingRangeStart >= $payload['rangeStart']))) {
             $existingUpdatedAt = $pdo->query("SELECT value FROM public_meta WHERE key='updatedAt'")->fetchColumn();
-            $pdo->rollBack();
+            $pdo->exec('ROLLBACK');
             if ($existingUpdatedAt !== false) $payload['updatedAt'] = (string)$existingUpdatedAt;
             return $payload;
         }
@@ -136,9 +136,10 @@ function kptc_publish_availability(array $state, int $sourceVersion): array {
         $meta = $pdo->prepare('INSERT OR REPLACE INTO public_meta(key,value) VALUES(?,?)');
         foreach (['schemaVersion','updatedAt','rangeStart','rangeEnd'] as $key) $meta->execute([$key, (string)$payload[$key]]);
         $meta->execute(['sourceVersion', (string)$sourceVersion]);
-        $pdo->commit();
+        // BEGIN IMMEDIATE はPDOの取引フラグへ反映されないため、SQLで確実に確定します。
+        $pdo->exec('COMMIT');
     } catch (Throwable $error) {
-        if ($pdo->inTransaction()) $pdo->rollBack();
+        try { $pdo->exec('ROLLBACK'); } catch (Throwable $rollbackError) { /* 既に取引が閉じている場合は元の例外を優先します。 */ }
         throw $error;
     }
     return $payload;
