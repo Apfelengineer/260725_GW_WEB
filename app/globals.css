@@ -184,9 +184,9 @@ button, select { cursor: pointer; }
 
 /* 週表示の予定表とドラッグ可能な予定カード */
 .week-grid-wrap { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 5px 20px rgba(28,43,60,.035); }
-.week-grid { min-width: 1040px; }
+.week-grid { width: 100%; min-width: 0; }
 .week-header-row,
-.member-schedule-row { display: grid; grid-template-columns: 162px repeat(7, minmax(0,1fr)); }
+.member-schedule-row { display: grid; grid-template-columns: minmax(110px,1.15fr) repeat(7,minmax(72px,1fr)); }
 .corner-cell,
 .day-header { display: flex; height: 57px; align-items: center; border-bottom: 1px solid var(--line); background: #fafbfc; }
 .corner-cell { flex-direction: column; align-items: flex-start; justify-content: center; padding: 0 15px; border-right: 1px solid var(--line); }
@@ -337,9 +337,9 @@ button, select { cursor: pointer; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 
 /* 画面幅に応じて右欄、サイドバー、操作部品を段階的に簡略化します。 */
-@media (max-width: 1180px) {
+@media (max-width: 1400px) {
   .page-layout { grid-template-columns: minmax(0,1fr); }
-  .right-rail { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); padding-top: 0; }
+  .right-rail { display: grid; grid-template-columns: minmax(0,265px); justify-content: end; padding-top: 0; }
 }
 
 @media (max-width: 900px) {

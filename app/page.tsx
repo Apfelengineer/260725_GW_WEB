@@ -177,7 +177,7 @@ export default function Home() {
   // サーバーと共有する業務データと、画面内だけで使う選択状態を分けて保持します。
   const [section, setSection] = useState<Section>("schedule");
   const [view, setView] = useState<CalendarView>("week");
-  const [calendarDate, setCalendarDate] = useState(() => new Date(2026, 6, 24, 12));
+  const [calendarDate, setCalendarDate] = useState(() => dateAtNoon(new Date()));
   const [group, setGroup] = useState<string>("すべてのグループ");
   const [search, setSearch] = useState("");
   const [schedules, setSchedules] = useState<ScheduleItem[]>(demoSchedules);

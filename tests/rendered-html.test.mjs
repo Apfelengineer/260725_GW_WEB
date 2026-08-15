@@ -8,8 +8,9 @@ const root = new URL("../", import.meta.url);
 
 test("KPTC Scheduler の主要機能を提供する", async () => {
   // 主要画面・通信層・サーバーAPIをまとめて読み、必須機能の手掛かりを検査します。
-  const [page, layout, api, phpApi] = await Promise.all([
+  const [page, styles, layout, api, phpApi] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
     readFile(new URL("app/layout.tsx", root), "utf8"),
     readFile(new URL("app/lib/group-watcher-api.ts", root), "utf8"),
     readFile(new URL("public/api.php", root), "utf8"),
@@ -35,6 +36,9 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /操作履歴/);
   assert.match(page, /scheduleOccursOn/);
   assert.match(page, /addMonths/);
+  assert.match(page, /useState\(\(\) => dateAtNoon\(new Date\(\)\)\)/);
+  assert.doesNotMatch(page, /new Date\(2026, 6, 24/);
+  assert.match(styles, /grid-template-columns: minmax\(110px,1\.15fr\) repeat\(7,minmax\(72px,1fr\)\)/);
   assert.match(api, /groupWatcherApi/);
   assert.match(api, /demoCategories/);
   assert.match(api, /試験室/);
