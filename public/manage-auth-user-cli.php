@@ -17,7 +17,7 @@ $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 kptc_auth_create_tables($pdo);
 
 function kptc_auth_cli_usage(): never {
-    fwrite(STDERR, "Usage:\n  php manage-auth-user-cli.php list\n  php manage-auth-user-cli.php create <username> <member-id> [admin|user] --password-stdin\n  php manage-auth-user-cli.php password <username> --password-stdin\n  php manage-auth-user-cli.php enable|disable <username>\n");
+    fwrite(STDERR, "Usage:\n  php manage-auth-user-cli.php list\n  php manage-auth-user-cli.php create <username> <member-id> [admin|user|room] --password-stdin\n  php manage-auth-user-cli.php password <username> --password-stdin\n  php manage-auth-user-cli.php enable|disable <username>\n");
     exit(2);
 }
 
@@ -40,7 +40,7 @@ try {
         $memberId = trim((string)($argv[3] ?? ''));
         $role = (string)($argv[4] ?? 'user');
         kptc_auth_validate_username($username);
-        if ($memberId === '' || !in_array($role, ['admin', 'user'], true)) kptc_auth_cli_usage();
+        if ($memberId === '' || !in_array($role, ['admin', 'user', 'room'], true)) kptc_auth_cli_usage();
         $stateRow = $pdo->query('SELECT payload FROM app_state WHERE id=1')->fetch(PDO::FETCH_ASSOC);
         $state = is_array($stateRow) ? json_decode((string)$stateRow['payload'], true) : null;
         $memberIds = is_array($state) ? array_column($state['members'] ?? [], 'id') : [];

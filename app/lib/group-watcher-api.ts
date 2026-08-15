@@ -57,16 +57,21 @@ export type AvailabilityPublishStatus = {
   consecutiveFailures: number;
 };
 
+export type AuthRole = "admin" | "user" | "room";
+export type SessionRole = AuthRole | "guest";
+
 export type AuthAccount = {
   id: number;
   username: string;
   memberId: string;
-  role: "admin" | "user";
+  role: AuthRole;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
   lastLoginAt: string | null;
 };
+
+export type LoginUser = { username: string; memberId: string; name: string; role: "admin" | "user" };
 
 export type AuthenticatedBootstrapResponse = {
   authenticated: true;
@@ -75,7 +80,7 @@ export type AuthenticatedBootstrapResponse = {
   version: number;
   currentUserId: string;
   username: string;
-  role: "admin" | "user";
+  role: SessionRole;
   csrfToken: string;
   publicAvailabilityPageUrl: string;
   authAccounts: AuthAccount[];
@@ -86,6 +91,7 @@ export type AuthenticatedBootstrapResponse = {
 export type UnauthenticatedBootstrapResponse = {
   authenticated: false;
   setupRequired: boolean;
+  loginUsers: LoginUser[];
 };
 
 export type BootstrapResponse = AuthenticatedBootstrapResponse | UnauthenticatedBootstrapResponse;
@@ -135,6 +141,9 @@ export const groupWatcherApi = {
   login(username: string, password: string) {
     return this.request<AuthenticatedBootstrapResponse>("login", { method: "POST", body: JSON.stringify({ username, password }) });
   },
+  guestLogin() {
+    return this.request<AuthenticatedBootstrapResponse>("guest-login", { method: "POST", body: "{}" });
+  },
   logout(csrfToken: string) {
     return this.request<{ ok: boolean }>("logout", { method: "POST", headers: { "X-CSRF-Token": csrfToken } });
   },
@@ -144,7 +153,7 @@ export const groupWatcherApi = {
   undo(auditId: number, version: number, csrfToken: string) {
     return this.request<AuthenticatedBootstrapResponse>("undo", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ auditId, version }) });
   },
-  saveAuthAccount(input: { operation: "create" | "update"; id?: number; memberId?: string; username: string; role: "admin" | "user"; password: string }, csrfToken: string) {
-    return this.request<AuthenticatedBootstrapResponse>("auth-account", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify(input) });
+  saveMemberAccount(input: { operation: "save" | "delete"; version: number; member: Member; username: string; role: AuthRole; password: string }, csrfToken: string) {
+    return this.request<AuthenticatedBootstrapResponse>("member-account", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify(input) });
   },
 };

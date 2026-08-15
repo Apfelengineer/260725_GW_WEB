@@ -9,13 +9,34 @@ function kptc_auth_create_tables(PDO $pdo): void {
         username TEXT NOT NULL COLLATE NOCASE UNIQUE,
         member_id TEXT NOT NULL,
         password_hash TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('admin','user')),
+        role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('admin','user','room')),
         enabled INTEGER NOT NULL DEFAULT 1,
         auth_revision INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         last_login_at TEXT
     )");
+    $tableSql = (string)$pdo->query("SELECT sql FROM sqlite_master WHERE type='table' AND name='auth_users'")->fetchColumn();
+    if (!str_contains($tableSql, "'room'")) {
+        // 既存アカウントを保持したまま、試験室権限を許可する制約へ移行します。
+        $pdo->exec('ALTER TABLE auth_users RENAME TO auth_users_legacy_role');
+        $pdo->exec("CREATE TABLE auth_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+            member_id TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('admin','user','room')),
+            enabled INTEGER NOT NULL DEFAULT 1,
+            auth_revision INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_login_at TEXT
+        )");
+        $legacyColumns = $pdo->query('PRAGMA table_info(auth_users_legacy_role)')->fetchAll(PDO::FETCH_COLUMN, 1);
+        $revisionExpression = in_array('auth_revision', $legacyColumns, true) ? 'auth_revision' : '1';
+        $pdo->exec("INSERT INTO auth_users(id,username,member_id,password_hash,role,enabled,auth_revision,created_at,updated_at,last_login_at) SELECT id,username,member_id,password_hash,role,enabled,{$revisionExpression},created_at,updated_at,last_login_at FROM auth_users_legacy_role");
+        $pdo->exec('DROP TABLE auth_users_legacy_role');
+    }
     $columns = $pdo->query('PRAGMA table_info(auth_users)')->fetchAll(PDO::FETCH_COLUMN, 1);
     if (!in_array('auth_revision', $columns, true)) $pdo->exec('ALTER TABLE auth_users ADD COLUMN auth_revision INTEGER NOT NULL DEFAULT 1');
     $pdo->exec('CREATE INDEX IF NOT EXISTS auth_users_member_id_idx ON auth_users(member_id)');
@@ -112,6 +133,19 @@ function kptc_auth_account_list(PDO $pdo): array {
     ], $rows);
 }
 
+function kptc_auth_login_user_list(PDO $pdo, array $state): array {
+    // ログイン画面には管理者・一般ユーザーだけを氏名付きで返し、試験室アカウントは表示しません。
+    $memberNames = [];
+    foreach ($state['members'] ?? [] as $member) $memberNames[(string)$member['id']] = (string)$member['name'];
+    $rows = $pdo->query("SELECT username,member_id,role FROM auth_users WHERE enabled=1 AND role IN ('admin','user') ORDER BY username")->fetchAll(PDO::FETCH_ASSOC);
+    return array_values(array_map(static fn(array $row): array => [
+        'username'=>(string)$row['username'],
+        'memberId'=>(string)$row['member_id'],
+        'name'=>$memberNames[(string)$row['member_id']] ?? '削除済みユーザー',
+        'role'=>(string)$row['role'],
+    ], array_filter($rows, static fn(array $row): bool => isset($memberNames[(string)$row['member_id']]))));
+}
+
 function kptc_auth_enabled_admin_count(PDO $pdo): int {
     return (int)$pdo->query("SELECT COUNT(*) FROM auth_users WHERE role='admin' AND enabled=1")->fetchColumn();
 }
@@ -123,7 +157,12 @@ function kptc_auth_active_session_user(PDO $pdo): ?array {
     $now = time();
     $idleTimeout = max(300, (int)(getenv('KPTC_AUTH_IDLE_TIMEOUT') ?: 1800));
     $absoluteTimeout = max($idleTimeout, (int)(getenv('KPTC_AUTH_ABSOLUTE_TIMEOUT') ?: 43200));
-    if ($authUserId < 1 || $authenticatedAt < $now - $absoluteTimeout || $lastActivityAt < $now - $idleTimeout) return null;
+    if ($authenticatedAt < $now - $absoluteTimeout || $lastActivityAt < $now - $idleTimeout) return null;
+    if (!empty($_SESSION['guest'])) {
+        $_SESSION['last_activity_at'] = $now;
+        return ['id'=>0, 'username'=>'guest', 'member_id'=>'guest', 'role'=>'guest', 'enabled'=>1, 'auth_revision'=>1];
+    }
+    if ($authUserId < 1) return null;
     $statement = $pdo->prepare('SELECT id,username,member_id,role,enabled,auth_revision FROM auth_users WHERE id=?');
     $statement->execute([$authUserId]);
     $user = $statement->fetch(PDO::FETCH_ASSOC);
