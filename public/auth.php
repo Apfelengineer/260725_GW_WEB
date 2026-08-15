@@ -11,10 +11,13 @@ function kptc_auth_create_tables(PDO $pdo): void {
         password_hash TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('admin','user')),
         enabled INTEGER NOT NULL DEFAULT 1,
+        auth_revision INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         last_login_at TEXT
     )");
+    $columns = $pdo->query('PRAGMA table_info(auth_users)')->fetchAll(PDO::FETCH_COLUMN, 1);
+    if (!in_array('auth_revision', $columns, true)) $pdo->exec('ALTER TABLE auth_users ADD COLUMN auth_revision INTEGER NOT NULL DEFAULT 1');
     $pdo->exec('CREATE INDEX IF NOT EXISTS auth_users_member_id_idx ON auth_users(member_id)');
     $pdo->exec("CREATE TABLE IF NOT EXISTS auth_login_attempts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +68,7 @@ function kptc_auth_clear_failures(PDO $pdo, string $attemptKey): void {
 }
 
 function kptc_auth_find_user(PDO $pdo, string $username): ?array {
-    $statement = $pdo->prepare('SELECT id,username,member_id,password_hash,role,enabled FROM auth_users WHERE username=?');
+    $statement = $pdo->prepare('SELECT id,username,member_id,password_hash,role,enabled,auth_revision FROM auth_users WHERE username=?');
     $statement->execute([kptc_auth_normalize_username($username)]);
     $row = $statement->fetch(PDO::FETCH_ASSOC);
     return is_array($row) ? $row : null;
@@ -94,6 +97,25 @@ function kptc_auth_user_count(PDO $pdo): int {
     return (int)$pdo->query('SELECT COUNT(*) FROM auth_users')->fetchColumn();
 }
 
+function kptc_auth_account_list(PDO $pdo): array {
+    // パスワードハッシュを含めず、管理画面に必要な項目だけを返します。
+    $rows = $pdo->query('SELECT id,username,member_id,role,enabled,created_at,updated_at,last_login_at FROM auth_users ORDER BY username')->fetchAll(PDO::FETCH_ASSOC);
+    return array_map(static fn(array $row): array => [
+        'id'=>(int)$row['id'],
+        'username'=>(string)$row['username'],
+        'memberId'=>(string)$row['member_id'],
+        'role'=>(string)$row['role'],
+        'enabled'=>(int)$row['enabled'] === 1,
+        'createdAt'=>(string)$row['created_at'],
+        'updatedAt'=>(string)$row['updated_at'],
+        'lastLoginAt'=>$row['last_login_at'] === null ? null : (string)$row['last_login_at'],
+    ], $rows);
+}
+
+function kptc_auth_enabled_admin_count(PDO $pdo): int {
+    return (int)$pdo->query("SELECT COUNT(*) FROM auth_users WHERE role='admin' AND enabled=1")->fetchColumn();
+}
+
 function kptc_auth_active_session_user(PDO $pdo): ?array {
     $authUserId = (int)($_SESSION['auth_user_id'] ?? 0);
     $authenticatedAt = (int)($_SESSION['authenticated_at'] ?? 0);
@@ -102,10 +124,13 @@ function kptc_auth_active_session_user(PDO $pdo): ?array {
     $idleTimeout = max(300, (int)(getenv('KPTC_AUTH_IDLE_TIMEOUT') ?: 1800));
     $absoluteTimeout = max($idleTimeout, (int)(getenv('KPTC_AUTH_ABSOLUTE_TIMEOUT') ?: 43200));
     if ($authUserId < 1 || $authenticatedAt < $now - $absoluteTimeout || $lastActivityAt < $now - $idleTimeout) return null;
-    $statement = $pdo->prepare('SELECT id,username,member_id,role,enabled FROM auth_users WHERE id=?');
+    $statement = $pdo->prepare('SELECT id,username,member_id,role,enabled,auth_revision FROM auth_users WHERE id=?');
     $statement->execute([$authUserId]);
     $user = $statement->fetch(PDO::FETCH_ASSOC);
     if (!is_array($user) || (int)$user['enabled'] !== 1) return null;
+    $revision = (int)$user['auth_revision'];
+    if (isset($_SESSION['auth_revision']) && (int)$_SESSION['auth_revision'] !== $revision) return null;
+    $_SESSION['auth_revision'] = $revision;
     $_SESSION['last_activity_at'] = $now;
     return $user;
 }

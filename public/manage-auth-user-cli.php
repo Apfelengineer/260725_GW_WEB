@@ -55,7 +55,7 @@ try {
     if ($command === 'password') {
         $username = kptc_auth_normalize_username((string)($argv[2] ?? ''));
         kptc_auth_validate_username($username);
-        $statement = $pdo->prepare('UPDATE auth_users SET password_hash=?,updated_at=? WHERE username=?');
+        $statement = $pdo->prepare('UPDATE auth_users SET password_hash=?,auth_revision=auth_revision+1,updated_at=? WHERE username=?');
         $statement->execute([kptc_auth_password_hash(kptc_auth_cli_password($argv)), date(DATE_ATOM), $username]);
         if ($statement->rowCount() !== 1) throw new RuntimeException('ユーザーが見つかりません');
         fwrite(STDOUT, "Password updated: {$username}\n");
@@ -64,7 +64,7 @@ try {
     if (in_array($command, ['enable', 'disable'], true)) {
         $username = kptc_auth_normalize_username((string)($argv[2] ?? ''));
         kptc_auth_validate_username($username);
-        $statement = $pdo->prepare('UPDATE auth_users SET enabled=?,updated_at=? WHERE username=?');
+        $statement = $pdo->prepare('UPDATE auth_users SET enabled=?,auth_revision=auth_revision+1,updated_at=? WHERE username=?');
         $statement->execute([$command === 'enable' ? 1 : 0, date(DATE_ATOM), $username]);
         if ($statement->rowCount() !== 1) throw new RuntimeException('ユーザーが見つかりません');
         fwrite(STDOUT, ucfirst($command) . "d: {$username}\n");

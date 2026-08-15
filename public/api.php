@@ -328,7 +328,7 @@ function require_post(): void {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') respond(['error'=>'POSTで送信してください'], 405);
 }
 
-function require_auth(): string {
+function require_auth_user(): array {
     // 更新系APIはログイン済みセッションとCSRFトークンの両方を要求します。
     $user = kptc_auth_active_session_user(db());
     if ($user === null) {
@@ -337,7 +337,17 @@ function require_auth(): string {
     }
     $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     if ($token === '' || !hash_equals(csrf(), $token)) respond(['error'=>'セッションを確認できません'], 403);
-    return (string)$user['member_id'];
+    return $user;
+}
+
+function require_auth(): string {
+    return (string)require_auth_user()['member_id'];
+}
+
+function require_admin(): array {
+    $user = require_auth_user();
+    if (($user['role'] ?? '') !== 'admin') respond(['error'=>'管理者権限が必要です'], 403);
+    return $user;
 }
 
 function member_name(array $state, string $memberId): string {
@@ -365,6 +375,7 @@ function bootstrap_payload(PDO $pdo): array {
         'username'=>(string)$user['username'],
         'role'=>(string)$user['role'],
         'csrfToken'=>csrf(),
+        'authAccounts'=>$user['role'] === 'admin' ? kptc_auth_account_list($pdo) : [],
         'audit'=>audit_list($pdo),
         'availabilityPublish'=>[
             'pending'=>get_meta($pdo, 'public_availability_pending') === '1',
@@ -403,6 +414,7 @@ if ($action === 'login') {
     $_SESSION['auth_user_id'] = (int)$user['id'];
     $_SESSION['authenticated_at'] = time();
     $_SESSION['last_activity_at'] = time();
+    $_SESSION['auth_revision'] = (int)$user['auth_revision'];
     $_SESSION['csrf'] = bin2hex(random_bytes(24));
     $stmt = $pdo->prepare('INSERT INTO audit_logs(actor_id,actor_name,action,summary,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?)');
     $stmt->execute([$memberId,$name,'ログイン','ログイン',null,null,date(DATE_ATOM)]);
@@ -417,6 +429,79 @@ if ($action === 'logout') {
     respond(['ok'=>true]);
 }
 
+if ($action === 'auth-account') {
+    // 管理者だけがログインID・権限・パスワードを作成または変更できます。
+    require_post();
+    $admin = require_admin();
+    $input = body();
+    $operation = (string)($input['operation'] ?? '');
+    $record = current_record($pdo);
+    $memberIds = array_column($record['state']['members'] ?? [], 'id');
+    $username = kptc_auth_normalize_username((string)($input['username'] ?? ''));
+    $role = (string)($input['role'] ?? 'user');
+    $password = (string)($input['password'] ?? '');
+    try {
+        kptc_auth_validate_username($username);
+        if (!in_array($role, ['admin', 'user'], true)) throw new InvalidArgumentException('権限を選択してください');
+        $now = date(DATE_ATOM);
+        $sessionRevision = null;
+        $pdo->beginTransaction();
+        if ($operation === 'create') {
+            $memberId = trim((string)($input['memberId'] ?? ''));
+            if (!in_array($memberId, $memberIds, true)) throw new InvalidArgumentException('対応するスケジューラーユーザーが見つかりません');
+            $linked = $pdo->prepare('SELECT id FROM auth_users WHERE member_id=?');
+            $linked->execute([$memberId]);
+            if ($linked->fetchColumn() !== false) throw new InvalidArgumentException('このユーザーにはログインアカウントが設定済みです');
+            $hash = kptc_auth_password_hash($password);
+            $statement = $pdo->prepare('INSERT INTO auth_users(username,member_id,password_hash,role,enabled,auth_revision,created_at,updated_at) VALUES(?,?,?,?,1,1,?,?)');
+            $statement->execute([$username,$memberId,$hash,$role,$now,$now]);
+            $summary = member_name($record['state'], $memberId) . 'のログインアカウントを作成';
+        } elseif ($operation === 'update') {
+            $accountId = (int)($input['id'] ?? 0);
+            $targetStatement = $pdo->prepare('SELECT id,username,member_id,role,enabled FROM auth_users WHERE id=?');
+            $targetStatement->execute([$accountId]);
+            $target = $targetStatement->fetch(PDO::FETCH_ASSOC);
+            if (!is_array($target)) throw new InvalidArgumentException('変更するアカウントが見つかりません');
+            if ($target['role'] === 'admin' && (int)$target['enabled'] === 1 && $role !== 'admin' && kptc_auth_enabled_admin_count($pdo) <= 1) {
+                throw new InvalidArgumentException('最後の管理者を一般ユーザーへ変更できません');
+            }
+            if ($password !== '') {
+                $statement = $pdo->prepare('UPDATE auth_users SET username=?,role=?,password_hash=?,auth_revision=auth_revision+1,updated_at=? WHERE id=?');
+                $statement->execute([$username,$role,kptc_auth_password_hash($password),$now,$accountId]);
+            } else {
+                $statement = $pdo->prepare('UPDATE auth_users SET username=?,role=?,auth_revision=auth_revision+1,updated_at=? WHERE id=?');
+                $statement->execute([$username,$role,$now,$accountId]);
+            }
+            if ((int)$admin['id'] === $accountId) {
+                $revisionStatement = $pdo->prepare('SELECT auth_revision FROM auth_users WHERE id=?');
+                $revisionStatement->execute([$accountId]);
+                $sessionRevision = (int)$revisionStatement->fetchColumn();
+            }
+            $summary = member_name($record['state'], (string)$target['member_id']) . 'のログイン情報を変更' . ($password !== '' ? '（パスワード再設定）' : '');
+        } else {
+            throw new InvalidArgumentException('アカウント操作が不正です');
+        }
+        $actorName = member_name($record['state'], (string)$admin['member_id']);
+        $log = $pdo->prepare('INSERT INTO audit_logs(actor_id,actor_name,action,summary,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?)');
+        $log->execute([(string)$admin['member_id'],$actorName,'アカウント管理',$summary,null,null,$now]);
+        $pdo->commit();
+        if ($sessionRevision !== null) $_SESSION['auth_revision'] = $sessionRevision;
+        respond(bootstrap_payload($pdo));
+    } catch (InvalidArgumentException $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        respond(['error'=>$error->getMessage()], 422);
+    } catch (PDOException $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        if ((string)$error->getCode() === '23000') respond(['error'=>'このユーザーIDは既に使用されています'], 409);
+        error_log('Auth account database update failed: ' . $error->getMessage());
+        respond(['error'=>'ログイン情報を保存できませんでした'], 500);
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('Auth account update failed: ' . $error->getMessage());
+        respond(['error'=>'ログイン情報を保存できませんでした'], 500);
+    }
+}
+
 if ($action === 'save') {
     // 受信時のversionが最新値と一致した場合だけ、状態と監査ログを同じ取引で更新します。
     require_post();
@@ -425,6 +510,11 @@ if ($action === 'save') {
     $state = $input['state'] ?? null;
     if (!is_array($state) || !isset($state['members'],$state['schedules'],$state['categories'])) respond(['error'=>'保存データが不正です'], 422);
     $state = strip_schedule_automation_fields($state);
+    $nextMemberIds = array_column($state['members'], 'id');
+    $linkedMemberIds = $pdo->query('SELECT member_id FROM auth_users')->fetchAll(PDO::FETCH_COLUMN);
+    foreach ($linkedMemberIds as $linkedMemberId) {
+        if (!in_array($linkedMemberId, $nextMemberIds, true)) respond(bootstrap_payload($pdo) + ['error'=>'ログインアカウントがあるユーザーは削除できません'], 422);
+    }
     $expectedVersion = (int)($input['version'] ?? 0);
     $pdo->beginTransaction();
     $record = current_record($pdo);

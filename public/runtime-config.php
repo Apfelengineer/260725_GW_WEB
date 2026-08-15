@@ -12,9 +12,21 @@ function kptc_load_runtime_config(string $role): void {
 
     $environmentKey = $role === 'internal' ? 'KPTC_INTERNAL_CONFIG_FILE' : 'KPTC_PUBLIC_CONFIG_FILE';
     $configuredPath = trim((string)(getenv($environmentKey) ?: ''));
-    $defaultPath = dirname(__DIR__, 2) . '/GW/config/' . $role . '-env.php';
-    $configPath = $configuredPath !== '' ? $configuredPath : $defaultPath;
-    if (is_file($configPath)) require $configPath;
+    $configPath = $configuredPath;
+    if ($configPath === '') {
+        // /GW直下への旧配置と、/GW/schedule・/GW/calendarへの分離配置を両方扱います。
+        $defaultPaths = [
+            dirname(__DIR__, 2) . '/GW/config/' . $role . '-env.php',
+            dirname(__DIR__, 3) . '/GW/config/' . $role . '-env.php',
+        ];
+        foreach ($defaultPaths as $defaultPath) {
+            if (is_file($defaultPath)) {
+                $configPath = $defaultPath;
+                break;
+            }
+        }
+    }
+    if ($configPath !== '' && is_file($configPath)) require $configPath;
     $loaded[$role] = true;
 }
 

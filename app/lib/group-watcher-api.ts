@@ -57,6 +57,17 @@ export type AvailabilityPublishStatus = {
   consecutiveFailures: number;
 };
 
+export type AuthAccount = {
+  id: number;
+  username: string;
+  memberId: string;
+  role: "admin" | "user";
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: string | null;
+};
+
 export type AuthenticatedBootstrapResponse = {
   authenticated: true;
   setupRequired: false;
@@ -66,6 +77,7 @@ export type AuthenticatedBootstrapResponse = {
   username: string;
   role: "admin" | "user";
   csrfToken: string;
+  authAccounts: AuthAccount[];
   audit: AuditEntry[];
   availabilityPublish: AvailabilityPublishStatus;
 };
@@ -130,5 +142,8 @@ export const groupWatcherApi = {
   },
   undo(auditId: number, version: number, csrfToken: string) {
     return this.request<AuthenticatedBootstrapResponse>("undo", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ auditId, version }) });
+  },
+  saveAuthAccount(input: { operation: "create" | "update"; id?: number; memberId?: string; username: string; role: "admin" | "user"; password: string }, csrfToken: string) {
+    return this.request<AuthenticatedBootstrapResponse>("auth-account", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify(input) });
   },
 };

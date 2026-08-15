@@ -9,6 +9,7 @@ import {
   groups,
   japaneseHolidays,
   type AuditEntry,
+  type AuthAccount,
   type AuthenticatedBootstrapResponse,
   type AvailabilityPublishStatus,
   type Member,
@@ -24,7 +25,7 @@ type ClipboardState = { mode: "copy" | "cut"; items: ScheduleItem[] };
 type CellTarget = { memberId: string; date: string };
 type ContextMenuState = { scheduleId: string; x: number; y: number };
 type CellContextMenuState = { target: CellTarget; x: number; y: number };
-type ManagementTab = "members" | "categories" | "audit";
+type ManagementTab = "members" | "categories" | "accounts" | "audit";
 
 // 日付はタイムゾーン境界で前後しないよう、常に正午を基準に計算します。
 const weekdayNames = ["日", "月", "火", "水", "木", "金", "土"];
@@ -78,7 +79,7 @@ function weekDates(value: Date) {
 
 function openRoomAvailability() {
   // スケジューラーを保持したまま、公開用の空き状況を独立したタブで開きます。
-  const publicUrl = import.meta.env.VITE_KPTC_PUBLIC_AVAILABILITY_URL || "./reservations.html?room=m6";
+  const publicUrl = import.meta.env.VITE_KPTC_PUBLIC_AVAILABILITY_URL || "../calendar/?room=m6";
   window.open(publicUrl, "_blank", "noopener,noreferrer");
 }
 
@@ -185,6 +186,7 @@ export default function Home() {
   const [scheduleEditor, setScheduleEditor] = useState<EditorState | null>(null);
   const [memberEditor, setMemberEditor] = useState<Member | "new" | null>(null);
   const [categoryEditor, setCategoryEditor] = useState<ScheduleCategory | "new" | null>(null);
+  const [accountEditor, setAccountEditor] = useState<AuthAccount | "new" | null>(null);
   const [managementTab, setManagementTab] = useState<ManagementTab>("members");
   const [selectedScheduleIds, setSelectedScheduleIds] = useState<string[]>([]);
   const [selectedCell, setSelectedCell] = useState<CellTarget | null>(null);
@@ -197,6 +199,9 @@ export default function Home() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [setupRequired, setSetupRequired] = useState(false);
   const [csrfToken, setCsrfToken] = useState("");
+  const [currentUsername, setCurrentUsername] = useState("");
+  const [currentRole, setCurrentRole] = useState<"admin" | "user">("user");
+  const [authAccounts, setAuthAccounts] = useState<AuthAccount[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
   const [availabilityPublish, setAvailabilityPublish] = useState<AvailabilityPublishStatus | null>(null);
   const [syncStatus, setSyncStatus] = useState<"saved" | "saving" | "offline">("saving");
@@ -216,6 +221,10 @@ export default function Home() {
     versionRef.current = payload.version;
     setCsrfToken(payload.csrfToken);
     setCurrentUserId(payload.currentUserId);
+    setCurrentUsername(payload.username);
+    setCurrentRole(payload.role);
+    setAuthAccounts(payload.authAccounts);
+    if (payload.role !== "admin") setManagementTab((tab) => tab === "accounts" ? "members" : tab);
     setAuditLogs(payload.audit);
     setAvailabilityPublish(payload.availabilityPublish);
     applySharedState(payload.state);
@@ -262,9 +271,9 @@ export default function Home() {
         } catch (error) {
           const conflict = (error as { status?: number; payload?: AuthenticatedBootstrapResponse }).status === 409;
           const payload = (error as { payload?: AuthenticatedBootstrapResponse }).payload;
-          if (conflict && payload?.state) {
+          if (payload?.state) {
             applyServerPayload(payload);
-            setToast("他の利用者の更新を反映しました。もう一度操作してください");
+            setToast(conflict ? "他の利用者の更新を反映しました。もう一度操作してください" : error instanceof Error ? error.message : "変更を保存できませんでした");
           } else {
             setSyncStatus("offline");
             setToast("共有保存に失敗しました。通信を確認してください");
@@ -318,6 +327,9 @@ export default function Home() {
       try { await groupWatcherApi.logout(csrfToken); } catch { /* 画面側のログアウトは継続します。 */ }
     }
     setCurrentUserId(null);
+    setCurrentUsername("");
+    setCurrentRole("user");
+    setAuthAccounts([]);
     setSection("schedule");
   }
 
@@ -556,6 +568,10 @@ export default function Home() {
       setToast("ログイン中のユーザーは削除できません");
       return;
     }
+    if (authAccounts.some((account) => account.memberId === member.id)) {
+      setToast("ログインアカウントがあるユーザーは削除できません");
+      return;
+    }
     const count = schedules.filter((item) => item.memberId === member.id).length;
     const detail = count ? `\nこのユーザーの予定 ${count}件も削除されます。` : "";
     if (!window.confirm(`「${member.name}」を削除しますか？${detail}`)) return;
@@ -627,6 +643,34 @@ export default function Home() {
     setToast(`${category.name}の表示順を変更しました`);
   }
 
+  async function saveAuthAccount(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!accountEditor || currentRole !== "admin") return;
+    const form = new FormData(event.currentTarget);
+    const password = String(form.get("password") ?? "");
+    const confirmation = String(form.get("passwordConfirmation") ?? "");
+    if (password !== confirmation) {
+      setToast("確認用パスワードが一致しません");
+      return;
+    }
+    const existing = accountEditor === "new" ? null : accountEditor;
+    try {
+      const payload = await groupWatcherApi.saveAuthAccount({
+        operation: existing ? "update" : "create",
+        id: existing?.id,
+        memberId: existing?.memberId ?? String(form.get("memberId") ?? ""),
+        username: String(form.get("username") ?? "").trim(),
+        role: String(form.get("role") ?? "user") as "admin" | "user",
+        password,
+      }, csrfToken);
+      applyServerPayload(payload);
+      setAccountEditor(null);
+      setToast(existing ? "ログイン情報を更新しました" : "ログインアカウントを作成しました");
+    } catch (reason) {
+      setToast(reason instanceof Error ? reason.message : "ログイン情報を保存できませんでした");
+    }
+  }
+
   function navigateCalendar(direction: -1 | 1) {
     setCalendarDate((value) => view === "day" ? addDays(value, direction) : view === "week" ? addDays(value, direction * 7) : addMonths(value, direction));
   }
@@ -672,7 +716,7 @@ export default function Home() {
         </div>
 
         {currentMember ? (
-          <div className="sidebar-user"><Avatar member={currentMember} small /><span><b>{currentMember.name}</b><small>{currentMember.group}・共同編集</small></span><button aria-label="ログアウト" title="ログアウト" onClick={logout}>↪</button></div>
+          <div className="sidebar-user"><Avatar member={currentMember} small /><span><b>{currentMember.name}</b><small>{currentRole === "admin" ? "管理者" : "一般ユーザー"}・{currentUsername}</small></span><button aria-label="ログアウト" title="ログアウト" onClick={logout}>↪</button></div>
         ) : (
           <div className="sidebar-user sidebar-empty-user"><span>ユーザー未登録</span></div>
         )}
@@ -732,6 +776,11 @@ export default function Home() {
             onMoveCategory={moveCategory}
             auditLogs={auditLogs}
             onUndo={undoAudit}
+            isAdmin={currentRole === "admin"}
+            authAccounts={authAccounts}
+            currentUsername={currentUsername}
+            onAddAccount={() => setAccountEditor("new")}
+            onEditAccount={setAccountEditor}
           />
         )}
       </main>
@@ -746,6 +795,7 @@ export default function Home() {
       {scheduleEditor && <ScheduleModal editor={scheduleEditor} members={members} categories={categories} onClose={() => setScheduleEditor(null)} onSubmit={saveSchedule} onDelete={scheduleEditor.mode === "edit" ? () => deleteSchedules([scheduleEditor.item.id]) : undefined} />}
       {memberEditor && <MemberModal member={memberEditor === "new" ? null : memberEditor} onClose={() => setMemberEditor(null)} onSubmit={saveMember} />}
       {categoryEditor && <CategoryModal category={categoryEditor === "new" ? null : categoryEditor} onClose={() => setCategoryEditor(null)} onSubmit={saveCategory} />}
+      {accountEditor && <AuthAccountModal account={accountEditor === "new" ? null : accountEditor} accounts={authAccounts} members={members} onClose={() => setAccountEditor(null)} onSubmit={saveAuthAccount} />}
       {contextMenu && (
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} role="menu">
           <button role="menuitem" onClick={() => copySchedules(actionScheduleIds(contextMenu.scheduleId))}><span>□</span>コピー<kbd>Ctrl+C</kbd></button>
@@ -962,7 +1012,7 @@ function MonthView({ calendarDate, members, schedules, categories, selectedSched
   );
 }
 
-function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs, onUndo, onAddMember, onEditMember, onDeleteMember, onMoveMember, onAddCategory, onEditCategory, onDeleteCategory, onMoveCategory }: {
+function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs, onUndo, onAddMember, onEditMember, onDeleteMember, onMoveMember, onAddCategory, onEditCategory, onDeleteCategory, onMoveCategory, isAdmin, authAccounts, currentUsername, onAddAccount, onEditAccount }: {
   tab: ManagementTab;
   setTab: (tab: ManagementTab) => void;
   members: Member[];
@@ -978,15 +1028,23 @@ function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs
   onEditCategory: (category: ScheduleCategory) => void;
   onDeleteCategory: (category: ScheduleCategory) => void;
   onMoveCategory: (category: ScheduleCategory, direction: -1 | 1) => void;
+  isAdmin: boolean;
+  authAccounts: AuthAccount[];
+  currentUsername: string;
+  onAddAccount: () => void;
+  onEditAccount: (account: AuthAccount) => void;
 }) {
+  const addAction = tab === "members" ? onAddMember : tab === "categories" ? onAddCategory : tab === "accounts" ? onAddAccount : null;
   return (
     <div className="standard-page management-page">
-      <div className="page-heading"><div><span className="eyebrow">MANAGEMENT</span><h1>ユーザー・予定種別・操作履歴</h1><p>共同編集の変更者を確認し、必要に応じて変更を取り消せます</p></div>{tab !== "audit" && <button className="primary-button" onClick={tab === "members" ? onAddMember : onAddCategory}>＋ {tab === "members" ? "ユーザーを追加" : "予定種別を追加"}</button>}</div>
-      <div className="management-tabs"><button className={tab === "members" ? "active" : ""} onClick={() => setTab("members")}>ユーザー <span>{members.length}</span></button><button className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}>予定種別 <span>{categories.length}</span></button><button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>操作履歴 <span>{auditLogs.length}</span></button></div>
+      <div className="page-heading"><div><span className="eyebrow">MANAGEMENT</span><h1>ユーザー・予定種別・ログイン管理</h1><p>表示ユーザー、予定種別、ログイン権限と操作履歴を管理します</p></div>{addAction && <button className="primary-button" onClick={addAction}>＋ {tab === "members" ? "ユーザーを追加" : tab === "categories" ? "予定種別を追加" : "ログインを追加"}</button>}</div>
+      <div className="management-tabs"><button className={tab === "members" ? "active" : ""} onClick={() => setTab("members")}>ユーザー <span>{members.length}</span></button><button className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}>予定種別 <span>{categories.length}</span></button>{isAdmin && <button className={tab === "accounts" ? "active" : ""} onClick={() => setTab("accounts")}>ログイン <span>{authAccounts.length}</span></button>}<button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>操作履歴 <span>{auditLogs.length}</span></button></div>
       {tab === "members" ? (
         <div className="members-table-wrap"><table className="members-table"><thead><tr><th>表示順</th><th>ユーザー</th><th>所属</th><th>内線</th><th>操作</th></tr></thead><tbody>{members.map((member, index) => <tr key={member.id}><td><div className="order-control"><b>{index + 1}</b><button type="button" aria-label={`${member.name}を上へ`} disabled={index === 0} onClick={() => onMoveMember(member, -1)}>↑</button><button type="button" aria-label={`${member.name}を下へ`} disabled={index === members.length - 1} onClick={() => onMoveMember(member, 1)}>↓</button></div></td><td><Avatar member={member} small /><b>{member.name}</b></td><td>{member.group}</td><td><span>{member.extension || "—"}</span></td><td className="table-actions"><button onClick={() => onEditMember(member)}>編集</button><button className="danger" onClick={() => onDeleteMember(member)}>削除</button></td></tr>)}</tbody></table></div>
       ) : tab === "categories" ? (
         <div className="category-management-list">{categories.map((category, index) => <article key={category.id}><div className="order-control category-order"><b>{index + 1}</b><button type="button" aria-label={`${category.name}を上へ`} disabled={index === 0} onClick={() => onMoveCategory(category, -1)}>↑</button><button type="button" aria-label={`${category.name}を下へ`} disabled={index === categories.length - 1} onClick={() => onMoveCategory(category, 1)}>↓</button></div><span className="category-swatch" style={{ background: category.color }} /><div><h2>{category.name}</h2><p>使用中の予定 {schedules.filter((item) => item.category === category.name).length}件</p></div><button onClick={() => onEditCategory(category)}>編集</button><button className="danger" onClick={() => onDeleteCategory(category)}>削除</button></article>)}</div>
+      ) : tab === "accounts" && isAdmin ? (
+        <div className="auth-account-panel"><p className="security-note">パスワードの現在値は安全上表示できません。必要な場合は「編集」から新しいパスワードへ再設定してください。</p><div className="members-table-wrap"><table className="members-table auth-accounts-table"><thead><tr><th>スケジューラーユーザー</th><th>ユーザーID</th><th>権限</th><th>最終ログイン</th><th>操作</th></tr></thead><tbody>{authAccounts.map((account) => { const member = members.find((item) => item.id === account.memberId); return <tr key={account.id}><td><b>{member?.name ?? "削除済みユーザー"}</b></td><td><code>{account.username}</code>{account.username === currentUsername && <small className="current-account-label">ログイン中</small>}</td><td><span className={`role-badge ${account.role}`}>{account.role === "admin" ? "管理者" : "一般ユーザー"}</span></td><td>{account.lastLoginAt ? new Date(account.lastLoginAt).toLocaleString("ja-JP") : "未ログイン"}</td><td className="table-actions"><button onClick={() => onEditAccount(account)}>編集</button></td></tr>; })}</tbody></table></div></div>
       ) : (
         <div className="audit-list">{auditLogs.length ? auditLogs.map((entry) => <article key={entry.id}><span className="audit-icon">↺</span><div><b>{entry.summary}</b><small>{entry.actorName} ・ {new Date(entry.createdAt).toLocaleString("ja-JP")}</small></div><em>{entry.action}</em>{entry.canUndo && <button onClick={() => onUndo(entry)}>取り消す</button>}</article>) : <EmptyState>操作履歴はまだありません</EmptyState>}</div>
       )}
@@ -1052,6 +1110,24 @@ function CategoryModal({ category, onClose, onSubmit }: { category: ScheduleCate
         <label className="field full"><span>予定種別名</span><input name="name" autoFocus defaultValue={category?.name ?? ""} placeholder="例：研修" required /></label>
         <label className="field color-field full"><span>表示色</span><input name="color" type="color" defaultValue={category?.color ?? "#5086bd"} /></label>
         <footer><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button className="primary-button" type="submit">{category ? "変更を保存" : "予定種別を追加"}</button></footer>
+      </form>
+    </ModalShell>
+  );
+}
+
+function AuthAccountModal({ account, accounts, members, onClose, onSubmit }: { account: AuthAccount | null; accounts: AuthAccount[]; members: Member[]; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  const [password, setPassword] = useState("");
+  const availableMembers = account ? members : members.filter((member) => !accounts.some((item) => item.memberId === member.id));
+  const linkedMember = account ? members.find((member) => member.id === account.memberId) : null;
+  return (
+    <ModalShell title={account ? "ログイン情報を編集" : "ログインアカウントを追加"} eyebrow="AUTH ACCOUNT" onClose={onClose}>
+      <form onSubmit={onSubmit} className="modal-form compact-form">
+        {account ? <label className="field full"><span>スケジューラーユーザー</span><input value={linkedMember?.name ?? "削除済みユーザー"} readOnly /></label> : <label className="field full"><span>スケジューラーユーザー</span><select name="memberId" required defaultValue=""><option value="" disabled>ユーザーを選択</option>{availableMembers.map((member) => <option value={member.id} key={member.id}>{member.name}（{member.group}）</option>)}</select><small className="field-note">ログインアカウント未設定のユーザーだけを表示します</small></label>}
+        <label className="field full"><span>ユーザーID</span><input name="username" autoFocus={!account} minLength={3} maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._@-]{2,63}" autoCapitalize="none" autoComplete="off" defaultValue={account?.username ?? ""} required /><small className="field-note">3〜64文字の半角英数字と . _ @ - を使用できます</small></label>
+        <label className="field full"><span>権限</span><select name="role" defaultValue={account?.role ?? "user"}><option value="user">一般ユーザー</option><option value="admin">管理者</option></select></label>
+        <label className="field full"><span>{account ? "新しいパスワード（変更する場合のみ）" : "パスワード"}</span><input name="password" type="password" minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required={!account} /><small className="field-note">12文字以上。現在のパスワードは表示されません</small></label>
+        <label className="field full"><span>パスワード（確認）</span><input name="passwordConfirmation" type="password" minLength={12} maxLength={256} autoComplete="new-password" required={Boolean(password)} /></label>
+        <footer><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button className="primary-button" type="submit">{account ? "変更を保存" : "アカウントを作成"}</button></footer>
       </form>
     </ModalShell>
   );

@@ -39,3 +39,6 @@ const distribution = distributions[target];
 const destination = resolve(root, distribution.directory);
 await mkdir(destination, { recursive: true });
 for (const source of distribution.files) await copyFile(resolve(root, source), resolve(destination, source.split("/").at(-1)));
+
+// 公開側はディレクトリURL（/GW/calendar）だけで表示できるようindex.htmlも用意します。
+if (target === "public") await copyFile(resolve(destination, "reservations.html"), resolve(destination, "index.html"));

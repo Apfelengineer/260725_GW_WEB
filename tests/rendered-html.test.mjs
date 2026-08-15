@@ -209,21 +209,29 @@ test("試験室3室の空き状況ページと署名付きJSON連携を提供す
 });
 
 test("認証情報を予定データから分離して正式ログインを提供する", async () => {
-  const [api, auth, client, manager] = await Promise.all([
+  const [api, auth, client, manager, page] = await Promise.all([
     readFile(new URL("public/api.php", root), "utf8"),
     readFile(new URL("public/auth.php", root), "utf8"),
     readFile(new URL("app/lib/group-watcher-api.ts", root), "utf8"),
     readFile(new URL("public/manage-auth-user-cli.php", root), "utf8"),
+    readFile(new URL("app/page.tsx", root), "utf8"),
   ]);
+  const loginSection = api.slice(api.indexOf("if ($action === 'login')"), api.indexOf("if ($action === 'logout')"));
+  const accountListSection = auth.slice(auth.indexOf("function kptc_auth_account_list"), auth.indexOf("function kptc_auth_enabled_admin_count"));
   assert.match(api, /authenticated'=>false/);
   assert.match(api, /kptc_auth_verify/);
   assert.match(api, /session_regenerate_id\(true\)/);
-  assert.doesNotMatch(api, /デモ版へログイン|\$input\['memberId'\]/);
+  assert.doesNotMatch(loginSection, /デモ版へログイン|\$input\['memberId'\]/);
   assert.match(auth, /CREATE TABLE IF NOT EXISTS auth_users/);
   assert.match(auth, /password_hash/);
   assert.match(auth, /password_verify/);
   assert.match(auth, /auth_login_attempts/);
   assert.match(auth, />= 5/);
+  assert.match(api, /require_admin\(\)/);
+  assert.match(api, /最後の管理者を一般ユーザーへ変更できません/);
+  assert.doesNotMatch(accountListSection, /password_hash/);
+  assert.match(page, /パスワードの現在値は安全上表示できません/);
+  assert.match(page, /currentRole === "admin"/);
   assert.match(client, /JSON\.stringify\(\{ username, password \}\)/);
   assert.match(manager, /--password-stdin/);
   assert.doesNotMatch(manager, /SELECT \*/);
@@ -242,8 +250,17 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   assert.match(publicSection, /health-availability\.php/);
   assert.match(publicSection, /availability-contract\.php/);
   assert.match(publicSection, /runtime-config\.php/);
+  assert.match(publicSection, /reservations\.html/);
+  assert.match(publicSection, /index\.html/);
   assert.doesNotMatch(publicSection, /availability-json\.php/);
   assert.doesNotMatch(publicSection, /api\.php|auth\.php|manage-auth-user|publish-availability-cli|group-watcher\.sqlite/);
   await access(new URL("deploy/kptc-availability-publish.timer", root));
   await access(new URL("deploy/kptc-availability-monitor.timer", root));
+});
+
+test("分離配置でも公開領域外の実行設定を探索する", async () => {
+  const runtimeConfig = await readFile(new URL("public/runtime-config.php", root), "utf8");
+  assert.match(runtimeConfig, /dirname\(__DIR__, 2\)/);
+  assert.match(runtimeConfig, /dirname\(__DIR__, 3\)/);
+  assert.match(runtimeConfig, /GW\/config/);
 });

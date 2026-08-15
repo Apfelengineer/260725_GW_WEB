@@ -25,6 +25,7 @@ PHP APIと内部用SQLiteへデータを保存するため、別端末・別ブ�
 - キーボード操作（Ctrl/Cmd+C、Ctrl/Cmd+V、Delete、Esc）
 - ユーザーと予定種別の追加・編集・削除
 - ユーザー名・パスワード認証、ログイン試行制限、共有データ保存、競合検知
+- 管理者画面からのログインID・パスワード再設定・管理者／一般ユーザー権限の管理
 - 操作履歴、変更者記録、直前操作の取り消し・削除復元
 - 「試験室」グループと3つの試験室ユーザー
 - 電波暗室・電磁波妨害評価装置(G-TEM)・パルスサージシステムそれぞれの直近3か月空き状況ページ
@@ -58,7 +59,7 @@ pnpm test
 - `dist-internal`: スケジューラー画面、内部API、認証、送信・再送・監視コマンド
 - `dist-public`: 空き状況画面、署名付きJSON受信API、公開JSON読取API
 
-外部用には `api.php`、`auth.php`、管理コマンド、SQLite接続処理を含めません。内部画面の「試験室予約」リンク先は、ビルド時に `VITE_KPTC_PUBLIC_AVAILABILITY_URL=https://availability.example.jp/reservations.html?room=m6` を設定します。開発用の一体表示は `pnpm run dev`、旧来の一体型出力は `pnpm run build:combined` で利用できます。
+外部用には `api.php`、`auth.php`、管理コマンド、SQLite接続処理を含めません。内部画面の「試験室予約」リンク先は、ビルド時に `VITE_KPTC_PUBLIC_AVAILABILITY_URL=https://availability.example.jp/calendar/?room=m6` を設定します。開発用の一体表示は `pnpm run dev`、旧来の一体型出力は `pnpm run build:combined` で利用できます。
 
 ## 正式ログイン認証
 
@@ -106,12 +107,17 @@ php manage-auth-user-cli.php enable admin
 
 ## さくらインターネットへの配置
 
-現行のさくら環境でも、内部用は例として `/home/apfelrunner/www/GW-internal/`、外部用は `/home/apfelrunner/www/GW-public/` へ分けて配置できます。内部用SQLiteと外部用JSONも別フォルダへ保存します。
+現行のさくら環境では、内部用を `/home/apfelrunner/www/GW/schedule/`、外部用を `/home/apfelrunner/www/GW/calendar/` へ分けて配置します。公開URLはそれぞれ次のとおりです。
+
+- 内部スケジューラー: `https://apfelrunner.sakura.ne.jp/GW/schedule`
+- 外部向け試験室空き状況: `https://apfelrunner.sakura.ne.jp/GW/calendar`
+
+画面の公開フォルダを同じ `GW` 配下に置いても、内部用SQLiteは `/home/apfelrunner/GW/`、外部用JSONは `/home/apfelrunner/GW-public/` に分離し、外部画面から内部DBを直接参照しません。
 
 再送は、内部サーバーの定期実行へ次の1行を登録します。
 
 ```cron
-*/5 * * * * /usr/local/bin/php /home/apfelrunner/www/GW-internal/publish-availability-cli.php
+*/5 * * * * /usr/local/bin/php /home/apfelrunner/www/GW/schedule/publish-availability-cli.php
 ```
 
-試験室空き状況ページは `reservations.html?room=m6`（電波暗室）、`room=m7`（電磁波妨害評価装置(G-TEM)）、`room=m8`（パルスサージシステム）で切り替えます。
+試験室空き状況ページは `/GW/calendar/?room=m6`（電波暗室）、`room=m7`（電磁波妨害評価装置(G-TEM)）、`room=m8`（パルスサージシステム）で切り替えます。`dist-public/index.html` を生成するため、ファイル名なしのディレクトリURLで表示できます。
