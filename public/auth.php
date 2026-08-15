@@ -56,14 +56,15 @@ function kptc_auth_validate_username(string $username): void {
     if (!preg_match('/^[a-z0-9][a-z0-9._@-]{2,63}$/', $username)) throw new InvalidArgumentException('ユーザー名は3〜64文字の半角英数字・._@-で指定してください');
 }
 
-function kptc_auth_validate_password(string $password): void {
-    if (strlen($password) < 12 || strlen($password) > 256) throw new InvalidArgumentException('パスワードは12〜256文字で指定してください');
+function kptc_auth_password_material(string $password): string {
+    // bcrypt環境でも長い入力が途中で切られないよう、固定長へ変換してから適応的ハッシュへ渡します。
+    return 'kptc-sha512:' . hash('sha512', $password);
 }
 
 function kptc_auth_password_hash(string $password): string {
-    kptc_auth_validate_password($password);
+    // 空文字を含む任意長のパスワードを、平文ではなく常にハッシュで保存します。
     $algorithm = defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT;
-    $hash = password_hash($password, $algorithm);
+    $hash = password_hash(kptc_auth_password_material($password), $algorithm);
     if (!is_string($hash)) throw new RuntimeException('パスワードを安全に保存できません');
     return $hash;
 }
@@ -101,13 +102,15 @@ function kptc_auth_verify(PDO $pdo, string $username, string $password, string $
     if (kptc_auth_is_rate_limited($pdo, $attemptKey)) throw new OverflowException('ログイン試行回数が上限に達しました。15分後にお試しください');
     $user = kptc_auth_find_user($pdo, $normalized);
     $hash = is_array($user) ? (string)$user['password_hash'] : kptc_auth_password_hash(bin2hex(random_bytes(16)));
-    $valid = password_verify($password, $hash) && is_array($user) && (int)$user['enabled'] === 1;
+    $usesCurrentMaterial = password_verify(kptc_auth_password_material($password), $hash);
+    // 旧方式のハッシュも受け入れ、ログイン成功後に現在の方式へ置き換えます。
+    $valid = ($usesCurrentMaterial || password_verify($password, $hash)) && is_array($user) && (int)$user['enabled'] === 1;
     if (!$valid) {
         kptc_auth_record_failure($pdo, $attemptKey);
         return null;
     }
     kptc_auth_clear_failures($pdo, $attemptKey);
-    if (password_needs_rehash($hash, defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT)) {
+    if (!$usesCurrentMaterial || password_needs_rehash($hash, defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT)) {
         $pdo->prepare('UPDATE auth_users SET password_hash=?,updated_at=? WHERE id=?')->execute([kptc_auth_password_hash($password), date(DATE_ATOM), $user['id']]);
     }
     $pdo->prepare('UPDATE auth_users SET last_login_at=?,updated_at=? WHERE id=?')->execute([date(DATE_ATOM), date(DATE_ATOM), $user['id']]);

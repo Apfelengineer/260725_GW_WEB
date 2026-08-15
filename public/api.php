@@ -414,7 +414,7 @@ if ($action === 'login') {
     $input = body();
     $username = (string)($input['username'] ?? '');
     $password = (string)($input['password'] ?? '');
-    if (strlen($username) < 3 || strlen($username) > 64 || strlen($password) < 12 || strlen($password) > 256) respond(['error'=>'ユーザー名またはパスワードが正しくありません'], 401);
+    if (strlen($username) < 3 || strlen($username) > 64) respond(['error'=>'ユーザー名またはパスワードが正しくありません'], 401);
     if (kptc_auth_user_count($pdo) === 0) respond(['error'=>'管理者による初期アカウント設定が必要です', 'setupRequired'=>true], 503);
     try {
         $user = kptc_auth_verify($pdo, $username, $password, (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
@@ -471,6 +471,7 @@ if ($action === 'member-account') {
     $memberId = trim((string)($memberInput['id'] ?? ''));
     $username = kptc_auth_normalize_username((string)($input['username'] ?? ''));
     $password = (string)($input['password'] ?? '');
+    $changePassword = ($input['changePassword'] ?? false) === true;
     $role = (string)($input['role'] ?? 'user');
     try {
         if ($memberId === '' || !preg_match('/^[A-Za-z0-9._-]{1,80}$/', $memberId)) throw new InvalidArgumentException('ユーザーIDが不正です');
@@ -522,7 +523,8 @@ if ($action === 'member-account') {
                 kptc_auth_validate_username($username);
                 if (is_array($account) && $account['role'] === 'admin' && $role !== 'admin' && kptc_auth_enabled_admin_count($pdo) <= 1) throw new InvalidArgumentException('最後の管理者を変更できません');
                 if (is_array($account)) {
-                    if ($password !== '') {
+                    // 空文字も有効なパスワードなので、値ではなく変更指定の有無で更新を判断します。
+                    if ($changePassword) {
                         $statement = $pdo->prepare('UPDATE auth_users SET username=?,role=?,password_hash=?,auth_revision=auth_revision+1,updated_at=? WHERE id=?');
                         $statement->execute([$username,$role,kptc_auth_password_hash($password),$now,(int)$account['id']]);
                     } else {
@@ -535,7 +537,6 @@ if ($action === 'member-account') {
                         $sessionRevision = (int)$revision->fetchColumn();
                     }
                 } else {
-                    if ($password === '') throw new InvalidArgumentException('新しいアカウントのパスワードを入力してください');
                     $statement = $pdo->prepare('INSERT INTO auth_users(username,member_id,password_hash,role,enabled,auth_revision,created_at,updated_at) VALUES(?,?,?,?,1,1,?,?)');
                     $statement->execute([$username,$memberId,kptc_auth_password_hash($password),$role,$now,$now]);
                 }

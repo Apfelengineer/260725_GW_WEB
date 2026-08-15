@@ -153,7 +153,7 @@ export const groupWatcherApi = {
   undo(auditId: number, version: number, csrfToken: string) {
     return this.request<AuthenticatedBootstrapResponse>("undo", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ auditId, version }) });
   },
-  saveMemberAccount(input: { operation: "save" | "delete"; version: number; member: Member; username: string; role: AuthRole; password: string }, csrfToken: string) {
+  saveMemberAccount(input: { operation: "save" | "delete"; version: number; member: Member; username: string; role: AuthRole; password: string; changePassword: boolean }, csrfToken: string) {
     return this.request<AuthenticatedBootstrapResponse>("member-account", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify(input) });
   },
 };

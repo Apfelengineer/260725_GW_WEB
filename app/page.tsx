@@ -173,11 +173,11 @@ function LoginScreen({ serverAvailable, setupRequired, loginUsers, onLogin, onGu
     <main className="auth-screen">
       <form className="login-card" onSubmit={submit}>
         <Logo />
-        <div><span className="eyebrow">SECURE SIGN IN</span><h1>KPTC Schedulerへログイン</h1><p>ユーザーを選択してパスワードを入力してください。</p></div>
+        <div><span className="eyebrow">SECURE SIGN IN</span><h1>KPTC Schedulerへログイン</h1><p>管理者または一般ユーザーを選択してログインしてください。</p></div>
         <label className="field"><span>ユーザー</span><select autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required><option value="" disabled>ユーザーを選択</option>{loginUsers.map((user) => <option value={user.username} key={user.username}>{user.name}（{user.role === "admin" ? "管理者" : "一般"}）</option>)}</select></label>
-        <label className="field"><span>パスワード</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+        <label className="field"><span>パスワード</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
         {error && <p className="login-error" role="alert">{error}</p>}
-        <button className="primary-button" type="submit" disabled={!serverAvailable || !username || !password || submitting}>{submitting ? "ログイン中…" : "ログイン"}</button>
+        <button className="primary-button" type="submit" disabled={!serverAvailable || !username || submitting}>{submitting ? "ログイン中…" : "ログイン"}</button>
         <button className="secondary-button guest-login-button" type="button" disabled={!serverAvailable || submitting} onClick={guestLogin}>ゲストとしてログイン</button>
         <small>{!serverAvailable ? "内部サーバーへ接続できません。管理者へお問い合わせください。" : setupRequired ? "初期アカウントが未設定です。管理用コマンドで管理者を作成してください。" : "通信とセッションはサーバー側で安全に管理されます。"}</small>
       </form>
@@ -594,7 +594,9 @@ export default function Home() {
       extension: String(form.get("extension") ?? ""),
     };
     const password = String(form.get("password") ?? "");
-    if (password !== String(form.get("passwordConfirmation") ?? "")) { setToast("確認用パスワードが一致しません"); return; }
+    const existingAccount = existing ? authAccounts.find((account) => account.memberId === existing.id) : undefined;
+    const changePassword = !existingAccount || form.get("changePassword") === "on";
+    if (changePassword && password !== String(form.get("passwordConfirmation") ?? "")) { setToast("確認用パスワードが一致しません"); return; }
     await saveQueueRef.current;
     try {
       const payload = await groupWatcherApi.saveMemberAccount({
@@ -604,6 +606,7 @@ export default function Home() {
         username: String(form.get("accountId") ?? "").trim(),
         role: String(form.get("role") ?? "user") as AuthRole,
         password,
+        changePassword,
       }, csrfToken);
       applyServerPayload(payload);
       setMemberEditor(null);
@@ -627,7 +630,7 @@ export default function Home() {
     await saveQueueRef.current;
     try {
       const account = authAccounts.find((item) => item.memberId === member.id);
-      const payload = await groupWatcherApi.saveMemberAccount({ operation: "delete", version: versionRef.current, member, username: account?.username ?? "", role: account?.role ?? "room", password: "" }, csrfToken);
+      const payload = await groupWatcherApi.saveMemberAccount({ operation: "delete", version: versionRef.current, member, username: account?.username ?? "", role: account?.role ?? "room", password: "", changePassword: false }, csrfToken);
       applyServerPayload(payload);
       if (selectedCell?.memberId === member.id) setSelectedCell(null);
       setToast("ユーザーと関連予定を削除しました");
@@ -1116,7 +1119,7 @@ function MemberModal({ member, account, onClose, onSubmit }: { member: Member | 
   const [role, setRole] = useState<AuthRole>(account?.role ?? (member?.group === "試験室" ? "room" : "user"));
   const [username, setUsername] = useState<string | null>(null);
   const [password, setPassword] = useState("");
-  const needsNewAccount = !account && role !== "room";
+  const [changePassword, setChangePassword] = useState(!account);
   return (
     <ModalShell title={member ? "ユーザーを編集" : "ユーザーを追加"} eyebrow="USER MANAGEMENT" onClose={onClose}>
       <form onSubmit={onSubmit} className="modal-form">
@@ -1127,8 +1130,9 @@ function MemberModal({ member, account, onClose, onSubmit }: { member: Member | 
         <label className="field"><span>内線</span><input name="extension" type="text" inputMode="tel" defaultValue={member?.extension ?? ""} /></label>
         <label className="field full"><span>権限</span><select name="role" value={role} onChange={(event) => setRole(event.target.value as AuthRole)}><option value="admin">管理者</option><option value="user">一般</option><option value="room">試験室（閲覧のみ）</option></select><small className="field-note">管理者はユーザー管理可、一般は予定編集可、試験室は閲覧のみです</small></label>
         <label className="field full"><span>アカウントID</span><input name="accountId" minLength={3} maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._@-]{2,63}" autoCapitalize="none" autoComplete="off" value={username ?? account?.username ?? ""} onChange={(event) => setUsername(event.target.value)} required={role !== "room"} /><small className="field-note">試験室権限でログイン不要の場合だけ空欄にできます</small></label>
-        <label className="field full"><span>{account ? "新しいパスワード（変更する場合のみ）" : "パスワード"}</span><input name="password" type="password" minLength={12} maxLength={256} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required={needsNewAccount} /><small className="field-note">12文字以上。現在のパスワードは表示されません</small></label>
-        <label className="field full"><span>パスワード（確認）</span><input name="passwordConfirmation" type="password" minLength={12} maxLength={256} autoComplete="new-password" required={Boolean(password)} /></label>
+        {account && <label className="check-field full"><input name="changePassword" type="checkbox" checked={changePassword} onChange={(event) => setChangePassword(event.target.checked)} /><span><b>パスワードを変更する</b><small>チェックしない場合は現在のパスワードを維持します</small></span></label>}
+        <label className="field full"><span>{account ? "新しいパスワード" : "パスワード"}</span><input name="password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={!changePassword} /><small className="field-note">文字数制限はありません。空欄（パスワードなし）も設定できます</small></label>
+        <label className="field full"><span>パスワード（確認）</span><input name="passwordConfirmation" type="password" autoComplete="new-password" disabled={!changePassword} /></label>
         <footer><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button className="primary-button" type="submit">{member ? "変更を保存" : "ユーザーを追加"}</button></footer>
       </form>
     </ModalShell>

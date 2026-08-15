@@ -237,6 +237,14 @@ test("認証情報を予定データから分離して正式ログインを提�
   assert.match(page, /試験室（閲覧のみ）/);
   assert.match(page, /name="accountId"/);
   assert.match(page, /name="password"/);
+  assert.match(page, /name="changePassword"/);
+  assert.match(page, /文字数制限はありません。空欄（パスワードなし）も設定できます/);
+  assert.doesNotMatch(page, /name="password"[^>]*minLength|name="password"[^>]*maxLength/);
+  assert.doesNotMatch(auth, /パスワードは12〜256文字/);
+  assert.match(auth, /kptc_auth_password_material/);
+  assert.match(auth, /hash\('sha512', \$password\)/);
+  assert.match(api, /\$changePassword/);
+  assert.doesNotMatch(loginSection, /strlen\(\$password\)/);
   assert.doesNotMatch(page, /AuthAccountModal|tab === "accounts"/);
   assert.match(page, /currentRole === "admin"/);
   assert.match(page, /canEditSchedule/);
