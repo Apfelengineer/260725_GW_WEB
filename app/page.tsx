@@ -57,26 +57,11 @@ function daysBetween(from: string, to: string) {
 }
 
 function scheduleOccursOn(item: ScheduleItem, targetKey: string) {
-  // 複数日予定と日次・週次・月次の繰り返しを、表示対象の日付へ展開します。
+  // 開始日から終了日までの範囲に、表示対象の日付が含まれるか判定します。
   const endDate = item.endDate || item.date;
   const duration = Math.max(0, daysBetween(item.date, endDate));
   const offset = daysBetween(item.date, targetKey);
-  if (offset < 0) return false;
-  const repeat = item.repeat ?? "none";
-  if (repeat === "none") return offset <= duration;
-  const repeatUntil = item.repeatUntil || item.date;
-  if (targetKey > dateKey(addDays(new Date(`${repeatUntil}T12:00:00`), duration))) return false;
-  if (repeat === "daily") return true;
-  if (repeat === "weekly") return offset % 7 <= duration;
-  const start = new Date(`${item.date}T12:00:00`);
-  const target = new Date(`${targetKey}T12:00:00`);
-  for (let cursor = new Date(start.getFullYear(), start.getMonth(), 1, 12); cursor <= target; cursor = addMonths(cursor, 1)) {
-    const lastDay = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 12).getDate();
-    const occurrence = new Date(cursor.getFullYear(), cursor.getMonth(), Math.min(start.getDate(), lastDay), 12);
-    if (dateKey(occurrence) > repeatUntil) break;
-    if (targetKey >= dateKey(occurrence) && targetKey <= dateKey(addDays(occurrence, duration))) return true;
-  }
-  return false;
+  return offset >= 0 && offset <= duration;
 }
 
 function mondayOf(value: Date) {
@@ -208,7 +193,6 @@ export default function Home() {
   const lastSyncedRef = useRef("");
   const mutationRef = useRef({ action: "更新", summary: "共有データを更新" });
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const shownRemindersRef = useRef(new Set<string>());
 
   function applySharedState(state: SharedState) {
     setMembers(state.members);
@@ -347,34 +331,6 @@ export default function Home() {
     }
   }
 
-  useEffect(() => {
-    if (!currentUserId) return;
-    // 開始時刻が近い予定を30秒ごとに確認し、同じ予定の通知は一度だけ表示します。
-    const checkReminders = () => {
-      const now = new Date();
-      schedules.forEach((item) => {
-        if (!item.reminderMinutes) return;
-        const [hour, minute] = item.start.split(":").map(Number);
-        const lookAheadDays = Math.max(1, Math.ceil(item.reminderMinutes / 1440));
-        for (let dayOffset = 0; dayOffset <= lookAheadDays; dayOffset += 1) {
-          const occurrenceDate = addDays(now, dayOffset);
-          const occurrenceKey = dateKey(occurrenceDate);
-          if (!scheduleOccursOn(item, occurrenceKey)) continue;
-          const startsAt = new Date(occurrenceDate.getFullYear(), occurrenceDate.getMonth(), occurrenceDate.getDate(), hour, minute);
-          const reminderAt = startsAt.getTime() - item.reminderMinutes * 60000;
-          const key = `${item.id}-${occurrenceKey}`;
-          if (now.getTime() >= reminderAt && now.getTime() < reminderAt + 60000 && !shownRemindersRef.current.has(key)) {
-            shownRemindersRef.current.add(key);
-            setToast(`リマインダー：${occurrenceKey} ${item.start} ${item.title}`);
-          }
-        }
-      });
-    };
-    checkReminders();
-    const timer = window.setInterval(checkReminders, 30000);
-    return () => window.clearInterval(timer);
-  }, [currentUserId, schedules]);
-
   function openCreateSchedule(target?: Partial<CellTarget>) {
     if (!members.length) {
       setToast("先にユーザーを登録してください");
@@ -418,9 +374,6 @@ export default function Home() {
       category: String(form.get("category")),
       memo: String(form.get("memo") ?? ""),
       private: form.get("private") === "on",
-      repeat: String(form.get("repeat") ?? "none") as ScheduleItem["repeat"],
-      repeatUntil: String(form.get("repeatUntil") || endDate),
-      reminderMinutes: Number(form.get("reminderMinutes") ?? 0) || undefined,
     };
     markMutation(scheduleEditor.mode === "edit" ? "予定編集" : "予定作成", `${nextItem.title}（${nextItem.date}〜${nextItem.endDate}）`);
     setSchedules((items) => scheduleEditor.mode === "edit" ? items.map((item) => item.id === nextItem.id ? nextItem : item) : [...items, nextItem]);
@@ -853,7 +806,7 @@ function ScheduleEventButton({ item, categories, selected, cutting, compact = fa
       onContextMenu={(event) => onContextMenu(event, item)}
       title={`${item.timePreset === "all-day" ? "終日" : `${item.start}–${item.end}`} ${item.title}（ダブルクリックで編集）`}
     >
-      {compact ? <><i />{scheduleTimeLabel(item)} {item.repeat && item.repeat !== "none" ? "↻ " : ""}{item.private ? "【非】" : ""}{item.title}</> : <><time>{scheduleTimeLabel(item)}{item.endDate && item.endDate !== item.date ? "・複数日" : ""}</time><strong>{item.repeat && item.repeat !== "none" ? "↻ " : ""}{item.reminderMinutes ? "♢ " : ""}{item.private ? "【非】" : ""}{item.title}</strong>{item.memo && <span className="memo-mark">◆</span>}</>}
+      {compact ? <><i />{scheduleTimeLabel(item)} {item.private ? "【非】" : ""}{item.title}</> : <><time>{scheduleTimeLabel(item)}{item.endDate && item.endDate !== item.date ? "・複数日" : ""}</time><strong>{item.private ? "【非】" : ""}{item.title}</strong>{item.memo && <span className="memo-mark">◆</span>}</>}
     </button>
   );
 }
@@ -1022,11 +975,8 @@ function ScheduleModal({ editor, members, categories, onClose, onSubmit, onDelet
         <label className="field"><span>開始日</span><input name="date" type="date" defaultValue={item?.date ?? (editor.mode === "create" ? editor.date : "")} required /></label>
         <label className="field"><span>終了日</span><input name="endDate" type="date" defaultValue={item?.endDate ?? item?.date ?? (editor.mode === "create" ? editor.date : "")} required /></label>
         <label className="field"><span>予定種別</span><select name="category" defaultValue={item?.category ?? categories[0]?.name}>{categories.map((category) => <option key={category.id}>{category.name}</option>)}</select></label>
-        <label className="field"><span>繰り返し</span><select name="repeat" defaultValue={item?.repeat ?? "none"}><option value="none">繰り返さない</option><option value="daily">毎日</option><option value="weekly">毎週</option><option value="monthly">毎月</option></select></label>
         <label className="field"><span>開始</span><input name="start" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} readOnly={timePreset !== "custom"} required /></label>
         <label className="field"><span>終了</span><input name="end" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} readOnly={timePreset !== "custom"} required /></label>
-        <label className="field"><span>繰り返し終了日</span><input name="repeatUntil" type="date" defaultValue={item?.repeatUntil ?? item?.endDate ?? item?.date ?? (editor.mode === "create" ? editor.date : "")} /></label>
-        <label className="field"><span>リマインダー</span><select name="reminderMinutes" defaultValue={item?.reminderMinutes ?? 0}><option value="0">なし</option><option value="5">5分前</option><option value="10">10分前</option><option value="15">15分前</option><option value="30">30分前</option><option value="60">1時間前</option><option value="1440">1日前</option></select></label>
         <label className="field full"><span>メモ</span><textarea name="memo" placeholder="場所、持ち物、共有事項など" rows={3} defaultValue={item?.memo ?? ""} /></label>
         <label className="check-field full"><input name="private" type="checkbox" defaultChecked={item?.private ?? false} /><span><b>非公開にする</b><small>他のメンバーには予定があることだけを表示します</small></span></label>
         <footer>{onDelete && <button type="button" className="secondary-button danger-button" onClick={onDelete}>削除</button>}<span className="footer-spacer" /><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button className="primary-button" type="submit">{item ? "変更を保存" : "予定を登録"}</button></footer>

@@ -32,7 +32,6 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /午前（9:00–12:00）/);
   assert.match(page, /午後（13:00–17:00）/);
   assert.match(page, /終日/);
-  assert.match(page, /リマインダー/);
   assert.match(page, /操作履歴/);
   assert.match(page, /ユーザー表示順変更/);
   assert.match(page, /予定種別表示順変更/);
@@ -40,6 +39,7 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /を上へ/);
   assert.match(page, /を下へ/);
   assert.match(page, /scheduleOccursOn/);
+  assert.doesNotMatch(page, /name="repeat"|name="repeatUntil"|name="reminderMinutes"|繰り返し|リマインダー|shownRemindersRef/);
   assert.match(page, /addMonths/);
   assert.match(page, /window\.open\("\.\/reservations\.html\?room=m6", "_blank", "noopener,noreferrer"\)/);
   assert.doesNotMatch(page, /window\.location\.assign\("\.\/reservations\.html\?room=m6"\)/);
@@ -70,12 +70,15 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.doesNotMatch(page, /TodayCard|今日の予定|today-card|right-rail/);
   assert.doesNotMatch(styles, /today-card|today-list|right-rail|rail-card/);
   assert.doesNotMatch(api, /PresenceState|MessageItem|messages:/);
+  assert.doesNotMatch(api, /repeatUntil|reminderMinutes|repeat\?:/);
   assert.match(phpApi, /pdo_sqlite|sqlite:/);
   assert.match(phpApi, /audit_logs/);
   assert.match(phpApi, /CSRF|csrf/i);
   assert.match(phpApi, /foreach \(\$state\['members'\] as &\$member\)/);
   assert.match(phpApi, /organization_categories_extension_v1/);
   assert.match(phpApi, /migrate_organization_categories/);
+  assert.match(phpApi, /remove_repeat_reminder_v1/);
+  assert.match(phpApi, /strip_schedule_automation_fields/);
   assert.match(layout, /KPTC Scheduler/);
   assert.doesNotMatch(page, /SkeletonPreview|codex-preview/);
 });
@@ -131,6 +134,7 @@ test("試験室3室の空き状況ページを提供する", async () => {
   assert.match(jsonPublisher, /キャンセル待ち/);
   assert.match(jsonPublisher, /機器点検/);
   assert.match(jsonPublisher, /sourceVersion/);
+  assert.doesNotMatch(jsonPublisher, /repeatUntil|\$repeat/);
   assert.match(jsonPublisher, /JSON_PRETTY_PRINT/);
   assert.match(jsonPublisher, /rename\(\$temporary, \$path\)/);
   assert.doesNotMatch(jsonPublisher, /PDO|sqlite:|CREATE TABLE|public_meta/);

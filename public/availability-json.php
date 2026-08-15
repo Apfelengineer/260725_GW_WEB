@@ -32,24 +32,7 @@ function kptc_schedule_occurs_on(array $schedule, string $targetKey): bool {
     $offset = kptc_days_between($start, $target);
     if ($offset < 0) return false;
 
-    $repeat = (string)($schedule['repeat'] ?? 'none');
-    if ($repeat === 'none') return $offset <= $duration;
-    $repeatUntil = kptc_date((string)($schedule['repeatUntil'] ?? $startKey));
-    if ($target > $repeatUntil->modify('+' . $duration . ' days')) return false;
-    if ($repeat === 'daily') return true;
-    if ($repeat === 'weekly') return $offset % 7 <= $duration;
-    if ($repeat !== 'monthly') return false;
-
-    $cursor = $start->modify('first day of this month');
-    $targetMonth = $target->modify('first day of this month');
-    $startDay = (int)$start->format('j');
-    while ($cursor <= $targetMonth) {
-        $occurrence = $cursor->setDate((int)$cursor->format('Y'), (int)$cursor->format('n'), min($startDay, (int)$cursor->format('t')));
-        if ($occurrence > $repeatUntil) break;
-        if ($target >= $occurrence && $target <= $occurrence->modify('+' . $duration . ' days')) return true;
-        $cursor = $cursor->modify('+1 month');
-    }
-    return false;
+    return $offset <= $duration;
 }
 
 function kptc_minutes(string $value): int {
