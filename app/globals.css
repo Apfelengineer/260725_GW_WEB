@@ -207,8 +207,8 @@ button, select { cursor: pointer; }
 .member-schedule-row { min-height: 72px; border-bottom: 1px solid var(--line); }
 .member-schedule-row:last-child { border-bottom: 0; }
 .member-cell { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-right: 1px solid var(--line); }
-.member-cell > span:last-child { display: flex; min-width: 0; flex-direction: column; }
-.member-cell b { overflow: hidden; font-size: 10px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+.member-cell > span:last-child { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.member-cell b { font-size: 10px; font-weight: 720; line-height: 1.45; overflow-wrap: anywhere; white-space: normal; }
 .member-cell small { display: flex; align-items: center; gap: 5px; margin-top: 4px; color: #8b96a0; font-size: 8px; }
 .schedule-cell { display: flex; min-width: 0; flex-direction: column; gap: 5px; padding: 7px 6px; border-right: 1px solid var(--line); background: #fff; }
 .schedule-cell:last-child { border-right: 0; }
@@ -239,7 +239,7 @@ button, select { cursor: pointer; }
 .day-member { display: grid; grid-template-columns: 170px minmax(0,1fr); min-height: 83px; border-bottom: 1px solid var(--line); }
 .day-member:last-child { border-bottom: 0; }
 .day-member-profile { display: flex; align-items: center; gap: 9px; padding: 14px; border-right: 1px solid var(--line); }
-.day-member-profile > span { display: flex; flex-direction: column; }.day-member-profile b { font-size: 10px; }.day-member-profile small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.day-member-profile > span { display: flex; min-width: 0; flex: 1; flex-direction: column; }.day-member-profile b { font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; white-space: normal; }.day-member-profile small { margin-top: 3px; color: var(--muted); font-size: 8px; }
 .day-events { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 9px; padding: 10px; }
 .day-events .schedule-event { width: min(220px,100%); min-width: 170px; }
 .day-event { display: flex; min-width: 180px; flex-direction: column; gap: 3px; padding: 9px 11px; border: 0; border-left: 3px solid; border-radius: 8px; text-align: left; }
