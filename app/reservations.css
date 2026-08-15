@@ -1,7 +1,7 @@
 /* 試験室空き状況ページの3か月カレンダーと状態別配色を定義します。 */
 
 /* 基本配色とページ外枠 */
-:root { --reservation-blue: #0647d9; --reservation-blue-deep: #0035b5; --reservation-bg: #eaf8ff; --reservation-red: #d63b2d; }
+:root { --reservation-blue: #0647d9; --reservation-blue-deep: #0035b5; --reservation-red: #d63b2d; }
 * { box-sizing: border-box; }
 body { margin: 0; }
 .reservation-page { min-height: 100vh; padding: 34px 22px; color: #132033; background: linear-gradient(180deg,#eefaff,#e2f5ff); font-family: "Hiragino Sans","Yu Gothic UI",sans-serif; }

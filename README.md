@@ -33,7 +33,7 @@ Group Watcher 3.65 の主要機能を、PC・タブレット・スマートフ�
 
 ## 開発
 
-Node.js 22.13以上と pnpm を使用します。
+Node.js 22.13以上と pnpm を使用します。構成は、画面を生成するVite＋Reactと、共有保存・公開JSON連携を担うPHPに一本化しています。
 
 ```bash
 pnpm install
@@ -44,13 +44,8 @@ pnpm run dev
 
 ```bash
 pnpm run build
+pnpm run check
 pnpm test
-```
-
-さくらのレンタルサーバー向け静的ビルド:
-
-```bash
-pnpm run build:sakura
 ```
 
 生成された `dist-sakura` の中身をWeb公開フォルダへ配置します。画像やスクリプトは相対パスで出力されるため、初期ドメイン直下でも `/GW/` のようなサブフォルダでも利用できます。

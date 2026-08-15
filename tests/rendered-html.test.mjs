@@ -8,10 +8,10 @@ const root = new URL("../", import.meta.url);
 
 test("KPTC Scheduler の主要機能を提供する", async () => {
   // 主要画面・通信層・サーバーAPIをまとめて読み、必須機能の手掛かりを検査します。
-  const [page, styles, layout, api, phpApi] = await Promise.all([
+  const [page, styles, html, api, phpApi] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
-    readFile(new URL("app/layout.tsx", root), "utf8"),
+    readFile(new URL("sakura/index.html", root), "utf8"),
     readFile(new URL("app/lib/group-watcher-api.ts", root), "utf8"),
     readFile(new URL("public/api.php", root), "utf8"),
   ]);
@@ -96,8 +96,18 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(phpApi, /migrate_organization_categories/);
   assert.match(phpApi, /remove_repeat_reminder_v1/);
   assert.match(phpApi, /strip_schedule_automation_fields/);
-  assert.match(layout, /KPTC Scheduler/);
+  assert.match(html, /KPTC Scheduler/);
   assert.doesNotMatch(page, /SkeletonPreview|codex-preview/);
+});
+
+test("実運用に必要なVite・React・PHP構成だけを保持する", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
+  assert.deepEqual(Object.keys(packageJson.dependencies).sort(), ["react", "react-dom"]);
+  assert.deepEqual(Object.keys(packageJson.devDependencies).sort(), ["@types/node", "@types/react", "@types/react-dom", "@vitejs/plugin-react", "typescript", "vite"]);
+  assert.match(packageJson.scripts.build, /vite build --config vite\.sakura\.config\.ts/);
+  for (const unused of ["app/layout.tsx", "app/chatgpt-auth.ts", "vite.config.ts", "next.config.ts", "drizzle.config.ts", "postcss.config.mjs", "worker/index.ts", "db/index.ts", "examples/d1/db/schema.ts"]) {
+    await assert.rejects(access(new URL(unused, root)));
+  }
 });
 
 test("共有用画像を同梱する", async () => {

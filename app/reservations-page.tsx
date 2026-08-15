@@ -10,10 +10,7 @@ const roomIds = ["m6", "m7", "m8"];
 type PublicRoom = { id: string; name: string; initials: string };
 type PublicStatus = "morning_available" | "afternoon_available" | "reserved" | "maintenance";
 type PublicAvailabilityResponse = {
-  schemaVersion: number;
   updatedAt: string;
-  rangeStart: string;
-  rangeEnd: string;
   availability: Record<string, Record<string, PublicStatus>>;
 };
 
@@ -126,8 +123,7 @@ export default function ReservationsPage() {
 
         <div className="reservation-contact"><strong>ご予約・お問い合わせ:xxx@yyy/075-xxx-xxxx</strong><small>ご利用の際には必ずメールか電話でお問い合わせをお願いします。</small></div>
 
-        <footer>{/* 静的なSakura向けViteページのため、添付PNGを直接表示します。 */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+        <footer>{/* 添付のロゴ画像を公開画面のフッターへ表示します。 */}
           <img src="./technology-center-logo-white.png" alt="技術センター" />
         </footer>
       </section>
