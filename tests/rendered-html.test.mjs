@@ -49,6 +49,8 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(styles, /month-days > div\.holiday \{ background-color: #fff0ed; \}/);
   assert.match(styles, /member-cell b \{[^}]*overflow-wrap: anywhere; white-space: normal;/);
   assert.match(styles, /day-member-profile b \{[^}]*overflow-wrap: anywhere; white-space: normal;/);
+  assert.match(styles, /schedule-event \{[^}]*min-height: 40\.5px;/);
+  assert.doesNotMatch(styles, /schedule-event \{[^}]*min-height: 54px;/);
   assert.match(api, /groupWatcherApi/);
   assert.match(api, /demoCategories/);
   assert.match(api, /\["すべてのグループ", "電気通信係", "試験室"\]/);
