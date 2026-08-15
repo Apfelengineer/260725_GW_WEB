@@ -823,7 +823,6 @@ function SchedulePage({ view, setView, calendarDate, onPrevious, onNext, onToday
         </div>
         <div className="shortcut-guide"><b>操作:</b> 日付欄をダブルクリックで登録 ・ 予定をドラッグして移動 ・ 右クリックでコピー／切り取り／削除 ・ <kbd>Ctrl+C</kbd> <kbd>Ctrl+V</kbd> <kbd>Delete</kbd></div>
       </section>
-      <aside className="right-rail"><TodayCard members={allMembers} schedules={schedules} /></aside>
     </div>
   );
 }
@@ -957,20 +956,6 @@ function MonthView({ calendarDate, members, schedules, categories, selectedSched
         })}
       </div>
     </div>
-  );
-}
-
-function TodayCard({ members, schedules }: { members: Member[]; schedules: ScheduleItem[] }) {
-  const today = dateAtNoon(new Date());
-  const todayItems = schedules.filter((item) => scheduleOccursOn(item, dateKey(today))).slice(0, 3);
-  return (
-    <section className="rail-card today-card">
-      <div className="rail-card-heading"><div><span className="eyebrow">TODAY</span><h2>今日の予定</h2></div><span className="date-badge"><b>{today.getDate()}</b>{weekdayNames[today.getDay()]}</span></div>
-      <div className="today-card-divider" />
-      <div className="today-list">
-        {todayItems.length ? todayItems.map((item) => { const member = members.find((person) => person.id === item.memberId); return member ? <div key={item.id}><Avatar member={member} small /><span><b>{scheduleTimeLabel(item)} {item.title}</b><small>{member.name} ・ {item.timePreset === "all-day" ? "終日" : `${item.end}まで`}</small></span></div> : null; }) : <span className="rail-empty">今日の予定はありません</span>}
-      </div>
-    </section>
   );
 }
 

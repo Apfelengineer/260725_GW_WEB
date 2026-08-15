@@ -61,6 +61,8 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(api, /電波暗室/);
   assert.match(api, /japaneseHolidays/);
   assert.doesNotMatch(page, /行き先・在席|メッセージ・伝言|PresencePage|MessagesPage|MessageModal/);
+  assert.doesNotMatch(page, /TodayCard|今日の予定|today-card|right-rail/);
+  assert.doesNotMatch(styles, /today-card|today-list|right-rail|rail-card/);
   assert.doesNotMatch(api, /PresenceState|MessageItem|messages:/);
   assert.match(phpApi, /pdo_sqlite|sqlite:/);
   assert.match(phpApi, /audit_logs/);
