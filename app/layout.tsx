@@ -29,12 +29,12 @@ export async function generateMetadata(): Promise<Metadata> {
   const origin = `${protocol}://${host}`;
 
   return {
-    title: "KPTC Scheduler｜チームの予定と行き先をひと目で",
-    description: "予定共有、在席・行き先、伝言メモをひとつにまとめた KPTC Scheduler のWEBブラウザ版です。",
+    title: "KPTC Scheduler｜チームと試験室の予定をひと目で",
+    description: "チームと試験室の予定を共有できる KPTC Scheduler のWEBブラウザ版です。",
     applicationName: "KPTC Scheduler",
     openGraph: {
       title: "KPTC Scheduler",
-      description: "チームの今を、ひと目で。予定・行き先・伝言をまとめて共有。",
+      description: "チームと試験室の予定を、ひと目で共有。",
       type: "website",
       locale: "ja_JP",
       images: [{ url: new URL("/og.png", origin).toString(), width: 1200, height: 630, alt: "KPTC Scheduler WEBブラウザ版" }],

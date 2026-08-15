@@ -3,17 +3,12 @@
  * 本番APIへ切り替える場合も、画面側はこの公開インターフェースを利用します。
  */
 
-export type PresenceState = "在席" | "外出" | "会議中" | "休暇" | "離席";
-
 export type Member = {
   id: string;
   name: string;
   group: string;
   initials: string;
   color: string;
-  presence: PresenceState;
-  destination?: string;
-  returnAt?: string;
   phone: string;
   email: string;
 };
@@ -41,24 +36,12 @@ export type ScheduleCategory = {
   color: string;
 };
 
-export type MessageItem = {
-  id: string;
-  from: string;
-  to: string;
-  subject: string;
-  body: string;
-  time: string;
-  unread?: boolean;
-  kind: "message" | "memo";
-};
-
 export type Holiday = { date: string; name: string };
 
 export type SharedState = {
   members: Member[];
   schedules: ScheduleItem[];
   categories: ScheduleCategory[];
-  messages: MessageItem[];
 };
 
 export type AuditEntry = {
@@ -97,9 +80,6 @@ export const demoMembers: Member[] = [
     group: "営業部",
     initials: "佐",
     color: "#e96f51",
-    presence: "外出",
-    destination: "丸の内・山田商事",
-    returnAt: "16:30",
     phone: "03-1234-5678",
     email: "misaki.sato@example.jp",
   },
@@ -109,8 +89,6 @@ export const demoMembers: Member[] = [
     group: "営業部",
     initials: "鈴",
     color: "#3c82c8",
-    presence: "在席",
-    destination: "本社 3F",
     phone: "03-1234-5681",
     email: "kenta.suzuki@example.jp",
   },
@@ -120,9 +98,6 @@ export const demoMembers: Member[] = [
     group: "開発部",
     initials: "高",
     color: "#8a67c8",
-    presence: "会議中",
-    destination: "第2会議室",
-    returnAt: "14:00",
     phone: "03-1234-5686",
     email: "naoko.takahashi@example.jp",
   },
@@ -132,9 +107,6 @@ export const demoMembers: Member[] = [
     group: "開発部",
     initials: "田",
     color: "#268b7d",
-    presence: "離席",
-    destination: "休憩中",
-    returnAt: "13:30",
     phone: "03-1234-5688",
     email: "yuma.tanaka@example.jp",
   },
@@ -144,14 +116,12 @@ export const demoMembers: Member[] = [
     group: "管理部",
     initials: "伊",
     color: "#d18b2f",
-    presence: "休暇",
-    destination: "終日休暇",
     phone: "03-1234-5692",
     email: "yuki.ito@example.jp",
   },
-  { id: "m6", name: "電波暗室", group: "試験室", initials: "電波", color: "#536f91", presence: "在席", destination: "電波暗室", phone: "03-1234-5701", email: "anechoic@example.jp" },
-  { id: "m7", name: "電材室", group: "試験室", initials: "電材", color: "#417e72", presence: "在席", destination: "電材室", phone: "03-1234-5702", email: "materials@example.jp" },
-  { id: "m8", name: "電子情報研究室", group: "試験室", initials: "電子", color: "#765f9a", presence: "在席", destination: "電子情報研究室", phone: "03-1234-5703", email: "electronics@example.jp" },
+  { id: "m6", name: "電波暗室", group: "試験室", initials: "電波", color: "#536f91", phone: "03-1234-5701", email: "anechoic@example.jp" },
+  { id: "m7", name: "電材室", group: "試験室", initials: "電材", color: "#417e72", phone: "03-1234-5702", email: "materials@example.jp" },
+  { id: "m8", name: "電子情報研究室", group: "試験室", initials: "電子", color: "#765f9a", phone: "03-1234-5703", email: "electronics@example.jp" },
 ];
 
 export const demoSchedules: ScheduleItem[] = [
@@ -202,38 +172,6 @@ export const japaneseHolidays: Holiday[] = [
   { date: "2027-09-20", name: "敬老の日" }, { date: "2027-09-23", name: "秋分の日" },
   { date: "2027-10-11", name: "スポーツの日" }, { date: "2027-11-03", name: "文化の日" },
   { date: "2027-11-23", name: "勤労感謝の日" },
-];
-
-export const demoMessages: MessageItem[] = [
-  {
-    id: "msg1",
-    from: "鈴木 健太",
-    to: "自分",
-    subject: "山田商事からお電話です",
-    body: "折り返しをご希望です。16時頃までご在席とのことでした。",
-    time: "12:18",
-    unread: true,
-    kind: "memo",
-  },
-  {
-    id: "msg2",
-    from: "高橋 直子",
-    to: "営業部",
-    subject: "メンテナンスのお知らせ",
-    body: "本日18:30から約30分、検証環境の更新を行います。",
-    time: "10:42",
-    unread: true,
-    kind: "message",
-  },
-  {
-    id: "msg3",
-    from: "伊藤 由紀",
-    to: "全員",
-    subject: "来週の全社会議について",
-    body: "資料は前日までに共有フォルダへ格納してください。",
-    time: "昨日",
-    kind: "message",
-  },
 ];
 
 /**

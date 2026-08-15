@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /*
  * さくらインターネット上で動作する共有APIです。
- * PHPセッションで利用者を識別し、SQLiteへ予定・在席・伝言・操作履歴を保存します。
+ * PHPセッションで利用者を識別し、SQLiteへ予定・ユーザー・予定種別・操作履歴を保存します。
  */
 
 // API応答をJSONに統一し、共有データをブラウザや中継キャッシュへ残さないようにします。
@@ -34,14 +34,14 @@ function initial_state(): array {
     // DBを初めて作成したときだけ使用する、画面確認用の初期データです。
     return [
         'members' => [
-            ['id'=>'m1','name'=>'佐藤 美咲','group'=>'営業部','initials'=>'佐','color'=>'#e96f51','presence'=>'外出','destination'=>'丸の内・山田商事','returnAt'=>'16:30','phone'=>'03-1234-5678','email'=>'misaki.sato@example.jp'],
-            ['id'=>'m2','name'=>'鈴木 健太','group'=>'営業部','initials'=>'鈴','color'=>'#3c82c8','presence'=>'在席','destination'=>'本社 3F','phone'=>'03-1234-5681','email'=>'kenta.suzuki@example.jp'],
-            ['id'=>'m3','name'=>'高橋 直子','group'=>'開発部','initials'=>'高','color'=>'#8a67c8','presence'=>'会議中','destination'=>'第2会議室','returnAt'=>'14:00','phone'=>'03-1234-5686','email'=>'naoko.takahashi@example.jp'],
-            ['id'=>'m4','name'=>'田中 悠真','group'=>'開発部','initials'=>'田','color'=>'#268b7d','presence'=>'離席','destination'=>'休憩中','returnAt'=>'13:30','phone'=>'03-1234-5688','email'=>'yuma.tanaka@example.jp'],
-            ['id'=>'m5','name'=>'伊藤 由紀','group'=>'管理部','initials'=>'伊','color'=>'#d18b2f','presence'=>'休暇','destination'=>'終日休暇','phone'=>'03-1234-5692','email'=>'yuki.ito@example.jp'],
-            ['id'=>'m6','name'=>'電波暗室','group'=>'試験室','initials'=>'電波','color'=>'#536f91','presence'=>'在席','destination'=>'電波暗室','phone'=>'03-1234-5701','email'=>'anechoic@example.jp'],
-            ['id'=>'m7','name'=>'電材室','group'=>'試験室','initials'=>'電材','color'=>'#417e72','presence'=>'在席','destination'=>'電材室','phone'=>'03-1234-5702','email'=>'materials@example.jp'],
-            ['id'=>'m8','name'=>'電子情報研究室','group'=>'試験室','initials'=>'電子','color'=>'#765f9a','presence'=>'在席','destination'=>'電子情報研究室','phone'=>'03-1234-5703','email'=>'electronics@example.jp'],
+            ['id'=>'m1','name'=>'佐藤 美咲','group'=>'営業部','initials'=>'佐','color'=>'#e96f51','phone'=>'03-1234-5678','email'=>'misaki.sato@example.jp'],
+            ['id'=>'m2','name'=>'鈴木 健太','group'=>'営業部','initials'=>'鈴','color'=>'#3c82c8','phone'=>'03-1234-5681','email'=>'kenta.suzuki@example.jp'],
+            ['id'=>'m3','name'=>'高橋 直子','group'=>'開発部','initials'=>'高','color'=>'#8a67c8','phone'=>'03-1234-5686','email'=>'naoko.takahashi@example.jp'],
+            ['id'=>'m4','name'=>'田中 悠真','group'=>'開発部','initials'=>'田','color'=>'#268b7d','phone'=>'03-1234-5688','email'=>'yuma.tanaka@example.jp'],
+            ['id'=>'m5','name'=>'伊藤 由紀','group'=>'管理部','initials'=>'伊','color'=>'#d18b2f','phone'=>'03-1234-5692','email'=>'yuki.ito@example.jp'],
+            ['id'=>'m6','name'=>'電波暗室','group'=>'試験室','initials'=>'電波','color'=>'#536f91','phone'=>'03-1234-5701','email'=>'anechoic@example.jp'],
+            ['id'=>'m7','name'=>'電材室','group'=>'試験室','initials'=>'電材','color'=>'#417e72','phone'=>'03-1234-5702','email'=>'materials@example.jp'],
+            ['id'=>'m8','name'=>'電子情報研究室','group'=>'試験室','initials'=>'電子','color'=>'#765f9a','phone'=>'03-1234-5703','email'=>'electronics@example.jp'],
         ],
         'categories' => [
             ['id'=>'cat-meeting','name'=>'会議','color'=>'#5086bd'], ['id'=>'cat-visit','name'=>'訪問','color'=>'#e87556'],
@@ -63,11 +63,6 @@ function initial_state(): array {
             ['id'=>'s12','memberId'=>'m4','date'=>'2026-07-24','endDate'=>'2026-07-24','start'=>'10:00','end'=>'12:00','title'=>'データ移行検証','category'=>'作業'],
             ['id'=>'s13','memberId'=>'m5','date'=>'2026-07-21','endDate'=>'2026-07-21','start'=>'09:00','end'=>'18:00','title'=>'有給休暇','category'=>'休暇','private'=>true],
             ['id'=>'s14','memberId'=>'m5','date'=>'2026-07-23','endDate'=>'2026-07-23','start'=>'10:00','end'=>'11:00','title'=>'採用面談','category'=>'会議'],
-        ],
-        'messages' => [
-            ['id'=>'msg1','from'=>'鈴木 健太','to'=>'自分','subject'=>'山田商事からお電話です','body'=>'折り返しをご希望です。16時頃までご在席とのことでした。','time'=>'12:18','unread'=>true,'kind'=>'memo'],
-            ['id'=>'msg2','from'=>'高橋 直子','to'=>'営業部','subject'=>'メンテナンスのお知らせ','body'=>'本日18:30から約30分、検証環境の更新を行います。','time'=>'10:42','unread'=>true,'kind'=>'message'],
-            ['id'=>'msg3','from'=>'伊藤 由紀','to'=>'全員','subject'=>'来週の全社会議について','body'=>'資料は前日までに共有フォルダへ格納してください。','time'=>'昨日','kind'=>'message'],
         ],
     ];
 }
@@ -120,6 +115,20 @@ function db(): PDO {
         $stmt = $pdo->prepare('UPDATE app_state SET payload=?,version=?,updated_at=? WHERE id=1');
         $stmt->execute([json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), (int)$row['version'] + 1, date(DATE_ATOM)]);
         $pdo->prepare("INSERT INTO app_meta(key,value) VALUES('room_demo_v1','1')")->execute();
+    }
+    $trimmed = $pdo->query("SELECT value FROM app_meta WHERE key='remove_presence_messages_v1'")->fetchColumn();
+    if ($trimmed === false) {
+        // 廃止した在席・行き先・メッセージのデータを既存DBから一度だけ除去します。
+        $row = $pdo->query('SELECT payload,version FROM app_state WHERE id=1')->fetch(PDO::FETCH_ASSOC);
+        $state = json_decode($row['payload'], true);
+        unset($state['messages']);
+        foreach ($state['members'] ?? [] as &$member) {
+            unset($member['presence'], $member['destination'], $member['returnAt']);
+        }
+        unset($member);
+        $stmt = $pdo->prepare('UPDATE app_state SET payload=?,version=?,updated_at=? WHERE id=1');
+        $stmt->execute([json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), (int)$row['version'] + 1, date(DATE_ATOM)]);
+        $pdo->prepare("INSERT INTO app_meta(key,value) VALUES('remove_presence_messages_v1','1')")->execute();
     }
     return $pdo;
 }
@@ -212,7 +221,7 @@ if ($action === 'save') {
     $actorId = require_auth();
     $input = body();
     $state = $input['state'] ?? null;
-    if (!is_array($state) || !isset($state['members'],$state['schedules'],$state['categories'],$state['messages'])) respond(['error'=>'保存データが不正です'], 422);
+    if (!is_array($state) || !isset($state['members'],$state['schedules'],$state['categories'])) respond(['error'=>'保存データが不正です'], 422);
     $expectedVersion = (int)($input['version'] ?? 0);
     $pdo->beginTransaction();
     $record = current_record($pdo);

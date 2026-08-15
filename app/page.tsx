@@ -2,7 +2,7 @@
 
 /**
  * KPTC Scheduler のメイン画面。
- * 予定表、在席状況、伝言、ユーザー・予定種別管理を一つの画面で制御します。
+ * 予定表とユーザー・予定種別管理を一つの画面で制御します。
  */
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
@@ -10,21 +10,18 @@ import {
   groupWatcherApi,
   demoCategories,
   demoMembers,
-  demoMessages,
   demoSchedules,
   groups,
   japaneseHolidays,
   type AuditEntry,
   type BootstrapResponse,
   type Member,
-  type MessageItem,
-  type PresenceState,
   type ScheduleCategory,
   type ScheduleItem,
   type SharedState,
 } from "./lib/group-watcher-api";
 
-type Section = "schedule" | "presence" | "messages" | "members";
+type Section = "schedule" | "members";
 type CalendarView = "day" | "week" | "month";
 type EditorState = { mode: "create"; memberId: string; date: string } | { mode: "edit"; item: ScheduleItem };
 type ClipboardState = { mode: "copy" | "cut"; item: ScheduleItem };
@@ -35,7 +32,6 @@ type ManagementTab = "members" | "categories" | "audit";
 
 // 日付はタイムゾーン境界で前後しないよう、常に正午を基準に計算します。
 const weekdayNames = ["日", "月", "火", "水", "木", "金", "土"];
-const presenceOptions: PresenceState[] = ["在席", "外出", "会議中", "離席", "休暇"];
 
 function dateAtNoon(value: Date) {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 12);
@@ -148,10 +144,6 @@ function Avatar({ member, small = false }: { member: Member; small?: boolean }) 
   );
 }
 
-function StatusDot({ status }: { status: PresenceState }) {
-  return <span className={`status-dot status-${status}`} aria-hidden="true" />;
-}
-
 function Logo() {
   return (
     <div className="brand-lockup" aria-label="KPTC Scheduler">
@@ -191,9 +183,7 @@ export default function Home() {
   const [schedules, setSchedules] = useState<ScheduleItem[]>(demoSchedules);
   const [members, setMembers] = useState<Member[]>(demoMembers);
   const [categories, setCategories] = useState<ScheduleCategory[]>(demoCategories);
-  const [messages, setMessages] = useState<MessageItem[]>(demoMessages);
   const [scheduleEditor, setScheduleEditor] = useState<EditorState | null>(null);
-  const [messageModal, setMessageModal] = useState(false);
   const [memberEditor, setMemberEditor] = useState<Member | "new" | null>(null);
   const [categoryEditor, setCategoryEditor] = useState<ScheduleCategory | "new" | null>(null);
   const [managementTab, setManagementTab] = useState<ManagementTab>("members");
@@ -203,7 +193,6 @@ export default function Home() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [cellContextMenu, setCellContextMenu] = useState<CellContextMenuState | null>(null);
   const [toast, setToast] = useState("");
-  const [selectedMessage, setSelectedMessage] = useState<MessageItem>(demoMessages[0]);
   const [authReady, setAuthReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -220,8 +209,6 @@ export default function Home() {
     setMembers(state.members);
     setSchedules(state.schedules);
     setCategories(state.categories);
-    setMessages(state.messages);
-    setSelectedMessage((current) => state.messages.find((item) => item.id === current?.id) ?? state.messages[0] ?? current);
   }
 
   function applyServerPayload(payload: BootstrapResponse) {
@@ -247,7 +234,7 @@ export default function Home() {
       setAuthReady(true);
     }).catch(() => {
       if (!active) return;
-      lastSyncedRef.current = JSON.stringify({ members: demoMembers, schedules: demoSchedules, categories: demoCategories, messages: demoMessages });
+      lastSyncedRef.current = JSON.stringify({ members: demoMembers, schedules: demoSchedules, categories: demoCategories });
       setServerAvailable(false);
       setSyncStatus("offline");
       setAuthReady(true);
@@ -260,7 +247,7 @@ export default function Home() {
   useEffect(() => {
     // 変更を短時間まとめ、バージョン番号付きで直列保存して同時編集の競合を検出します。
     if (!authReady || !serverAvailable || !currentUserId || !csrfToken) return;
-    const state: SharedState = { members, schedules, categories, messages };
+    const state: SharedState = { members, schedules, categories };
     const serialized = JSON.stringify(state);
     if (serialized === lastSyncedRef.current) return;
     const mutation = { ...mutationRef.current };
@@ -287,7 +274,7 @@ export default function Home() {
     return () => window.clearTimeout(timer);
     // サーバー反映関数は最新状態を直列に保存します。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, categories, csrfToken, currentUserId, members, messages, schedules, serverAvailable]);
+  }, [authReady, categories, csrfToken, currentUserId, members, schedules, serverAvailable]);
 
   useEffect(() => {
     if (!toast) return;
@@ -309,13 +296,12 @@ export default function Home() {
     const q = search.trim().toLowerCase();
     return members.filter((member) => {
       const inGroup = group === "すべてのグループ" || member.group === group;
-      const matches = !q || `${member.name} ${member.group} ${member.destination ?? ""}`.toLowerCase().includes(q);
+      const matches = !q || `${member.name} ${member.group}`.toLowerCase().includes(q);
       return inGroup && matches;
     });
   }, [group, members, search]);
 
   const currentMember = members.find((member) => member.id === currentUserId) ?? members[0];
-  const unreadCount = messages.filter((message) => message.unread).length;
   const selectedSchedule = schedules.find((item) => item.id === selectedScheduleId) ?? null;
 
   async function login(memberId: string) {
@@ -518,7 +504,6 @@ export default function Home() {
       if (target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)) return;
       if (event.key === "Escape") {
         setScheduleEditor(null);
-        setMessageModal(false);
         setMemberEditor(null);
         setCategoryEditor(null);
         setContextMenu(null);
@@ -546,35 +531,6 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clipboard, scheduleEditor, schedules, section, selectedCell, selectedSchedule, selectedScheduleId]);
 
-  function sendMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const subject = String(form.get("subject") ?? "").trim();
-    if (!subject) return;
-    const item: MessageItem = {
-      id: `msg-${Date.now()}`,
-      from: currentMember?.name ?? "未登録ユーザー",
-      to: String(form.get("to")),
-      subject,
-      body: String(form.get("body") ?? ""),
-      time: "たった今",
-      kind: form.get("kind") === "memo" ? "memo" : "message",
-    };
-    markMutation(item.kind === "memo" ? "伝言登録" : "メッセージ送信", item.subject);
-    setMessages((items) => [item, ...items]);
-    setSelectedMessage(item);
-    setMessageModal(false);
-    setSection("messages");
-    setToast(item.kind === "memo" ? "伝言メモを登録しました" : "メッセージを送信しました");
-  }
-
-  function updatePresence(memberId: string, presence: PresenceState) {
-    const member = members.find((item) => item.id === memberId);
-    markMutation("在席更新", `${member?.name ?? "ユーザー"}を「${presence}」へ変更`);
-    setMembers((items) => items.map((member) => member.id === memberId ? { ...member, presence } : member));
-    setToast("在席状況を更新しました");
-  }
-
   function saveMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -587,9 +543,6 @@ export default function Home() {
       group: String(form.get("group")) as Member["group"],
       initials: String(form.get("initials") ?? name.slice(0, 1)).trim().slice(0, 2) || name.slice(0, 1),
       color: String(form.get("color")),
-      presence: String(form.get("presence")) as PresenceState,
-      destination: String(form.get("destination") ?? ""),
-      returnAt: String(form.get("returnAt") ?? ""),
       phone: String(form.get("phone") ?? ""),
       email: String(form.get("email") ?? ""),
     };
@@ -679,8 +632,6 @@ export default function Home() {
         <Logo />
         <nav className="main-nav" aria-label="メインメニュー">
           <button className={section === "schedule" ? "active" : ""} onClick={() => setSection("schedule")}><SectionIcon symbol="▦" /><span>スケジュール</span></button>
-          <button className={section === "presence" ? "active" : ""} onClick={() => setSection("presence")}><SectionIcon symbol="⌖" /><span>行き先・在席</span></button>
-          <button className={section === "messages" ? "active" : ""} onClick={() => setSection("messages")}><SectionIcon symbol="✉" /><span>メッセージ</span>{unreadCount > 0 && <em>{unreadCount}</em>}</button>
           <button onClick={() => window.location.assign("./reservations.html?room=m6")}><SectionIcon symbol="▤" /><span>試験室予約</span></button>
           <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>ユーザー・設定</span></button>
         </nav>
@@ -707,7 +658,6 @@ export default function Home() {
           <label className="global-search"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="予定・メンバーを検索" aria-label="予定・メンバーを検索" /><kbd>⌘ K</kbd></label>
           <div className="topbar-actions">
             <span className={`sync-badge ${syncStatus}`}>{syncStatus === "saved" ? "● 共有済み" : syncStatus === "saving" ? "○ 保存中" : "△ オフライン"}</span>
-            <button className="icon-button notification-button" aria-label={`通知 ${unreadCount}件`} onClick={() => setSection("messages")}>♢{unreadCount > 0 && <i />}</button>
             <button className="primary-button" onClick={() => openCreateSchedule()}><span>＋</span> 予定を登録</button>
           </div>
         </header>
@@ -736,11 +686,8 @@ export default function Home() {
             onMoveSchedule={moveSchedule}
             onContextMenu={openContextMenu}
             onCellContextMenu={openCellContextMenu}
-            openMessages={() => setSection("messages")}
           />
         )}
-        {section === "presence" && <PresencePage members={filteredMembers} updatePresence={updatePresence} openMessage={() => setMessageModal(true)} />}
-        {section === "messages" && <MessagesPage messages={messages} selectedMessage={selectedMessage} selectMessage={(message) => { setSelectedMessage(message); if (message.unread) markMutation("既読", `${message.subject}を確認`); setMessages((items) => items.map((item) => item.id === message.id ? { ...item, unread: false } : item)); }} openCompose={() => setMessageModal(true)} />}
         {section === "members" && (
           <ManagementPage
             tab={managementTab}
@@ -762,15 +709,12 @@ export default function Home() {
 
       <nav className="mobile-nav" aria-label="モバイルメニュー">
         <button className={section === "schedule" ? "active" : ""} onClick={() => setSection("schedule")}><SectionIcon symbol="▦" /><span>予定</span></button>
-        <button className={section === "presence" ? "active" : ""} onClick={() => setSection("presence")}><SectionIcon symbol="⌖" /><span>行き先</span></button>
         <button className="mobile-add" onClick={() => openCreateSchedule()} aria-label="予定を登録">＋</button>
-        <button className={section === "messages" ? "active" : ""} onClick={() => setSection("messages")}><SectionIcon symbol="✉" /><span>伝言</span></button>
         <button onClick={() => window.location.assign("./reservations.html?room=m6")}><SectionIcon symbol="▤" /><span>予約</span></button>
         <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>設定</span></button>
       </nav>
 
       {scheduleEditor && <ScheduleModal editor={scheduleEditor} members={members} categories={categories} onClose={() => setScheduleEditor(null)} onSubmit={saveSchedule} onDelete={scheduleEditor.mode === "edit" ? () => deleteSchedule(scheduleEditor.item.id) : undefined} />}
-      {messageModal && <MessageModal members={members} onClose={() => setMessageModal(false)} onSubmit={sendMessage} />}
       {memberEditor && <MemberModal member={memberEditor === "new" ? null : memberEditor} onClose={() => setMemberEditor(null)} onSubmit={saveMember} />}
       {categoryEditor && <CategoryModal category={categoryEditor === "new" ? null : categoryEditor} onClose={() => setCategoryEditor(null)} onSubmit={saveCategory} />}
       {contextMenu && (
@@ -808,7 +752,7 @@ type CalendarInteractionProps = {
   onCellContextMenu: (event: React.MouseEvent, target: CellTarget) => void;
 };
 
-function SchedulePage({ view, setView, calendarDate, onPrevious, onNext, onToday, group, setGroup, members, allMembers, schedules, categories, openMessages, ...interactions }: CalendarInteractionProps & {
+function SchedulePage({ view, setView, calendarDate, onPrevious, onNext, onToday, group, setGroup, members, allMembers, schedules, categories, ...interactions }: CalendarInteractionProps & {
   view: CalendarView;
   setView: (view: CalendarView) => void;
   calendarDate: Date;
@@ -818,7 +762,6 @@ function SchedulePage({ view, setView, calendarDate, onPrevious, onNext, onToday
   group: string;
   setGroup: (group: string) => void;
   allMembers: Member[];
-  openMessages: () => void;
 }) {
   return (
     <div className="page-layout schedule-page">
@@ -853,7 +796,7 @@ function SchedulePage({ view, setView, calendarDate, onPrevious, onNext, onToday
         </div>
         <div className="shortcut-guide"><b>操作:</b> 日付欄をダブルクリックで登録 ・ 予定をドラッグして移動 ・ 右クリックでコピー／切り取り／削除 ・ <kbd>Ctrl+C</kbd> <kbd>Ctrl+V</kbd> <kbd>Delete</kbd></div>
       </section>
-      <aside className="right-rail"><TodayCard members={allMembers} schedules={schedules} /><MemoCard openMessages={openMessages} /></aside>
+      <aside className="right-rail"><TodayCard members={allMembers} schedules={schedules} /></aside>
     </div>
   );
 }
@@ -920,7 +863,7 @@ function WeekGrid({ calendarDate, members, schedules, categories, selectedSchedu
         </div>
         {members.map((member) => (
           <div className="member-schedule-row" key={member.id}>
-            <div className="member-cell"><Avatar member={member} small /><span><b>{member.name}</b><small><StatusDot status={member.presence} />{member.presence}</small></span></div>
+            <div className="member-cell"><Avatar member={member} small /><span><b>{member.name}</b><small>{member.group}</small></span></div>
             {dates.map((date) => {
               const key = dateKey(date);
               const target = { memberId: member.id, date: key };
@@ -994,42 +937,12 @@ function TodayCard({ members, schedules }: { members: Member[]; schedules: Sched
   const todayItems = schedules.filter((item) => scheduleOccursOn(item, dateKey(today))).slice(0, 3);
   return (
     <section className="rail-card today-card">
-      <div className="rail-card-heading"><div><span className="eyebrow">TODAY</span><h2>今日のチーム</h2></div><span className="date-badge"><b>{today.getDate()}</b>{weekdayNames[today.getDay()]}</span></div>
-      <div className="presence-summary"><div><b>{members.filter((member) => member.presence === "在席").length}</b><span>在席</span></div><div><b>{members.filter((member) => ["外出", "会議中", "離席"].includes(member.presence)).length}</b><span>外出・離席</span></div><div><b>{members.filter((member) => member.presence === "休暇").length}</b><span>休暇</span></div></div>
+      <div className="rail-card-heading"><div><span className="eyebrow">TODAY</span><h2>今日の予定</h2></div><span className="date-badge"><b>{today.getDate()}</b>{weekdayNames[today.getDay()]}</span></div>
+      <div className="today-card-divider" />
       <div className="today-list">
         {todayItems.length ? todayItems.map((item) => { const member = members.find((person) => person.id === item.memberId); return member ? <div key={item.id}><Avatar member={member} small /><span><b>{scheduleTimeLabel(item)} {item.title}</b><small>{member.name} ・ {item.timePreset === "all-day" ? "終日" : `${item.end}まで`}</small></span></div> : null; }) : <span className="rail-empty">今日の予定はありません</span>}
       </div>
     </section>
-  );
-}
-
-function MemoCard({ openMessages }: { openMessages: () => void }) {
-  return (
-    <section className="rail-card memo-card">
-      <div className="rail-card-heading"><div><span className="eyebrow">MEMO</span><h2>伝言メモ</h2></div><span className="unread-pill">未読 2</span></div>
-      <button className="memo-item" onClick={openMessages}><span className="memo-icon">電</span><span><b>山田商事からお電話です</b><small>鈴木 健太 ・ 12:18</small></span></button>
-      <button className="memo-item" onClick={openMessages}><span className="memo-icon memo-icon-blue">連</span><span><b>メンテナンスのお知らせ</b><small>高橋 直子 ・ 10:42</small></span></button>
-      <button className="text-link" onClick={openMessages}>すべてのメッセージを見る <span>→</span></button>
-    </section>
-  );
-}
-
-function PresencePage({ members, updatePresence, openMessage }: { members: Member[]; updatePresence: (id: string, status: PresenceState) => void; openMessage: () => void }) {
-  return (
-    <div className="standard-page">
-      <div className="page-heading"><div><span className="eyebrow">WHEREABOUTS</span><h1>行き先・在席状況</h1><p>メンバーの現在地と戻り予定を確認できます</p></div></div>
-      <div className="summary-strip">{presenceOptions.slice(0, 4).map((status) => <div key={status}><StatusDot status={status} /><span>{status}</span><b>{members.filter((member) => member.presence === status).length}</b></div>)}</div>
-      <div className="presence-grid">{members.map((member) => <article className="presence-card" key={member.id}><div className="presence-profile"><Avatar member={member} /><div><span>{member.group}</span><h2>{member.name}</h2></div></div><label className={`presence-select presence-${member.presence}`}><StatusDot status={member.presence} /><select value={member.presence} onChange={(event) => updatePresence(member.id, event.target.value as PresenceState)}>{presenceOptions.map((status) => <option key={status}>{status}</option>)}</select></label><dl><div><dt>行き先</dt><dd>{member.destination || "—"}</dd></div><div><dt>戻り予定</dt><dd>{member.returnAt || "—"}</dd></div></dl><button onClick={openMessage}>伝言を残す</button></article>)}</div>
-    </div>
-  );
-}
-
-function MessagesPage({ messages, selectedMessage, selectMessage, openCompose }: { messages: MessageItem[]; selectedMessage: MessageItem; selectMessage: (message: MessageItem) => void; openCompose: () => void }) {
-  return (
-    <div className="standard-page messages-page">
-      <div className="page-heading"><div><span className="eyebrow">MESSAGES</span><h1>メッセージ・伝言</h1><p>グループや個人への連絡をまとめて確認</p></div><button className="primary-button" onClick={openCompose}>＋ 新規メッセージ</button></div>
-      <div className="message-workspace"><aside className="message-list"><div className="message-filter"><button className="active">受信</button><button>送信済み</button></div>{messages.map((message) => <button key={message.id} className={`${selectedMessage.id === message.id ? "active" : ""} ${message.unread ? "unread" : ""}`} onClick={() => selectMessage(message)}><span className={`message-type ${message.kind}`}>{message.kind === "memo" ? "電" : "連"}</span><span><b>{message.subject}</b><small>{message.from} → {message.to}</small><p>{message.body}</p></span><time>{message.time}</time></button>)}</aside><article className="message-detail"><div className="message-detail-top"><span className={`message-type large ${selectedMessage.kind}`}>{selectedMessage.kind === "memo" ? "電" : "連"}</span><div><small>{selectedMessage.kind === "memo" ? "伝言メモ" : "メッセージ"}</small><h2>{selectedMessage.subject}</h2></div><button aria-label="その他の操作">•••</button></div><div className="message-meta"><span><b>差出人</b>{selectedMessage.from}</span><span><b>宛先</b>{selectedMessage.to}</span><time>{selectedMessage.time}</time></div><p className="message-body">{selectedMessage.body}</p><div className="message-actions"><button onClick={openCompose}>↩ 返信する</button><button>✓ 確認済みにする</button></div></article></div>
-    </div>
   );
 }
 
@@ -1053,7 +966,7 @@ function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs
       <div className="page-heading"><div><span className="eyebrow">MANAGEMENT</span><h1>ユーザー・予定種別・操作履歴</h1><p>共同編集の変更者を確認し、必要に応じて変更を取り消せます</p></div>{tab !== "audit" && <button className="primary-button" onClick={tab === "members" ? onAddMember : onAddCategory}>＋ {tab === "members" ? "ユーザーを追加" : "予定種別を追加"}</button>}</div>
       <div className="management-tabs"><button className={tab === "members" ? "active" : ""} onClick={() => setTab("members")}>ユーザー <span>{members.length}</span></button><button className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}>予定種別 <span>{categories.length}</span></button><button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>操作履歴 <span>{auditLogs.length}</span></button></div>
       {tab === "members" ? (
-        <div className="members-table-wrap"><table className="members-table"><thead><tr><th>ユーザー</th><th>所属</th><th>在席状況</th><th>行き先</th><th>連絡先</th><th>操作</th></tr></thead><tbody>{members.map((member) => <tr key={member.id}><td><Avatar member={member} small /><b>{member.name}</b></td><td>{member.group}</td><td><span className={`table-status presence-${member.presence}`}><StatusDot status={member.presence} />{member.presence}</span></td><td>{member.destination || "—"}</td><td><span>{member.phone || "—"}</span><small>{member.email}</small></td><td className="table-actions"><button onClick={() => onEditMember(member)}>編集</button><button className="danger" onClick={() => onDeleteMember(member)}>削除</button></td></tr>)}</tbody></table></div>
+        <div className="members-table-wrap"><table className="members-table"><thead><tr><th>ユーザー</th><th>所属</th><th>連絡先</th><th>操作</th></tr></thead><tbody>{members.map((member) => <tr key={member.id}><td><Avatar member={member} small /><b>{member.name}</b></td><td>{member.group}</td><td><span>{member.phone || "—"}</span><small>{member.email}</small></td><td className="table-actions"><button onClick={() => onEditMember(member)}>編集</button><button className="danger" onClick={() => onDeleteMember(member)}>削除</button></td></tr>)}</tbody></table></div>
       ) : tab === "categories" ? (
         <div className="category-management-list">{categories.map((category) => <article key={category.id}><span className="category-swatch" style={{ background: category.color }} /><div><h2>{category.name}</h2><p>使用中の予定 {schedules.filter((item) => item.category === category.name).length}件</p></div><button onClick={() => onEditCategory(category)}>編集</button><button className="danger" onClick={() => onDeleteCategory(category)}>削除</button></article>)}</div>
       ) : (
@@ -1110,9 +1023,6 @@ function MemberModal({ member, onClose, onSubmit }: { member: Member | null; onC
         <label className="field"><span>表示文字</span><input name="initials" maxLength={2} defaultValue={member?.initials ?? ""} placeholder="例：佐" /></label>
         <label className="field color-field"><span>表示色</span><input name="color" type="color" defaultValue={member?.color ?? "#268b7d"} /></label>
         <label className="field"><span>所属</span><select name="group" defaultValue={member?.group ?? "営業部"}>{groups.slice(1).map((groupName) => <option key={groupName}>{groupName}</option>)}</select></label>
-        <label className="field"><span>在席状況</span><select name="presence" defaultValue={member?.presence ?? "在席"}>{presenceOptions.map((status) => <option key={status}>{status}</option>)}</select></label>
-        <label className="field full"><span>行き先</span><input name="destination" defaultValue={member?.destination ?? ""} /></label>
-        <label className="field"><span>戻り予定</span><input name="returnAt" type="time" defaultValue={member?.returnAt ?? ""} /></label>
         <label className="field"><span>電話番号</span><input name="phone" type="tel" defaultValue={member?.phone ?? ""} /></label>
         <label className="field full"><span>メールアドレス</span><input name="email" type="email" defaultValue={member?.email ?? ""} /></label>
         <footer><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button className="primary-button" type="submit">{member ? "変更を保存" : "ユーザーを追加"}</button></footer>
@@ -1131,8 +1041,4 @@ function CategoryModal({ category, onClose, onSubmit }: { category: ScheduleCate
       </form>
     </ModalShell>
   );
-}
-
-function MessageModal({ members, onClose, onSubmit }: { members: Member[]; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  return <ModalShell title="メッセージを作成" eyebrow="NEW MESSAGE" onClose={onClose}><form onSubmit={onSubmit} className="modal-form"><label className="field"><span>種類</span><select name="kind"><option value="message">メッセージ</option><option value="memo">伝言メモ</option></select></label><label className="field"><span>宛先</span><select name="to"><option>全員</option>{groups.slice(1).map((groupName) => <option key={groupName}>{groupName}</option>)}{members.map((member) => <option key={member.id}>{member.name}</option>)}</select></label><label className="field full"><span>件名</span><input name="subject" autoFocus placeholder="連絡内容を入力" required /></label><label className="field full"><span>本文</span><textarea name="body" rows={5} placeholder="メッセージを入力してください" /></label><footer><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button className="primary-button" type="submit">送信する</button></footer></form></ModalShell>;
 }
