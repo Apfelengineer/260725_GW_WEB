@@ -6,17 +6,19 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   groupWatcherApi,
-  demoCategories,
-  demoMembers,
-  demoSchedules,
   groups,
   japaneseHolidays,
   type AuditEntry,
-  type BootstrapResponse,
+  type AuthAccount,
+  type AuthRole,
+  type AuthenticatedBootstrapResponse,
+  type AvailabilityPublishStatus,
+  type LoginUser,
   type Member,
   type ScheduleCategory,
   type ScheduleItem,
   type SharedState,
+  type SessionRole,
 } from "./lib/group-watcher-api";
 
 type Section = "schedule" | "members";
@@ -78,9 +80,11 @@ function weekDates(value: Date) {
   return Array.from({ length: 7 }, (_, index) => addDays(monday, index));
 }
 
-function openRoomAvailability() {
+const defaultPublicAvailabilityUrl = import.meta.env.VITE_KPTC_PUBLIC_AVAILABILITY_URL || "../calendar";
+
+function openRoomAvailability(publicUrl: string) {
   // スケジューラーを保持したまま、公開用の空き状況を独立したタブで開きます。
-  window.open("./reservations.html?room=m6", "_blank", "noopener,noreferrer");
+  window.open(publicUrl, "_blank", "noopener,noreferrer");
 }
 
 function monthGridDates(value: Date) {
@@ -145,18 +149,38 @@ function EmptyState({ children }: { children: React.ReactNode }) {
   return <div className="empty-state"><span aria-hidden="true">○</span><p>{children}</p></div>;
 }
 
-function LoginScreen({ members, serverAvailable, onLogin }: { members: Member[]; serverAvailable: boolean; onLogin: (memberId: string) => Promise<void> }) {
-  const [memberId, setMemberId] = useState(members[0]?.id ?? "");
+function LoginScreen({ serverAvailable, setupRequired, loginUsers, onLogin, onGuestLogin }: { serverAvailable: boolean; setupRequired: boolean; loginUsers: LoginUser[]; onLogin: (username: string, password: string) => Promise<void>; onGuestLogin: () => Promise<void> }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    try { await onLogin(username, password); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "ログインできませんでした"); }
+    finally { setSubmitting(false); }
+  }
+  async function guestLogin() {
+    setSubmitting(true);
+    setError("");
+    try { await onGuestLogin(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "ゲストとしてログインできませんでした"); }
+    finally { setSubmitting(false); }
+  }
   return (
     <main className="auth-screen">
-      <section className="login-card">
+      <form className="login-card" onSubmit={submit}>
         <Logo />
-        <div><span className="eyebrow">TEAM SIGN IN</span><h1>利用者を選択してログイン</h1><p>変更内容は共有保存され、操作履歴に利用者名が記録されます。</p></div>
-        <label className="field"><span>利用者</span><select value={memberId} onChange={(event) => setMemberId(event.target.value)}>{members.map((member) => <option key={member.id} value={member.id}>{member.name}（{member.group}）</option>)}</select></label>
-        <button className="primary-button" disabled={!memberId || submitting} onClick={async () => { setSubmitting(true); await onLogin(memberId); setSubmitting(false); }}>{submitting ? "ログイン中…" : "ログイン"}</button>
-        <small>{serverAvailable ? "デモ認証：パスワードはAPI仕様確定後に接続します" : "共有サーバーへ接続できないため、端末内デモとして起動します"}</small>
-      </section>
+        <div><span className="eyebrow">SECURE SIGN IN</span><h1>KPTC Schedulerへログイン</h1><p>管理者または一般ユーザーを選択してログインしてください。</p></div>
+        <label className="field"><span>ユーザー</span><select autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required><option value="" disabled>ユーザーを選択</option>{loginUsers.map((user) => <option value={user.username} key={user.username}>{user.name}（{user.role === "admin" ? "管理者" : "一般"}）</option>)}</select></label>
+        <label className="field"><span>パスワード</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+        {error && <p className="login-error" role="alert">{error}</p>}
+        <button className="primary-button" type="submit" disabled={!serverAvailable || !username || submitting}>{submitting ? "ログイン中…" : "ログイン"}</button>
+        <button className="secondary-button guest-login-button" type="button" disabled={!serverAvailable || submitting} onClick={guestLogin}>ゲストとしてログイン</button>
+        <small>{!serverAvailable ? "内部サーバーへ接続できません。管理者へお問い合わせください。" : setupRequired ? "初期アカウントが未設定です。管理用コマンドで管理者を作成してください。" : "通信とセッションはサーバー側で安全に管理されます。"}</small>
+      </form>
     </main>
   );
 }
@@ -168,9 +192,9 @@ export default function Home() {
   const [calendarDate, setCalendarDate] = useState(() => dateAtNoon(new Date()));
   const [group, setGroup] = useState<string>("すべてのグループ");
   const [search, setSearch] = useState("");
-  const [schedules, setSchedules] = useState<ScheduleItem[]>(demoSchedules);
-  const [members, setMembers] = useState<Member[]>(demoMembers);
-  const [categories, setCategories] = useState<ScheduleCategory[]>(demoCategories);
+  const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [categories, setCategories] = useState<ScheduleCategory[]>([]);
   const [scheduleEditor, setScheduleEditor] = useState<EditorState | null>(null);
   const [memberEditor, setMemberEditor] = useState<Member | "new" | null>(null);
   const [categoryEditor, setCategoryEditor] = useState<ScheduleCategory | "new" | null>(null);
@@ -184,8 +208,15 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [setupRequired, setSetupRequired] = useState(false);
+  const [loginUsers, setLoginUsers] = useState<LoginUser[]>([]);
   const [csrfToken, setCsrfToken] = useState("");
+  const [currentUsername, setCurrentUsername] = useState("");
+  const [currentRole, setCurrentRole] = useState<SessionRole>("guest");
+  const [authAccounts, setAuthAccounts] = useState<AuthAccount[]>([]);
+  const [publicAvailabilityUrl, setPublicAvailabilityUrl] = useState(defaultPublicAvailabilityUrl);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
+  const [availabilityPublish, setAvailabilityPublish] = useState<AvailabilityPublishStatus | null>(null);
   const [syncStatus, setSyncStatus] = useState<"saved" | "saving" | "offline">("saving");
   const versionRef = useRef(0);
   const lastSyncedRef = useRef("");
@@ -198,12 +229,18 @@ export default function Home() {
     setCategories(state.categories);
   }
 
-  function applyServerPayload(payload: BootstrapResponse) {
+  function applyServerPayload(payload: AuthenticatedBootstrapResponse) {
     lastSyncedRef.current = JSON.stringify(payload.state);
     versionRef.current = payload.version;
     setCsrfToken(payload.csrfToken);
     setCurrentUserId(payload.currentUserId);
+    setCurrentUsername(payload.username);
+    setCurrentRole(payload.role);
+    setPublicAvailabilityUrl(payload.publicAvailabilityPageUrl || defaultPublicAvailabilityUrl);
+    setAuthAccounts(payload.authAccounts);
+    if (payload.role !== "admin") setSection("schedule");
     setAuditLogs(payload.audit);
+    setAvailabilityPublish(payload.availabilityPublish);
     applySharedState(payload.state);
     setSyncStatus("saved");
   }
@@ -217,11 +254,11 @@ export default function Home() {
     let active = true;
     groupWatcherApi.bootstrap().then((payload) => {
       if (!active) return;
-      applyServerPayload(payload);
+      if (payload.authenticated) applyServerPayload(payload);
+      else { setSetupRequired(payload.setupRequired); setLoginUsers(payload.loginUsers); }
       setAuthReady(true);
     }).catch(() => {
       if (!active) return;
-      lastSyncedRef.current = JSON.stringify({ members: demoMembers, schedules: demoSchedules, categories: demoCategories });
       setServerAvailable(false);
       setSyncStatus("offline");
       setAuthReady(true);
@@ -233,7 +270,7 @@ export default function Home() {
 
   useEffect(() => {
     // 変更を短時間まとめ、バージョン番号付きで直列保存して同時編集の競合を検出します。
-    if (!authReady || !serverAvailable || !currentUserId || !csrfToken) return;
+    if (!authReady || !serverAvailable || !currentUserId || !csrfToken || !["admin", "user"].includes(currentRole)) return;
     const state: SharedState = { members, schedules, categories };
     const serialized = JSON.stringify(state);
     if (serialized === lastSyncedRef.current) return;
@@ -246,11 +283,11 @@ export default function Home() {
           const payload = await groupWatcherApi.save(state, versionRef.current, csrfToken, mutation.action, mutation.summary);
           applyServerPayload(payload);
         } catch (error) {
-          const conflict = (error as { status?: number; payload?: BootstrapResponse }).status === 409;
-          const payload = (error as { payload?: BootstrapResponse }).payload;
-          if (conflict && payload?.state) {
+          const conflict = (error as { status?: number; payload?: AuthenticatedBootstrapResponse }).status === 409;
+          const payload = (error as { payload?: AuthenticatedBootstrapResponse }).payload;
+          if (payload?.state) {
             applyServerPayload(payload);
-            setToast("他の利用者の更新を反映しました。もう一度操作してください");
+            setToast(conflict ? "他の利用者の更新を反映しました。もう一度操作してください" : error instanceof Error ? error.message : "変更を保存できませんでした");
           } else {
             setSyncStatus("offline");
             setToast("共有保存に失敗しました。通信を確認してください");
@@ -261,7 +298,7 @@ export default function Home() {
     return () => window.clearTimeout(timer);
     // サーバー反映関数は最新状態を直列に保存します。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, categories, csrfToken, currentUserId, members, schedules, serverAvailable]);
+  }, [authReady, categories, csrfToken, currentRole, currentUserId, members, schedules, serverAvailable]);
 
   useEffect(() => {
     if (!toast) return;
@@ -288,23 +325,25 @@ export default function Home() {
     });
   }, [group, members, search]);
 
-  const currentMember = members.find((member) => member.id === currentUserId) ?? members[0];
+  const currentMember = members.find((member) => member.id === currentUserId);
+  const defaultTargetMember = currentMember ?? members[0];
+  const canEditSchedule = currentRole === "admin" || currentRole === "user";
+  const canManageUsers = currentRole === "admin";
   const selectedSchedules = selectedScheduleIds.map((id) => schedules.find((item) => item.id === id)).filter((item): item is ScheduleItem => Boolean(item));
   const selectedSchedule = selectedSchedules.length === 1 ? selectedSchedules[0] : null;
 
-  async function login(memberId: string) {
-    if (!serverAvailable) {
-      setCurrentUserId(memberId);
-      setToast("オフラインのデモモードでログインしました");
-      return;
-    }
-    try {
-      const payload = await groupWatcherApi.login(memberId);
-      applyServerPayload(payload);
-      setToast(`${payload.state.members.find((member) => member.id === memberId)?.name ?? "ユーザー"}としてログインしました`);
-    } catch {
-      setToast("ログインできませんでした");
-    }
+  async function login(username: string, password: string) {
+    if (!serverAvailable) throw new Error("内部サーバーへ接続できません");
+    const payload = await groupWatcherApi.login(username, password);
+    applyServerPayload(payload);
+    setToast(`${payload.state.members.find((member) => member.id === payload.currentUserId)?.name ?? "ユーザー"}としてログインしました`);
+  }
+
+  async function guestLogin() {
+    if (!serverAvailable) throw new Error("内部サーバーへ接続できません");
+    const payload = await groupWatcherApi.guestLogin();
+    applyServerPayload(payload);
+    setToast("ゲストとしてログインしました（閲覧専用）");
   }
 
   async function logout() {
@@ -312,7 +351,14 @@ export default function Home() {
       try { await groupWatcherApi.logout(csrfToken); } catch { /* 画面側のログアウトは継続します。 */ }
     }
     setCurrentUserId(null);
+    setCurrentUsername("");
+    setCurrentRole("guest");
+    setAuthAccounts([]);
     setSection("schedule");
+    try {
+      const payload = await groupWatcherApi.bootstrap();
+      if (!payload.authenticated) { setLoginUsers(payload.loginUsers); setSetupRequired(payload.setupRequired); }
+    } catch { /* ログイン画面側で接続エラーを表示します。 */ }
   }
 
   async function undoAudit(entry: AuditEntry) {
@@ -324,13 +370,14 @@ export default function Home() {
       applyServerPayload(payload);
       setToast("操作を取り消して以前の状態に戻しました");
     } catch (error) {
-      const payload = (error as { payload?: BootstrapResponse }).payload;
+      const payload = (error as { payload?: AuthenticatedBootstrapResponse }).payload;
       if (payload?.state) applyServerPayload(payload);
       setToast("取り消せませんでした。最新状態を確認してください");
     }
   }
 
   function openCreateSchedule(target?: Partial<CellTarget>) {
+    if (!canEditSchedule) { setToast("閲覧専用のため予定は登録できません"); return; }
     if (!members.length) {
       setToast("先にユーザーを登録してください");
       setSection("members");
@@ -338,7 +385,7 @@ export default function Home() {
     }
     setScheduleEditor({
       mode: "create",
-      memberId: target?.memberId ?? currentMember.id,
+      memberId: target?.memberId ?? defaultTargetMember.id,
       date: target?.date ?? dateKey(calendarDate),
     });
   }
@@ -346,6 +393,7 @@ export default function Home() {
   function saveSchedule(event: FormEvent<HTMLFormElement>) {
     // 時間帯プリセットを実時刻へ変換し、新規作成と編集を同じ形式で保存します。
     event.preventDefault();
+    if (!canEditSchedule) return;
     const form = new FormData(event.currentTarget);
     const title = String(form.get("title") ?? "").trim();
     if (!title || !scheduleEditor) return;
@@ -396,6 +444,7 @@ export default function Home() {
   }
 
   function deleteSchedules(ids: string[] = selectedScheduleIds, confirmDelete = true) {
+    if (!canEditSchedule) return;
     const targetItems = schedulesByIds([...new Set(ids)]);
     if (!targetItems.length) return;
     const message = targetItems.length === 1 ? `「${targetItems[0].title}」を削除しますか？` : `選択した${targetItems.length}件の予定を削除しますか？`;
@@ -421,6 +470,7 @@ export default function Home() {
   }
 
   function copySchedules(ids: string[] = selectedScheduleIds) {
+    if (!canEditSchedule) return;
     const items = sortForClipboard(schedulesByIds(ids));
     if (!items.length) return;
     setClipboard({ mode: "copy", items: items.map((item) => ({ ...item })) });
@@ -429,6 +479,7 @@ export default function Home() {
   }
 
   function cutSchedules(ids: string[] = selectedScheduleIds) {
+    if (!canEditSchedule) return;
     const items = sortForClipboard(schedulesByIds(ids));
     if (!items.length) return;
     setClipboard({ mode: "cut", items: items.map((item) => ({ ...item })) });
@@ -438,6 +489,7 @@ export default function Home() {
   }
 
   function pasteSchedule(target: CellTarget | null = selectedCell) {
+    if (!canEditSchedule) return;
     if (!clipboard) {
       setToast("コピーまたは切り取りした予定がありません");
       return;
@@ -480,6 +532,7 @@ export default function Home() {
   }
 
   function moveSchedule(id: string, target: CellTarget) {
+    if (!canEditSchedule) return;
     const source = schedules.find((item) => item.id === id);
     if (!source) return;
     const duration = Math.max(0, daysBetween(source.date, source.endDate || source.date));
@@ -504,7 +557,7 @@ export default function Home() {
         setSelectedScheduleIds([]);
         return;
       }
-      if (section !== "schedule" || scheduleEditor) return;
+      if (section !== "schedule" || scheduleEditor || !canEditSchedule) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c" && selectedScheduleIds.length) {
         event.preventDefault();
         copySchedules();
@@ -523,10 +576,11 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKeyDown);
   // クリップボード操作関数は最新の予定一覧と選択状態を参照するため、関連状態を依存に含めています。
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clipboard, scheduleEditor, schedules, section, selectedCell, selectedSchedule, selectedScheduleIds]);
+  }, [canEditSchedule, clipboard, scheduleEditor, schedules, section, selectedCell, selectedSchedule, selectedScheduleIds]);
 
-  function saveMember(event: FormEvent<HTMLFormElement>) {
+  async function saveMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canManageUsers) return;
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name") ?? "").trim();
     if (!name) return;
@@ -539,13 +593,33 @@ export default function Home() {
       color: String(form.get("color")),
       extension: String(form.get("extension") ?? ""),
     };
-    markMutation(existing ? "ユーザー編集" : "ユーザー追加", member.name);
-    setMembers((items) => existing ? items.map((item) => item.id === member.id ? member : item) : [...items, member]);
-    setMemberEditor(null);
-    setToast(existing ? "ユーザー情報を更新しました" : "ユーザーを追加しました");
+    const password = String(form.get("password") ?? "");
+    const existingAccount = existing ? authAccounts.find((account) => account.memberId === existing.id) : undefined;
+    const changePassword = !existingAccount || form.get("changePassword") === "on";
+    if (changePassword && password !== String(form.get("passwordConfirmation") ?? "")) { setToast("確認用パスワードが一致しません"); return; }
+    await saveQueueRef.current;
+    try {
+      const payload = await groupWatcherApi.saveMemberAccount({
+        operation: "save",
+        version: versionRef.current,
+        member,
+        username: String(form.get("accountId") ?? "").trim(),
+        role: String(form.get("role") ?? "user") as AuthRole,
+        password,
+        changePassword,
+      }, csrfToken);
+      applyServerPayload(payload);
+      setMemberEditor(null);
+      setToast(existing ? "ユーザーとログイン情報を更新しました" : "ユーザーを追加しました");
+    } catch (reason) {
+      const payload = (reason as { payload?: AuthenticatedBootstrapResponse }).payload;
+      if (payload?.state) applyServerPayload(payload);
+      setToast(reason instanceof Error ? reason.message : "ユーザー情報を保存できませんでした");
+    }
   }
 
-  function deleteMember(member: Member) {
+  async function deleteMember(member: Member) {
+    if (!canManageUsers) return;
     if (member.id === currentUserId) {
       setToast("ログイン中のユーザーは削除できません");
       return;
@@ -553,14 +627,22 @@ export default function Home() {
     const count = schedules.filter((item) => item.memberId === member.id).length;
     const detail = count ? `\nこのユーザーの予定 ${count}件も削除されます。` : "";
     if (!window.confirm(`「${member.name}」を削除しますか？${detail}`)) return;
-    markMutation("ユーザー削除", `${member.name}を削除`);
-    setMembers((items) => items.filter((item) => item.id !== member.id));
-    setSchedules((items) => items.filter((item) => item.memberId !== member.id));
-    if (selectedCell?.memberId === member.id) setSelectedCell(null);
-    setToast("ユーザーを削除しました");
+    await saveQueueRef.current;
+    try {
+      const account = authAccounts.find((item) => item.memberId === member.id);
+      const payload = await groupWatcherApi.saveMemberAccount({ operation: "delete", version: versionRef.current, member, username: account?.username ?? "", role: account?.role ?? "room", password: "", changePassword: false }, csrfToken);
+      applyServerPayload(payload);
+      if (selectedCell?.memberId === member.id) setSelectedCell(null);
+      setToast("ユーザーと関連予定を削除しました");
+    } catch (reason) {
+      const payload = (reason as { payload?: AuthenticatedBootstrapResponse }).payload;
+      if (payload?.state) applyServerPayload(payload);
+      setToast(reason instanceof Error ? reason.message : "ユーザーを削除できませんでした");
+    }
   }
 
   function moveMember(member: Member, direction: -1 | 1) {
+    if (!canManageUsers) return;
     const index = members.findIndex((item) => item.id === member.id);
     const nextIndex = index + direction;
     if (index < 0 || nextIndex < 0 || nextIndex >= members.length) return;
@@ -575,6 +657,7 @@ export default function Home() {
 
   function saveCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canManageUsers) return;
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name") ?? "").trim();
     if (!name) return;
@@ -594,6 +677,7 @@ export default function Home() {
   }
 
   function deleteCategory(category: ScheduleCategory) {
+    if (!canManageUsers) return;
     if (categories.length === 1) {
       setToast("予定種別は1つ以上必要です");
       return;
@@ -609,6 +693,7 @@ export default function Home() {
   }
 
   function moveCategory(category: ScheduleCategory, direction: -1 | 1) {
+    if (!canManageUsers) return;
     const index = categories.findIndex((item) => item.id === category.id);
     const nextIndex = index + direction;
     if (index < 0 || nextIndex < 0 || nextIndex >= categories.length) return;
@@ -626,6 +711,7 @@ export default function Home() {
   }
 
   function openContextMenu(event: React.MouseEvent, item: ScheduleItem) {
+    if (!canEditSchedule) return;
     event.preventDefault();
     event.stopPropagation();
     // 複数選択中の予定を右クリックした場合は、その選択全体を操作対象として維持します。
@@ -635,6 +721,7 @@ export default function Home() {
   }
 
   function openCellContextMenu(event: React.MouseEvent, target: CellTarget) {
+    if (!canEditSchedule) return;
     if ((event.target as HTMLElement).closest("button")) return;
     event.preventDefault();
     event.stopPropagation();
@@ -644,7 +731,7 @@ export default function Home() {
   }
 
   if (!authReady) return <div className="auth-screen"><Logo /><p>共有データを読み込んでいます…</p></div>;
-  if (!currentUserId) return <LoginScreen members={members} serverAvailable={serverAvailable} onLogin={login} />;
+  if (!currentUserId) return <LoginScreen serverAvailable={serverAvailable} setupRequired={setupRequired} loginUsers={loginUsers} onLogin={login} onGuestLogin={guestLogin} />;
 
   return (
     <div className="app-shell">
@@ -652,8 +739,8 @@ export default function Home() {
         <Logo />
         <nav className="main-nav" aria-label="メインメニュー">
           <button className={section === "schedule" ? "active" : ""} onClick={() => setSection("schedule")}><SectionIcon symbol="▦" /><span>スケジュール</span></button>
-          <button onClick={openRoomAvailability}><SectionIcon symbol="▤" /><span>試験室予約</span></button>
-          <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>ユーザー・設定</span></button>
+          <button onClick={() => openRoomAvailability(publicAvailabilityUrl)}><SectionIcon symbol="▤" /><span>試験室予約</span></button>
+          {canManageUsers && <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>ユーザー・設定</span></button>}
         </nav>
 
         <div className="sidebar-section">
@@ -665,11 +752,7 @@ export default function Home() {
           ))}
         </div>
 
-        {currentMember ? (
-          <div className="sidebar-user"><Avatar member={currentMember} small /><span><b>{currentMember.name}</b><small>{currentMember.group}・共同編集</small></span><button aria-label="ログアウト" title="ログアウト" onClick={logout}>↪</button></div>
-        ) : (
-          <div className="sidebar-user sidebar-empty-user"><span>ユーザー未登録</span></div>
-        )}
+        {currentMember ? <div className="sidebar-user"><Avatar member={currentMember} small /><span><b>{currentMember.name}</b><small>{currentRole === "admin" ? "管理者" : currentRole === "user" ? "一般" : "試験室"}・{currentUsername}</small></span><button aria-label="ログアウト" title="ログアウト" onClick={logout}>↪</button></div> : <div className="sidebar-user sidebar-empty-user"><span><b>ゲスト</b><small>閲覧専用</small></span><button aria-label="ログアウト" title="ログアウト" onClick={logout}>↪</button></div>}
       </aside>
 
       <main className="main-area">
@@ -677,8 +760,9 @@ export default function Home() {
           <div className="mobile-brand"><Logo /></div>
           <label className="global-search"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="予定・メンバーを検索" aria-label="予定・メンバーを検索" /><kbd>⌘ K</kbd></label>
           <div className="topbar-actions">
-            <span className={`sync-badge ${syncStatus}`}>{syncStatus === "saved" ? "● 共有済み" : syncStatus === "saving" ? "○ 保存中" : "△ オフライン"}</span>
-            <button className="primary-button" onClick={() => openCreateSchedule()}><span>＋</span> 予定を登録</button>
+            {canManageUsers && availabilityPublish && <span className={`publish-badge ${availabilityPublish.pending ? "pending" : "ok"}`} title={availabilityPublish.lastSuccessAt ? `最終送信: ${new Date(availabilityPublish.lastSuccessAt).toLocaleString("ja-JP")}` : "送信実績なし"}>{availabilityPublish.pending ? `△ 公開JSON再送待ち${availabilityPublish.consecutiveFailures ? ` (${availabilityPublish.consecutiveFailures})` : ""}` : "● 公開JSON送信済み"}</span>}
+            <span className={`sync-badge ${syncStatus}`}>{canEditSchedule ? (syncStatus === "saved" ? "● 共有済み" : syncStatus === "saving" ? "○ 保存中" : "△ オフライン") : "● 閲覧専用"}</span>
+            {canEditSchedule && <button className="primary-button" onClick={() => openCreateSchedule()}><span>＋</span> 予定を登録</button>}
           </div>
         </header>
 
@@ -696,6 +780,7 @@ export default function Home() {
             allMembers={members}
             schedules={schedules}
             categories={categories}
+            editable={canEditSchedule}
             selectedScheduleIds={selectedScheduleIds}
             cutScheduleIds={clipboard?.mode === "cut" ? clipboard.items.map((item) => item.id) : []}
             selectedCell={selectedCell}
@@ -708,7 +793,7 @@ export default function Home() {
             onCellContextMenu={openCellContextMenu}
           />
         )}
-        {section === "members" && (
+        {section === "members" && canManageUsers && (
           <ManagementPage
             tab={managementTab}
             setTab={setManagementTab}
@@ -725,21 +810,22 @@ export default function Home() {
             onMoveCategory={moveCategory}
             auditLogs={auditLogs}
             onUndo={undoAudit}
+            authAccounts={authAccounts}
           />
         )}
       </main>
 
       <nav className="mobile-nav" aria-label="モバイルメニュー">
         <button className={section === "schedule" ? "active" : ""} onClick={() => setSection("schedule")}><SectionIcon symbol="▦" /><span>予定</span></button>
-        <button className="mobile-add" onClick={() => openCreateSchedule()} aria-label="予定を登録">＋</button>
-        <button onClick={openRoomAvailability}><SectionIcon symbol="▤" /><span>予約</span></button>
-        <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>設定</span></button>
+        {canEditSchedule && <button className="mobile-add" onClick={() => openCreateSchedule()} aria-label="予定を登録">＋</button>}
+        <button onClick={() => openRoomAvailability(publicAvailabilityUrl)}><SectionIcon symbol="▤" /><span>予約</span></button>
+        {canManageUsers && <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>設定</span></button>}
       </nav>
 
-      {scheduleEditor && <ScheduleModal editor={scheduleEditor} members={members} categories={categories} onClose={() => setScheduleEditor(null)} onSubmit={saveSchedule} onDelete={scheduleEditor.mode === "edit" ? () => deleteSchedules([scheduleEditor.item.id]) : undefined} />}
-      {memberEditor && <MemberModal member={memberEditor === "new" ? null : memberEditor} onClose={() => setMemberEditor(null)} onSubmit={saveMember} />}
+      {scheduleEditor && canEditSchedule && <ScheduleModal editor={scheduleEditor} members={members} categories={categories} onClose={() => setScheduleEditor(null)} onSubmit={saveSchedule} onDelete={scheduleEditor.mode === "edit" ? () => deleteSchedules([scheduleEditor.item.id]) : undefined} />}
+      {memberEditor && canManageUsers && <MemberModal member={memberEditor === "new" ? null : memberEditor} account={memberEditor === "new" ? null : authAccounts.find((item) => item.memberId === memberEditor.id) ?? null} onClose={() => setMemberEditor(null)} onSubmit={saveMember} />}
       {categoryEditor && <CategoryModal category={categoryEditor === "new" ? null : categoryEditor} onClose={() => setCategoryEditor(null)} onSubmit={saveCategory} />}
-      {contextMenu && (
+      {contextMenu && canEditSchedule && (
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} role="menu">
           <button role="menuitem" onClick={() => copySchedules(actionScheduleIds(contextMenu.scheduleId))}><span>□</span>コピー<kbd>Ctrl+C</kbd></button>
           <button role="menuitem" onClick={() => cutSchedules(actionScheduleIds(contextMenu.scheduleId))}><span>✂</span>切り取り</button>
@@ -747,7 +833,7 @@ export default function Home() {
           <button className="danger" role="menuitem" onClick={() => deleteSchedules(actionScheduleIds(contextMenu.scheduleId))}><span>×</span>削除<kbd>Delete</kbd></button>
         </div>
       )}
-      {cellContextMenu && (
+      {cellContextMenu && canEditSchedule && (
         <div className="context-menu cell-context-menu" style={{ left: cellContextMenu.x, top: cellContextMenu.y }} onPointerDown={(event) => event.stopPropagation()} role="menu">
           <button role="menuitem" onClick={() => { openCreateSchedule(cellContextMenu.target); setCellContextMenu(null); }}><span>＋</span>新規予定作成</button>
           <button role="menuitem" disabled={!clipboard} onClick={() => { pasteSchedule(cellContextMenu.target); setCellContextMenu(null); }}><span>□</span>貼り付け<kbd>Ctrl+V</kbd></button>
@@ -759,6 +845,7 @@ export default function Home() {
 }
 
 type CalendarInteractionProps = {
+  editable: boolean;
   members: Member[];
   schedules: ScheduleItem[];
   categories: ScheduleCategory[];
@@ -790,7 +877,7 @@ function SchedulePage({ view, setView, calendarDate, onPrevious, onNext, onToday
       <section className="content-column">
         <div className="page-heading">
           <div><span className="eyebrow">SCHEDULE</span><h1>みんなの予定</h1><p>{formatPeriod(calendarDate, view)} ・ <b>{members.length}名を表示中</b></p></div>
-          <button className="compact-add" onClick={() => interactions.onCreateSchedule({ memberId: allMembers[0]?.id ?? "", date: dateKey(calendarDate) })}>＋ 予定を登録</button>
+          {interactions.editable && <button className="compact-add" onClick={() => interactions.onCreateSchedule({ memberId: allMembers[0]?.id ?? "", date: dateKey(calendarDate) })}>＋ 予定を登録</button>}
         </div>
 
         <div className="schedule-toolbar">
@@ -816,17 +903,18 @@ function SchedulePage({ view, setView, calendarDate, onPrevious, onNext, onToday
           {categories.map((category) => <span key={category.id}><i className="legend" style={{ background: category.color }} />{category.name}</span>)}
           <span><b>◆</b> メモあり</span><span><b>鍵</b> 非公開</span>
         </div>
-        <div className="shortcut-guide"><b>操作:</b> <kbd>Shift</kbd>＋クリックで複数選択 ・ 日付／別予定を通常クリックまたは <kbd>Esc</kbd> で解除 ・ 日付欄をダブルクリックで登録 ・ 右クリックでコピー／切り取り／削除 ・ <kbd>Ctrl+C</kbd> <kbd>Ctrl+V</kbd> <kbd>Delete</kbd></div>
+        {interactions.editable ? <div className="shortcut-guide"><b>操作:</b> <kbd>Shift</kbd>＋クリックで複数選択 ・ 日付／別予定を通常クリックまたは <kbd>Esc</kbd> で解除 ・ 日付欄をダブルクリックで登録 ・ 右クリックでコピー／切り取り／削除 ・ <kbd>Ctrl+C</kbd> <kbd>Ctrl+V</kbd> <kbd>Delete</kbd></div> : <div className="shortcut-guide"><b>閲覧専用:</b> 予定の追加・編集・移動・コピー・削除はできません。</div>}
       </section>
     </div>
   );
 }
 
-function ScheduleEventButton({ item, categories, selected, cutting, compact = false, onSelect, onEdit, onContextMenu }: {
+function ScheduleEventButton({ item, categories, selected, cutting, editable, compact = false, onSelect, onEdit, onContextMenu }: {
   item: ScheduleItem;
   categories: ScheduleCategory[];
   selected: boolean;
   cutting: boolean;
+  editable: boolean;
   compact?: boolean;
   onSelect: (item: ScheduleItem, additive?: boolean) => void;
   onEdit: (item: ScheduleItem) => void;
@@ -837,21 +925,22 @@ function ScheduleEventButton({ item, categories, selected, cutting, compact = fa
       className={`${compact ? "month-event" : "schedule-event"} ${selected ? "selected" : ""} ${cutting ? "cutting" : ""}`}
       style={categoryStyle(item.category, categories)}
       aria-pressed={selected}
-      draggable
-      onDragStart={(event) => { event.dataTransfer.setData("text/group-watcher-schedule", item.id); event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; if (!selected) onSelect(item); }}
+      draggable={editable}
+      onDragStart={(event) => { if (!editable) { event.preventDefault(); return; } event.dataTransfer.setData("text/group-watcher-schedule", item.id); event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; if (!selected) onSelect(item); }}
       onClick={(event) => { event.stopPropagation(); onSelect(item, event.shiftKey); }}
-      onDoubleClick={(event) => { event.stopPropagation(); onEdit(item); }}
-      onContextMenu={(event) => onContextMenu(event, item)}
-      title={`${item.timePreset === "all-day" ? "終日" : `${item.start}–${item.end}`} ${item.title}（ダブルクリックで編集）`}
+      onDoubleClick={(event) => { if (editable) { event.stopPropagation(); onEdit(item); } }}
+      onContextMenu={(event) => { if (editable) onContextMenu(event, item); }}
+      title={`${item.timePreset === "all-day" ? "終日" : `${item.start}–${item.end}`} ${item.title}${editable ? "（ダブルクリックで編集）" : ""}`}
     >
       {compact ? <><i />{scheduleTimeLabel(item)} {item.private ? "【非】" : ""}{item.title}</> : <><time>{scheduleTimeLabel(item)}{item.endDate && item.endDate !== item.date ? "・複数日" : ""}</time><strong>{item.private ? "【非】" : ""}{item.title}</strong>{item.memo && <span className="memo-mark">◆</span>}</>}
     </button>
   );
 }
 
-function DropCell({ target, selected, className, onSelectCell, onCreateSchedule, onMoveSchedule, onCellContextMenu, children }: {
+function DropCell({ target, selected, editable, className, onSelectCell, onCreateSchedule, onMoveSchedule, onCellContextMenu, children }: {
   target: CellTarget;
   selected: boolean;
+  editable: boolean;
   className: string;
   onSelectCell: (target: CellTarget) => void;
   onCreateSchedule: (target: CellTarget) => void;
@@ -864,16 +953,16 @@ function DropCell({ target, selected, className, onSelectCell, onCreateSchedule,
       className={`${className} ${selected ? "selected-cell" : ""}`}
       onClick={() => onSelectCell(target)}
       onDoubleClick={(event) => {
-        if (!(event.target as HTMLElement).closest("button")) onCreateSchedule(target);
+        if (editable && !(event.target as HTMLElement).closest("button")) onCreateSchedule(target);
       }}
-      onContextMenu={(event) => onCellContextMenu(event, target)}
-      onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }}
-      onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/group-watcher-schedule") || event.dataTransfer.getData("text/plain"); if (id) onMoveSchedule(id, target); }}
+      onContextMenu={(event) => { if (editable) onCellContextMenu(event, target); }}
+      onDragOver={(event) => { if (editable) { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } }}
+      onDrop={(event) => { if (!editable) return; event.preventDefault(); const id = event.dataTransfer.getData("text/group-watcher-schedule") || event.dataTransfer.getData("text/plain"); if (id) onMoveSchedule(id, target); }}
     >{children}</div>
   );
 }
 
-function WeekGrid({ calendarDate, members, schedules, categories, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
+function WeekGrid({ calendarDate, members, schedules, categories, editable, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
   const dates = weekDates(calendarDate);
   const today = dateAtNoon(new Date());
   return (
@@ -892,8 +981,8 @@ function WeekGrid({ calendarDate, members, schedules, categories, selectedSchedu
               const holiday = japaneseHolidays.some((item) => item.date === key);
               const items = schedules.filter((item) => item.memberId === member.id && scheduleOccursOn(item, key)).sort((a, b) => a.start.localeCompare(b.start));
               return (
-                <DropCell key={key} target={target} selected={selectedCell?.memberId === member.id && selectedCell.date === key} className={`schedule-cell ${sameDate(date, today) ? "is-today" : ""} ${date.getDay() === 0 || date.getDay() === 6 ? "weekend" : ""} ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
-                  {items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />)}
+                <DropCell key={key} target={target} editable={editable} selected={selectedCell?.memberId === member.id && selectedCell.date === key} className={`schedule-cell ${sameDate(date, today) ? "is-today" : ""} ${date.getDay() === 0 || date.getDay() === 6 ? "weekend" : ""} ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
+                  {items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} editable={editable} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />)}
                 </DropCell>
               );
             })}
@@ -904,7 +993,7 @@ function WeekGrid({ calendarDate, members, schedules, categories, selectedSchedu
   );
 }
 
-function DayView({ calendarDate, members, schedules, categories, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
+function DayView({ calendarDate, members, schedules, categories, editable, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
   const key = dateKey(calendarDate);
   const holiday = japaneseHolidays.find((item) => item.date === key);
   return (
@@ -916,8 +1005,8 @@ function DayView({ calendarDate, members, schedules, categories, selectedSchedul
         return (
           <div className="day-member" key={member.id}>
             <div className="day-member-profile"><Avatar member={member} small /><span><b>{member.name}</b><small>{member.group}</small></span></div>
-            <DropCell target={target} selected={selectedCell?.memberId === member.id && selectedCell.date === key} className={`day-events ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
-              {items.length ? items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />) : <span className="no-plan">予定はありません</span>}
+            <DropCell target={target} editable={editable} selected={selectedCell?.memberId === member.id && selectedCell.date === key} className={`day-events ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
+              {items.length ? items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} editable={editable} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />) : <span className="no-plan">予定はありません</span>}
             </DropCell>
           </div>
         );
@@ -926,7 +1015,7 @@ function DayView({ calendarDate, members, schedules, categories, selectedSchedul
   );
 }
 
-function MonthView({ calendarDate, members, schedules, categories, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
+function MonthView({ calendarDate, members, schedules, categories, editable, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
   const dates = monthGridDates(calendarDate);
   const today = dateAtNoon(new Date());
   const visibleMemberIds = new Set(members.map((member) => member.id));
@@ -942,10 +1031,10 @@ function MonthView({ calendarDate, members, schedules, categories, selectedSched
           const items = schedules.filter((item) => scheduleOccursOn(item, key) && visibleMemberIds.has(item.memberId)).sort((a, b) => a.start.localeCompare(b.start));
           const holiday = japaneseHolidays.find((item) => item.date === key);
           return (
-            <DropCell key={key} target={target} selected={selectedCell?.date === key} className={`month-day ${!inMonth ? "outside" : ""} ${sameDate(date, today) ? "today" : ""} ${date.getDay() === 0 || date.getDay() === 6 ? "weekend" : ""} ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
+            <DropCell key={key} target={target} editable={editable} selected={selectedCell?.date === key} className={`month-day ${!inMonth ? "outside" : ""} ${sameDate(date, today) ? "today" : ""} ${date.getDay() === 0 || date.getDay() === 6 ? "weekend" : ""} ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
               <b>{date.getDate()}</b>
               {holiday && <small className="holiday-name">{holiday.name}</small>}
-              {items.slice(0, 4).map((item) => <ScheduleEventButton compact key={item.id} item={item} categories={categories} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />)}
+              {items.slice(0, 4).map((item) => <ScheduleEventButton compact key={item.id} item={item} categories={categories} editable={editable} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />)}
               {items.length > 4 && <span className="more-events">ほか {items.length - 4}件</span>}
             </DropCell>
           );
@@ -955,7 +1044,7 @@ function MonthView({ calendarDate, members, schedules, categories, selectedSched
   );
 }
 
-function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs, onUndo, onAddMember, onEditMember, onDeleteMember, onMoveMember, onAddCategory, onEditCategory, onDeleteCategory, onMoveCategory }: {
+function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs, onUndo, onAddMember, onEditMember, onDeleteMember, onMoveMember, onAddCategory, onEditCategory, onDeleteCategory, onMoveCategory, authAccounts }: {
   tab: ManagementTab;
   setTab: (tab: ManagementTab) => void;
   members: Member[];
@@ -971,13 +1060,16 @@ function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs
   onEditCategory: (category: ScheduleCategory) => void;
   onDeleteCategory: (category: ScheduleCategory) => void;
   onMoveCategory: (category: ScheduleCategory, direction: -1 | 1) => void;
+  authAccounts: AuthAccount[];
 }) {
+  const addAction = tab === "members" ? onAddMember : tab === "categories" ? onAddCategory : null;
+  const roleLabel = (role: AuthRole) => role === "admin" ? "管理者" : role === "user" ? "一般" : "試験室";
   return (
     <div className="standard-page management-page">
-      <div className="page-heading"><div><span className="eyebrow">MANAGEMENT</span><h1>ユーザー・予定種別・操作履歴</h1><p>共同編集の変更者を確認し、必要に応じて変更を取り消せます</p></div>{tab !== "audit" && <button className="primary-button" onClick={tab === "members" ? onAddMember : onAddCategory}>＋ {tab === "members" ? "ユーザーを追加" : "予定種別を追加"}</button>}</div>
+      <div className="page-heading"><div><span className="eyebrow">MANAGEMENT</span><h1>ユーザー・予定種別管理</h1><p>ユーザー情報とログイン設定を同じ編集画面で管理します</p></div>{addAction && <button className="primary-button" onClick={addAction}>＋ {tab === "members" ? "ユーザーを追加" : "予定種別を追加"}</button>}</div>
       <div className="management-tabs"><button className={tab === "members" ? "active" : ""} onClick={() => setTab("members")}>ユーザー <span>{members.length}</span></button><button className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}>予定種別 <span>{categories.length}</span></button><button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>操作履歴 <span>{auditLogs.length}</span></button></div>
       {tab === "members" ? (
-        <div className="members-table-wrap"><table className="members-table"><thead><tr><th>表示順</th><th>ユーザー</th><th>所属</th><th>内線</th><th>操作</th></tr></thead><tbody>{members.map((member, index) => <tr key={member.id}><td><div className="order-control"><b>{index + 1}</b><button type="button" aria-label={`${member.name}を上へ`} disabled={index === 0} onClick={() => onMoveMember(member, -1)}>↑</button><button type="button" aria-label={`${member.name}を下へ`} disabled={index === members.length - 1} onClick={() => onMoveMember(member, 1)}>↓</button></div></td><td><Avatar member={member} small /><b>{member.name}</b></td><td>{member.group}</td><td><span>{member.extension || "—"}</span></td><td className="table-actions"><button onClick={() => onEditMember(member)}>編集</button><button className="danger" onClick={() => onDeleteMember(member)}>削除</button></td></tr>)}</tbody></table></div>
+        <div className="members-table-wrap"><table className="members-table"><thead><tr><th>表示順</th><th>ユーザー</th><th>所属</th><th>アカウントID</th><th>権限</th><th>内線</th><th>操作</th></tr></thead><tbody>{members.map((member, index) => { const account = authAccounts.find((item) => item.memberId === member.id); const role: AuthRole = account?.role ?? (member.group === "試験室" ? "room" : "user"); return <tr key={member.id}><td><div className="order-control"><b>{index + 1}</b><button type="button" aria-label={`${member.name}を上へ`} disabled={index === 0} onClick={() => onMoveMember(member, -1)}>↑</button><button type="button" aria-label={`${member.name}を下へ`} disabled={index === members.length - 1} onClick={() => onMoveMember(member, 1)}>↓</button></div></td><td><Avatar member={member} small /><b>{member.name}</b></td><td>{member.group}</td><td><code>{account?.username ?? "—"}</code></td><td><span className={`role-badge ${role}`}>{roleLabel(role)}</span></td><td><span>{member.extension || "—"}</span></td><td className="table-actions"><button onClick={() => onEditMember(member)}>編集</button><button className="danger" onClick={() => onDeleteMember(member)}>削除</button></td></tr>; })}</tbody></table></div>
       ) : tab === "categories" ? (
         <div className="category-management-list">{categories.map((category, index) => <article key={category.id}><div className="order-control category-order"><b>{index + 1}</b><button type="button" aria-label={`${category.name}を上へ`} disabled={index === 0} onClick={() => onMoveCategory(category, -1)}>↑</button><button type="button" aria-label={`${category.name}を下へ`} disabled={index === categories.length - 1} onClick={() => onMoveCategory(category, 1)}>↓</button></div><span className="category-swatch" style={{ background: category.color }} /><div><h2>{category.name}</h2><p>使用中の予定 {schedules.filter((item) => item.category === category.name).length}件</p></div><button onClick={() => onEditCategory(category)}>編集</button><button className="danger" onClick={() => onDeleteCategory(category)}>削除</button></article>)}</div>
       ) : (
@@ -1023,7 +1115,11 @@ function ScheduleModal({ editor, members, categories, onClose, onSubmit, onDelet
   );
 }
 
-function MemberModal({ member, onClose, onSubmit }: { member: Member | null; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function MemberModal({ member, account, onClose, onSubmit }: { member: Member | null; account: AuthAccount | null; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  const [role, setRole] = useState<AuthRole>(account?.role ?? (member?.group === "試験室" ? "room" : "user"));
+  const [username, setUsername] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [changePassword, setChangePassword] = useState(!account);
   return (
     <ModalShell title={member ? "ユーザーを編集" : "ユーザーを追加"} eyebrow="USER MANAGEMENT" onClose={onClose}>
       <form onSubmit={onSubmit} className="modal-form">
@@ -1032,6 +1128,11 @@ function MemberModal({ member, onClose, onSubmit }: { member: Member | null; onC
         <label className="field color-field"><span>表示色</span><input name="color" type="color" defaultValue={member?.color ?? "#268b7d"} /></label>
         <label className="field"><span>所属</span><select name="group" defaultValue={member?.group ?? "電気通信係"}>{groups.slice(1).map((groupName) => <option key={groupName}>{groupName}</option>)}</select></label>
         <label className="field"><span>内線</span><input name="extension" type="text" inputMode="tel" defaultValue={member?.extension ?? ""} /></label>
+        <label className="field full"><span>権限</span><select name="role" value={role} onChange={(event) => setRole(event.target.value as AuthRole)}><option value="admin">管理者</option><option value="user">一般</option><option value="room">試験室（閲覧のみ）</option></select><small className="field-note">管理者はユーザー管理可、一般は予定編集可、試験室は閲覧のみです</small></label>
+        <label className="field full"><span>アカウントID</span><input name="accountId" minLength={3} maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._@-]{2,63}" autoCapitalize="none" autoComplete="off" value={username ?? account?.username ?? ""} onChange={(event) => setUsername(event.target.value)} required={role !== "room"} /><small className="field-note">試験室権限でログイン不要の場合だけ空欄にできます</small></label>
+        {account && <label className="check-field full"><input name="changePassword" type="checkbox" checked={changePassword} onChange={(event) => setChangePassword(event.target.checked)} /><span><b>パスワードを変更する</b><small>チェックしない場合は現在のパスワードを維持します</small></span></label>}
+        <label className="field full"><span>{account ? "新しいパスワード" : "パスワード"}</span><input name="password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={!changePassword} /><small className="field-note">文字数制限はありません。空欄（パスワードなし）も設定できます</small></label>
+        <label className="field full"><span>パスワード（確認）</span><input name="passwordConfirmation" type="password" autoComplete="new-password" disabled={!changePassword} /></label>
         <footer><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button className="primary-button" type="submit">{member ? "変更を保存" : "ユーザーを追加"}</button></footer>
       </form>
     </ModalShell>

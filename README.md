@@ -2,7 +2,7 @@
 
 Group Watcher 3.65 の主要機能を、PC・タブレット・スマートフォンから利用できるよう「KPTC Scheduler」として再設計したWEBブラウザ版です。
 
-現在はUI確認用のデモデータで動作します。さくらレンタルサーバー上のPHP APIと内部用SQLiteへデータを保存するため、別端末・別ブラウザ間でも編集内容が共有されます。試験室の空き状況は個人情報を含まない3か月分の公開用JSONへ自動連携します。ログインは利用者を選択するデモ認証で、本番の認証API受領後に差し替えます。
+PHP APIと内部用SQLiteへデータを保存するため、別端末・別ブラウザ間でも編集内容が共有されます。試験室の空き状況は個人情報を含まない3か月分の公開用JSONへ変換し、署名付きHTTPSで外部公開サーバーへ送信します。ログイン情報は予定データと分離し、ユーザー名・パスワード認証、ログイン試行制限、セッション期限、CSRF対策を実装しています。
 
 ## システム資料
 
@@ -24,12 +24,17 @@ Group Watcher 3.65 の主要機能を、PC・タブレット・スマートフ�
 - Shift＋クリックによる予定の複数選択と、複数予定の一括コピー・貼り付け・削除
 - キーボード操作（Ctrl/Cmd+C、Ctrl/Cmd+V、Delete、Esc）
 - ユーザーと予定種別の追加・編集・削除
-- 利用者選択ログイン、共有データ保存、競合検知
+- ユーザー選択式のパスワード認証、パスワード不要の閲覧専用ゲストログイン、ログイン試行制限
+- 管理者・一般・試験室の3権限（管理者は全管理、一般は予定編集、試験室は閲覧のみ）
+- ユーザー編集画面に統合したアカウントID・パスワード・権限管理
 - 操作履歴、変更者記録、直前操作の取り消し・削除復元
 - 「試験室」グループと3つの試験室ユーザー
 - 電波暗室・電磁波妨害評価装置(G-TEM)・パルスサージシステムそれぞれの直近3か月空き状況ページ
 - 土日祝日の色分け、午前／午後予約、メンテナンス、満室時のキャンセル待ち表示
-- 内部スケジュールDBと3か月分の公開空き状況JSONの分離、および保存・削除・取り消し時の自動連携
+- 内部スケジュールDBと3か月分の公開空き状況JSONの分離、およびHMAC署名付きHTTPS連携
+- 外部受信時の署名・時刻・JSONスキーマ・世代検証と原子的なファイル置換
+- 5分間隔の自動再送、送信状態記録、監視用終了コード
+- 内部サーバー用／外部サーバー用の配布ファイル完全分離
 - PC／スマートフォン対応のレスポンシブ表示
 - Open Graph共有画像と日本語メタ情報
 
@@ -42,7 +47,7 @@ pnpm install
 pnpm run dev
 ```
 
-検証用ビルド:
+配布用ビルド:
 
 ```bash
 pnpm run build
@@ -50,37 +55,70 @@ pnpm run check
 pnpm test
 ```
 
-生成された `dist-sakura` の中身をWeb公開フォルダへ配置します。画像やスクリプトは相対パスで出力されるため、初期ドメイン直下でも `/GW/` のようなサブフォルダでも利用できます。
+`pnpm run build` は次の2つを生成します。
+
+- `dist-internal`: スケジューラー画面、内部API、認証、送信・再送・監視コマンド
+- `dist-public`: 空き状況画面、署名付きJSON受信API、公開JSON読取API
+
+外部用には `api.php`、`auth.php`、管理コマンド、SQLite接続処理を含めません。内部画面の「試験室予約」リンク先は、内部サーバー設定の `KPTC_PUBLIC_AVAILABILITY_PAGE_URL=https://availability.example.jp/calendar` で指定します。本番URLが変わっても再ビルドは不要です。値がない開発環境では、ビルド時の `VITE_KPTC_PUBLIC_AVAILABILITY_URL`、続いて相対URL `../calendar` を使用します。開発用の一体表示は `pnpm run dev`、旧来の一体型出力は `pnpm run build:combined` で利用できます。
+
+## 正式ログイン認証
+
+初回起動後、内部サーバー上でスケジューラーのメンバーIDに対応する認証アカウントを作成します。パスワードはコマンド引数や履歴へ残さず、標準入力から渡します。
+
+```bash
+read -s KPTC_NEW_PASSWORD
+printf '%s' "$KPTC_NEW_PASSWORD" | php manage-auth-user-cli.php create admin m1 admin --password-stdin
+unset KPTC_NEW_PASSWORD
+```
+
+一覧、無効化、再有効化、パスワード変更も管理コマンドから行います。
+
+```bash
+php manage-auth-user-cli.php list
+php manage-auth-user-cli.php disable admin
+php manage-auth-user-cli.php enable admin
+```
+
+パスワードには文字数制限を設けず、空欄（パスワードなし）も設定できます。保存時は空欄を含め、PHPが対応する場合はArgon2id、それ以外はPHPの推奨方式でハッシュ化します。5回失敗したユーザー名・接続元は15分間ログインを制限します。ブラウザへ予定データを返すのは認証後だけです。
 
 ## 共有API
 
-`public/api.php` が内部の共有データ、デモログイン、操作履歴、変更取り消しを提供します。予定を保存・削除・取り消した後、試験室3室の当月を含む3か月分を公開可能な空き状態へ変換し、公開用JSONへ送ります。連携に失敗した場合は内部DBへ未送信状態を記録し、次回アクセスで再試行します。
+`public/api.php` が内部の共有データ、正式ログイン、操作履歴、変更取り消しを提供します。予定を保存・削除・取り消した後、試験室3室の当月を含む3か月分を公開可能な空き状態へ変換し、`public/availability-publisher.php` が外部サーバーへ送ります。連携に失敗しても予定の保存は取り消さず、内部DBへ再送待ち、連続失敗回数、最終試行・成功日時、エラー概要を記録します。
 
 `public/public-availability.php` は公開ページ専用です。公開用JSONに保存された室ID・日付・状態（午前空き、午後空き、予約済み、メンテナンス）だけを返し、利用者名、予定件名、メモ、操作履歴は返しません。空き状況ページは内部APIや内部DBを直接参照しません。
 
-公開用JSONは更新のたびに一時ファイルから同じファイルへ置き換えます。月別ファイルや過去データの履歴は作成しません。予定変更がない月でも表示期間を進められるよう、内部サーバーで `public/publish-availability-cli.php` を毎月1日に定期実行します。
+外部の `receive-availability.php` は、共有秘密鍵によるHMAC-SHA256署名、送信時刻、最大128KiB、3室だけの固定スキーマ、許可した4状態、3か月以内の期間、更新世代を検証します。検証後は一時ファイルから同じJSONへ置き換えるため、月別ファイルや過去データの履歴は作成しません。
 
 - 内部スケジュールDB: `/home/apfelrunner/GW/group-watcher.sqlite`
-- 公開空き状況JSON: `/home/apfelrunner/GW/public-availability.json`
+- 公開空き状況JSON（外部サーバー）: `/var/lib/kptc-availability/public-availability.json`
 
-公開用JSONの保存先は環境変数 `KPTC_PUBLIC_AVAILABILITY_JSON` で変更できます。将来サーバーを分ける際は、`public/availability-json.php` の送信処理を認証付きHTTPS APIへ差し替えることで、公開サーバーから内部DBへ接続させずに運用できます。
+設定例は `deploy/internal-server.env.example` と `deploy/external-server.env.example` にあります。共有秘密鍵は `openssl rand -hex 32` などで個別に生成し、両サーバーのWeb用PHP環境と内部側の定期実行環境へ同じ値を設定します。リポジトリやWeb公開フォルダへ秘密鍵を保存しないでください。
 
-本番API受領後に差し替える項目:
+共有レンタルサーバーなどでWeb用PHPへ環境変数を設定できない場合は、内部側・外部側それぞれのホームディレクトリに `GW/config/internal-env.php` または `GW/config/public-env.php` を置けます。`runtime-config.php` が公開領域外のこのファイルを自動的に読み込みます。別の場所を使う場合は `KPTC_INTERNAL_CONFIG_FILE` または `KPTC_PUBLIC_CONFIG_FILE` で絶対パスを指定します。
 
-- 認証・ログイン
-- グループ／メンバー取得、権限取得
-- 予定の一覧・登録・編集・削除
-- 本人確認を伴う認証
-- 外部システムのユーザー・予定連携
+内部側の `publish-availability-cli.php` を5分間隔で実行すると、障害復旧後に自動再送されます。`monitor-availability-cli.php` は正常時0、再送待ち・連続失敗・30分超の未成功時1、DB等の設定異常時2を返します。外部側の `health-availability.php` は最終受信から30分以内かつ当月を含むJSONならHTTP 200、それ以外は503を返すため、一般的なURL監視から確認できます。systemdのサービス／タイマー例は `deploy/` に同梱しています。
+
+同一サーバー上で内部・外部を模擬する場合も、別の公開ディレクトリとURLへそれぞれ配置し、内部側の送信先を外部側の `receive-availability.php` にします。HTTPしか使えないローカル検証時だけ `KPTC_PUBLIC_AVAILABILITY_ALLOW_HTTP=1` を設定できます。本番では必ずHTTPSを使用してください。
+
+将来、組織の認証基盤が確定した場合に差し替える項目:
+
+- OIDC／LDAP等の組織アカウント認証
+- 組織側のグループ／メンバー／権限連携
 
 ## さくらインターネットへの配置
 
-静的フロントエンドとPHP APIを `/home/apfelrunner/www/GW/` に配置します。内部用SQLiteと公開用JSONは `/home/apfelrunner/GW/` に分けて保存します。
+現行のさくら環境では、内部用を `/home/apfelrunner/www/GW/schedule/`、外部用を `/home/apfelrunner/www/GW/calendar/` へ分けて配置します。公開URLはそれぞれ次のとおりです。
 
-月替わりのJSON更新は、内部サーバーの定期実行へ次の1行を登録します。
+- 内部スケジューラー: `https://apfelrunner.sakura.ne.jp/GW/schedule`
+- 外部向け試験室空き状況: `https://apfelrunner.sakura.ne.jp/GW/calendar`
+
+画面の公開フォルダを同じ `GW` 配下に置いても、内部用SQLiteは `/home/apfelrunner/GW/`、外部用JSONは `/home/apfelrunner/GW-public/` に分離し、外部画面から内部DBを直接参照しません。
+
+再送は、内部サーバーの定期実行へ次の1行を登録します。
 
 ```cron
-5 0 1 * * /usr/local/bin/php /home/apfelrunner/www/GW/publish-availability-cli.php >/dev/null 2>&1
+*/5 * * * * /usr/local/bin/php /home/apfelrunner/www/GW/schedule/publish-availability-cli.php
 ```
 
-試験室空き状況ページは `reservations.html?room=m6`（電波暗室）、`room=m7`（電磁波妨害評価装置(G-TEM)）、`room=m8`（パルスサージシステム）で切り替えます。
+試験室空き状況ページは `/GW/calendar/?room=m6`（電波暗室）、`room=m7`（電磁波妨害評価装置(G-TEM)）、`room=m8`（パルスサージシステム）で切り替えます。`dist-public/index.html` を生成するため、ファイル名なしのディレクトリURLで表示できます。

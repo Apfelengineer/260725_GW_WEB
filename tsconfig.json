@@ -17,6 +17,8 @@
     "app/**/*.ts",
     "app/**/*.tsx",
     "sakura/**/*.tsx",
-    "vite.sakura.config.ts"
+    "vite.sakura.config.ts",
+    "vite.internal.config.ts",
+    "vite.public.config.ts"
   ]
 }

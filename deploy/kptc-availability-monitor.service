@@ -1,0 +1,15 @@
+[Unit]
+Description=Monitor KPTC room availability publication
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+EnvironmentFile=/etc/kptc-scheduler/internal-server.env
+ExecStart=/usr/bin/php /opt/kptc-scheduler/internal/current/monitor-availability-cli.php
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/kptc-scheduler
