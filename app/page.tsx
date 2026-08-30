@@ -28,6 +28,16 @@ type ClipboardState = { mode: "copy" | "cut"; items: ScheduleItem[] };
 type CellTarget = { memberId: string; date: string };
 type ContextMenuState = { scheduleId: string; x: number; y: number };
 type CellContextMenuState = { target: CellTarget; x: number; y: number };
+type PendingMoveState = {
+  scheduleId: string;
+  title: string;
+  target: CellTarget;
+  targetEndDate: string;
+  sourceMemberName: string;
+  targetMemberName: string;
+  sourceDateLabel: string;
+  targetDateLabel: string;
+};
 type ManagementTab = "members" | "categories" | "audit";
 
 // 日付はタイムゾーン境界で前後しないよう、常に正午を基準に計算します。
@@ -202,6 +212,7 @@ export default function Home() {
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [cellContextMenu, setCellContextMenu] = useState<CellContextMenuState | null>(null);
+  const [pendingMove, setPendingMove] = useState<PendingMoveState | null>(null);
   const [toast, setToast] = useState("");
   const [authReady, setAuthReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(true);
@@ -540,17 +551,30 @@ export default function Home() {
     const targetMemberName = members.find((member) => member.id === target.memberId)?.name ?? "削除済みユーザー";
     const sourceDateLabel = source.endDate && source.endDate !== source.date ? `${source.date} ～ ${source.endDate}` : source.date;
     const targetDateLabel = targetEndDate !== target.date ? `${target.date} ～ ${targetEndDate}` : target.date;
-    const confirmed = window.confirm(`「${source.title}」を移動しますか？\n\n移動元：${sourceMemberName}／${sourceDateLabel}\n移動先：${targetMemberName}／${targetDateLabel}`);
-    if (!confirmed) {
-      setToast("予定の移動をキャンセルしました");
+    setPendingMove({ scheduleId: id, title: source.title, target, targetEndDate, sourceMemberName, targetMemberName, sourceDateLabel, targetDateLabel });
+  }
+
+  function confirmScheduleMove() {
+    if (!pendingMove || !canEditSchedule) return;
+    const source = schedules.find((item) => item.id === pendingMove.scheduleId);
+    if (!source) {
+      setPendingMove(null);
+      setToast("移動する予定が見つかりません");
       return;
     }
+    const { scheduleId, target, targetEndDate } = pendingMove;
     markMutation("予定移動", `${source.title}を${target.date}へ移動`);
-    setSchedules((items) => items.map((item) => item.id === id ? { ...item, memberId: target.memberId, date: target.date, endDate: targetEndDate } : item));
-    setSelectedScheduleIds([id]);
+    setSchedules((items) => items.map((item) => item.id === scheduleId ? { ...item, memberId: target.memberId, date: target.date, endDate: targetEndDate } : item));
+    setSelectedScheduleIds([scheduleId]);
     setSelectedCell(target);
-    setClipboard((value) => value?.mode === "cut" && value.items.some((item) => item.id === id) ? null : value);
+    setClipboard((value) => value?.mode === "cut" && value.items.some((item) => item.id === scheduleId) ? null : value);
+    setPendingMove(null);
     setToast("予定を移動しました");
+  }
+
+  function cancelScheduleMove() {
+    setPendingMove(null);
+    setToast("予定の移動をキャンセルしました");
   }
 
   useEffect(() => {
@@ -563,10 +587,11 @@ export default function Home() {
         setCategoryEditor(null);
         setContextMenu(null);
         setCellContextMenu(null);
+        setPendingMove(null);
         setSelectedScheduleIds([]);
         return;
       }
-      if (section !== "schedule" || scheduleEditor || !canEditSchedule) return;
+      if (section !== "schedule" || scheduleEditor || pendingMove || !canEditSchedule) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c" && selectedScheduleIds.length) {
         event.preventDefault();
         copySchedules();
@@ -585,7 +610,7 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKeyDown);
   // クリップボード操作関数は最新の予定一覧と選択状態を参照するため、関連状態を依存に含めています。
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canEditSchedule, clipboard, scheduleEditor, schedules, section, selectedCell, selectedSchedule, selectedScheduleIds]);
+  }, [canEditSchedule, clipboard, pendingMove, scheduleEditor, schedules, section, selectedCell, selectedSchedule, selectedScheduleIds]);
 
   async function saveMember(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -825,6 +850,7 @@ export default function Home() {
         {canManageUsers && <button className={section === "members" ? "active" : ""} onClick={() => setSection("members")}><SectionIcon symbol="◎" /><span>設定</span></button>}
       </nav>
 
+      {pendingMove && <MoveConfirmationModal move={pendingMove} onCancel={cancelScheduleMove} onConfirm={confirmScheduleMove} />}
       {scheduleEditor && canEditSchedule && <ScheduleModal editor={scheduleEditor} members={members} categories={categories} onClose={() => setScheduleEditor(null)} onSubmit={saveSchedule} onDelete={scheduleEditor.mode === "edit" ? () => deleteSchedules([scheduleEditor.item.id]) : undefined} />}
       {memberEditor && canManageUsers && <MemberModal member={memberEditor === "new" ? null : memberEditor} account={memberEditor === "new" ? null : authAccounts.find((item) => item.memberId === memberEditor.id) ?? null} onClose={() => setMemberEditor(null)} onSubmit={saveMember} />}
       {categoryEditor && <CategoryModal category={categoryEditor === "new" ? null : categoryEditor} onClose={() => setCategoryEditor(null)} onSubmit={saveCategory} />}
@@ -1084,6 +1110,21 @@ function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs
 
 function ModalShell({ title, eyebrow, onClose, children }: { title: string; eyebrow: string; onClose: () => void; children: React.ReactNode }) {
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="modal" role="dialog" aria-modal="true" aria-label={title}><header><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div><button onClick={onClose} aria-label="閉じる">×</button></header>{children}</section></div>;
+}
+
+function MoveConfirmationModal({ move, onCancel, onConfirm }: { move: PendingMoveState; onCancel: () => void; onConfirm: () => void }) {
+  return (
+    <ModalShell title="予定の移動確認" eyebrow="CONFIRM MOVE" onClose={onCancel}>
+      <div className="move-confirmation">
+        <p><b>「{move.title}」</b>を移動しますか？</p>
+        <dl>
+          <div><dt>移動元</dt><dd><b>{move.sourceMemberName}</b><span>{move.sourceDateLabel}</span></dd></div>
+          <div><dt>移動先</dt><dd><b>{move.targetMemberName}</b><span>{move.targetDateLabel}</span></dd></div>
+        </dl>
+        <footer><button type="button" className="secondary-button" onClick={onCancel}>キャンセル</button><button type="button" className="primary-button" onClick={onConfirm}>移動する</button></footer>
+      </div>
+    </ModalShell>
+  );
 }
 
 function ScheduleModal({ editor, members, categories, onClose, onSubmit, onDelete }: { editor: EditorState; members: Member[]; categories: ScheduleCategory[]; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onDelete?: () => void }) {

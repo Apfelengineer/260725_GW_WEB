@@ -34,9 +34,15 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /onDoubleClick/);
   assert.match(page, /onDrop/);
   const dragMoveFunction = page.slice(page.indexOf("function moveSchedule"), page.indexOf("useEffect", page.indexOf("function moveSchedule")));
-  assert.match(dragMoveFunction, /window\.confirm\(`「\$\{source\.title\}」を移動しますか？/);
+  assert.match(dragMoveFunction, /setPendingMove/);
+  assert.match(dragMoveFunction, /function confirmScheduleMove/);
   assert.match(dragMoveFunction, /予定の移動をキャンセルしました/);
-  assert.ok(dragMoveFunction.indexOf("window.confirm") < dragMoveFunction.indexOf('markMutation("予定移動"'));
+  assert.doesNotMatch(dragMoveFunction, /window\.confirm/);
+  assert.match(page, /function MoveConfirmationModal/);
+  assert.match(page, /予定の移動確認/);
+  assert.match(page, /<dt>移動元<\/dt>/);
+  assert.match(page, /<dt>移動先<\/dt>/);
+  assert.match(page, />移動する<\/button>/);
   assert.match(page, /予定種別を追加/);
   assert.match(page, /LoginScreen/);
   assert.match(page, /autoComplete="username"/);
