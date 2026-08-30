@@ -231,6 +231,7 @@ export default function Home() {
   const lastSyncedRef = useRef("");
   const mutationRef = useRef({ action: "更新", summary: "共有データを更新" });
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const pointerDragRef = useRef<{ scheduleId: string; startX: number; startY: number } | null>(null);
 
   function applySharedState(state: SharedState) {
     setMembers(state.members);
@@ -577,6 +578,33 @@ export default function Home() {
     setToast("予定の移動をキャンセルしました");
   }
 
+  function beginPointerScheduleDrag(scheduleId: string, event: React.PointerEvent<HTMLElement>) {
+    if (!canEditSchedule || event.button !== 0) return;
+    pointerDragRef.current = { scheduleId, startX: event.clientX, startY: event.clientY };
+  }
+
+  useEffect(() => {
+    // 標準ドラッグが安定しないMac系ブラウザーでも、ポインターの移動先セルから予定移動を開始します。
+    const onPointerUp = (event: PointerEvent) => {
+      const drag = pointerDragRef.current;
+      pointerDragRef.current = null;
+      if (!drag || Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 8) return;
+      const targetElement = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-schedule-drop-cell='true']");
+      const memberId = targetElement?.dataset.memberId;
+      const date = targetElement?.dataset.date;
+      if (memberId && date) moveSchedule(drag.scheduleId, { memberId, date });
+    };
+    const cancelPointerDrag = () => { pointerDragRef.current = null; };
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", cancelPointerDrag);
+    return () => {
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", cancelPointerDrag);
+    };
+    // 移動元・移動先の表示名を常に最新状態から取得します。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canEditSchedule, members, schedules]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -817,6 +845,7 @@ export default function Home() {
             onEditSchedule={(item) => setScheduleEditor({ mode: "edit", item })}
             onCreateSchedule={openCreateSchedule}
             onMoveSchedule={moveSchedule}
+            onPointerDragStart={beginPointerScheduleDrag}
             onContextMenu={openContextMenu}
             onCellContextMenu={openCellContextMenu}
           />
@@ -886,6 +915,7 @@ type CalendarInteractionProps = {
   onEditSchedule: (item: ScheduleItem) => void;
   onCreateSchedule: (target: CellTarget) => void;
   onMoveSchedule: (id: string, target: CellTarget) => void;
+  onPointerDragStart: (id: string, event: React.PointerEvent<HTMLElement>) => void;
   onContextMenu: (event: React.MouseEvent, item: ScheduleItem) => void;
   onCellContextMenu: (event: React.MouseEvent, target: CellTarget) => void;
 };
@@ -938,7 +968,7 @@ function SchedulePage({ view, setView, calendarDate, onPrevious, onNext, onToday
   );
 }
 
-function ScheduleEventButton({ item, categories, selected, cutting, editable, compact = false, onSelect, onEdit, onContextMenu }: {
+function ScheduleEventButton({ item, categories, selected, cutting, editable, compact = false, onSelect, onEdit, onPointerDragStart, onContextMenu }: {
   item: ScheduleItem;
   categories: ScheduleCategory[];
   selected: boolean;
@@ -947,6 +977,7 @@ function ScheduleEventButton({ item, categories, selected, cutting, editable, co
   compact?: boolean;
   onSelect: (item: ScheduleItem, additive?: boolean) => void;
   onEdit: (item: ScheduleItem) => void;
+  onPointerDragStart: (id: string, event: React.PointerEvent<HTMLElement>) => void;
   onContextMenu: (event: React.MouseEvent, item: ScheduleItem) => void;
 }) {
   return (
@@ -957,6 +988,7 @@ function ScheduleEventButton({ item, categories, selected, cutting, editable, co
       style={categoryStyle(item.category, categories)}
       aria-pressed={selected}
       draggable={editable}
+      onPointerDown={(event) => onPointerDragStart(item.id, event)}
       onDragStart={(event) => { if (!editable) { event.preventDefault(); return; } event.dataTransfer.setData("text/group-watcher-schedule", item.id); event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; if (!selected) onSelect(item); }}
       onClick={(event) => { event.stopPropagation(); onSelect(item, event.shiftKey); }}
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(item, event.shiftKey); } }}
@@ -982,6 +1014,9 @@ function DropCell({ target, selected, editable, className, onSelectCell, onCreat
 }) {
   return (
     <div
+      data-schedule-drop-cell="true"
+      data-member-id={target.memberId}
+      data-date={target.date}
       className={`${className} ${selected ? "selected-cell" : ""}`}
       onClick={() => onSelectCell(target)}
       onDoubleClick={(event) => {
@@ -994,7 +1029,7 @@ function DropCell({ target, selected, editable, className, onSelectCell, onCreat
   );
 }
 
-function WeekGrid({ calendarDate, members, schedules, categories, editable, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
+function WeekGrid({ calendarDate, members, schedules, categories, editable, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onPointerDragStart, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
   const dates = weekDates(calendarDate);
   const today = dateAtNoon(new Date());
   return (
@@ -1014,7 +1049,7 @@ function WeekGrid({ calendarDate, members, schedules, categories, editable, sele
               const items = schedules.filter((item) => item.memberId === member.id && scheduleOccursOn(item, key)).sort((a, b) => a.start.localeCompare(b.start));
               return (
                 <DropCell key={key} target={target} editable={editable} selected={selectedCell?.memberId === member.id && selectedCell.date === key} className={`schedule-cell ${sameDate(date, today) ? "is-today" : ""} ${date.getDay() === 0 || date.getDay() === 6 ? "weekend" : ""} ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
-                  {items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} editable={editable} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />)}
+                  {items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} editable={editable} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onPointerDragStart={onPointerDragStart} onContextMenu={onContextMenu} />)}
                 </DropCell>
               );
             })}
@@ -1025,7 +1060,7 @@ function WeekGrid({ calendarDate, members, schedules, categories, editable, sele
   );
 }
 
-function DayView({ calendarDate, members, schedules, categories, editable, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
+function DayView({ calendarDate, members, schedules, categories, editable, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onPointerDragStart, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
   const key = dateKey(calendarDate);
   const holiday = japaneseHolidays.find((item) => item.date === key);
   return (
@@ -1038,7 +1073,7 @@ function DayView({ calendarDate, members, schedules, categories, editable, selec
           <div className="day-member" key={member.id}>
             <div className="day-member-profile"><Avatar member={member} small /><span><b>{member.name}</b><small>{member.group}</small></span></div>
             <DropCell target={target} editable={editable} selected={selectedCell?.memberId === member.id && selectedCell.date === key} className={`day-events ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
-              {items.length ? items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} editable={editable} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />) : <span className="no-plan">予定はありません</span>}
+              {items.length ? items.map((item) => <ScheduleEventButton key={item.id} item={item} categories={categories} editable={editable} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onPointerDragStart={onPointerDragStart} onContextMenu={onContextMenu} />) : <span className="no-plan">予定はありません</span>}
             </DropCell>
           </div>
         );
@@ -1047,7 +1082,7 @@ function DayView({ calendarDate, members, schedules, categories, editable, selec
   );
 }
 
-function MonthView({ calendarDate, members, schedules, categories, editable, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
+function MonthView({ calendarDate, members, schedules, categories, editable, selectedScheduleIds, cutScheduleIds, selectedCell, onSelectCell, onSelectSchedule, onEditSchedule, onCreateSchedule, onMoveSchedule, onPointerDragStart, onContextMenu, onCellContextMenu }: CalendarInteractionProps & { calendarDate: Date }) {
   const dates = monthGridDates(calendarDate);
   const today = dateAtNoon(new Date());
   const visibleMemberIds = new Set(members.map((member) => member.id));
@@ -1066,7 +1101,7 @@ function MonthView({ calendarDate, members, schedules, categories, editable, sel
             <DropCell key={key} target={target} editable={editable} selected={selectedCell?.date === key} className={`month-day ${!inMonth ? "outside" : ""} ${sameDate(date, today) ? "today" : ""} ${date.getDay() === 0 || date.getDay() === 6 ? "weekend" : ""} ${holiday ? "holiday" : ""}`} onSelectCell={onSelectCell} onCreateSchedule={onCreateSchedule} onMoveSchedule={onMoveSchedule} onCellContextMenu={onCellContextMenu}>
               <b>{date.getDate()}</b>
               {holiday && <small className="holiday-name">{holiday.name}</small>}
-              {items.slice(0, 4).map((item) => <ScheduleEventButton compact key={item.id} item={item} categories={categories} editable={editable} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onContextMenu={onContextMenu} />)}
+              {items.slice(0, 4).map((item) => <ScheduleEventButton compact key={item.id} item={item} categories={categories} editable={editable} selected={selectedScheduleIds.includes(item.id)} cutting={cutScheduleIds.includes(item.id)} onSelect={onSelectSchedule} onEdit={onEditSchedule} onPointerDragStart={onPointerDragStart} onContextMenu={onContextMenu} />)}
               {items.length > 4 && <span className="more-events">ほか {items.length - 4}件</span>}
             </DropCell>
           );

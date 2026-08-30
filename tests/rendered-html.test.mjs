@@ -34,6 +34,9 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /onDoubleClick/);
   assert.match(page, /onDrop/);
   assert.match(page, /role="button"[\s\S]*tabIndex=\{0\}[\s\S]*draggable=\{editable\}/);
+  assert.match(page, /data-schedule-drop-cell="true"/);
+  assert.match(page, /function beginPointerScheduleDrag/);
+  assert.match(page, /window\.addEventListener\("pointerup", onPointerUp\)/);
   const dragMoveFunction = page.slice(page.indexOf("function moveSchedule"), page.indexOf("useEffect", page.indexOf("function moveSchedule")));
   assert.match(dragMoveFunction, /setPendingMove/);
   assert.match(dragMoveFunction, /function confirmScheduleMove/);
