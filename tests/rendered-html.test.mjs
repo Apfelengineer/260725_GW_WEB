@@ -33,6 +33,7 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /Shift<\/kbd>＋クリックで複数選択/);
   assert.match(page, /onDoubleClick/);
   assert.match(page, /onDrop/);
+  assert.match(page, /role="button"[\s\S]*tabIndex=\{0\}[\s\S]*draggable=\{editable\}/);
   const dragMoveFunction = page.slice(page.indexOf("function moveSchedule"), page.indexOf("useEffect", page.indexOf("function moveSchedule")));
   assert.match(dragMoveFunction, /setPendingMove/);
   assert.match(dragMoveFunction, /function confirmScheduleMove/);

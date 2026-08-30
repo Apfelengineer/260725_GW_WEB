@@ -950,19 +950,22 @@ function ScheduleEventButton({ item, categories, selected, cutting, editable, co
   onContextMenu: (event: React.MouseEvent, item: ScheduleItem) => void;
 }) {
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       className={`${compact ? "month-event" : "schedule-event"} ${selected ? "selected" : ""} ${cutting ? "cutting" : ""}`}
       style={categoryStyle(item.category, categories)}
       aria-pressed={selected}
       draggable={editable}
       onDragStart={(event) => { if (!editable) { event.preventDefault(); return; } event.dataTransfer.setData("text/group-watcher-schedule", item.id); event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.effectAllowed = "move"; if (!selected) onSelect(item); }}
       onClick={(event) => { event.stopPropagation(); onSelect(item, event.shiftKey); }}
+      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(item, event.shiftKey); } }}
       onDoubleClick={(event) => { if (editable) { event.stopPropagation(); onEdit(item); } }}
       onContextMenu={(event) => { if (editable) onContextMenu(event, item); }}
       title={`${item.timePreset === "all-day" ? "終日" : `${item.start}–${item.end}`} ${item.title}${editable ? "（ダブルクリックで編集）" : ""}`}
     >
       {compact ? <><i />{scheduleTimeLabel(item)} {item.private ? "【非】" : ""}{item.title}</> : <><time>{scheduleTimeLabel(item)}{item.endDate && item.endDate !== item.date ? "・複数日" : ""}</time><strong>{item.private ? "【非】" : ""}{item.title}</strong>{item.memo && <span className="memo-mark">◆</span>}</>}
-    </button>
+    </div>
   );
 }
 

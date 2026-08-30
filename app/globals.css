@@ -239,7 +239,7 @@ button, select { cursor: pointer; }
 .month-days { display: grid; grid-template-columns: repeat(7,1fr); }
 .month-days > div { min-height: 105px; padding: 7px; overflow: hidden; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }.month-days > div:nth-child(7n) { border-right: 0; }.month-days > div:nth-last-child(-n+7) { border-bottom: 0; }
 .month-days > div > b { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 7px; font-size: 9px; }.month-days > div.today > b { color: #fff; background: var(--teal); }.month-days > div.outside { background: #fafbfc; }
-.month-days button { display: flex; width: 100%; align-items: center; gap: 4px; margin-top: 4px; padding: 4px 5px; overflow: hidden; border: 0; border-left: 2px solid var(--event-color,#668fb8); border-radius: 4px; background: var(--event-bg,#f2f5f7); font-size: 7px; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: grab; }.month-days button i { width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%; background: var(--event-color,#668fb8); }
+.month-days .month-event { display: flex; width: 100%; align-items: center; gap: 4px; margin-top: 4px; padding: 4px 5px; overflow: hidden; border: 0; border-left: 2px solid var(--event-color,#668fb8); border-radius: 4px; background: var(--event-bg,#f2f5f7); font-size: 7px; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: grab; }.month-days .month-event i { width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%; background: var(--event-color,#668fb8); }
 .month-days > div:nth-child(7n+6) > b { color: #4f7caf; }
 .month-days > div:nth-child(7n) > b { color: #d36b52; }
 .month-days > div.weekend { background-color: #fcfcfd; }
