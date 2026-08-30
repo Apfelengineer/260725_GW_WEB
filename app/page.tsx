@@ -149,16 +149,15 @@ function EmptyState({ children }: { children: React.ReactNode }) {
   return <div className="empty-state"><span aria-hidden="true">○</span><p>{children}</p></div>;
 }
 
-function LoginScreen({ serverAvailable, setupRequired, loginUsers, onLogin, onGuestLogin }: { serverAvailable: boolean; setupRequired: boolean; loginUsers: LoginUser[]; onLogin: (username: string, password: string) => Promise<void>; onGuestLogin: () => Promise<void> }) {
+function LoginScreen({ serverAvailable, setupRequired, loginUsers, onLogin, onGuestLogin }: { serverAvailable: boolean; setupRequired: boolean; loginUsers: LoginUser[]; onLogin: (username: string) => Promise<void>; onGuestLogin: () => Promise<void> }) {
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setError("");
-    try { await onLogin(username, password); }
+    try { await onLogin(username); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "ログインできませんでした"); }
     finally { setSubmitting(false); }
   }
@@ -173,13 +172,12 @@ function LoginScreen({ serverAvailable, setupRequired, loginUsers, onLogin, onGu
     <main className="auth-screen">
       <form className="login-card" onSubmit={submit}>
         <Logo />
-        <div><span className="eyebrow">SECURE SIGN IN</span><h1>KPTC Schedulerへログイン</h1><p>管理者または一般ユーザーを選択してログインしてください。</p></div>
+        <div><span className="eyebrow">USER SELECTION</span><h1>KPTC Schedulerへログイン</h1><p>社内システムで認証済みのため、利用するユーザーを選択してください。</p></div>
         <label className="field"><span>ユーザー</span><select autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required><option value="" disabled>ユーザーを選択</option>{loginUsers.map((user) => <option value={user.username} key={user.username}>{user.name}（{user.role === "admin" ? "管理者" : "一般"}）</option>)}</select></label>
-        <label className="field"><span>パスワード</span><input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
         {error && <p className="login-error" role="alert">{error}</p>}
-        <button className="primary-button" type="submit" disabled={!serverAvailable || !username || submitting}>{submitting ? "ログイン中…" : "ログイン"}</button>
+        <button className="primary-button" type="submit" disabled={!serverAvailable || !username || submitting}>{submitting ? "ログイン中…" : "選択したユーザーでログイン"}</button>
         <button className="secondary-button guest-login-button" type="button" disabled={!serverAvailable || submitting} onClick={guestLogin}>ゲストとしてログイン</button>
-        <small>{!serverAvailable ? "内部サーバーへ接続できません。管理者へお問い合わせください。" : setupRequired ? "初期アカウントが未設定です。管理用コマンドで管理者を作成してください。" : "通信とセッションはサーバー側で安全に管理されます。"}</small>
+        <small>{!serverAvailable ? "内部サーバーへ接続できません。管理者へお問い合わせください。" : setupRequired ? "初期アカウントが未設定です。管理用コマンドで管理者を作成してください。" : "権限とセッションはサーバー側で管理されます。"}</small>
       </form>
     </main>
   );
@@ -332,9 +330,9 @@ export default function Home() {
   const selectedSchedules = selectedScheduleIds.map((id) => schedules.find((item) => item.id === id)).filter((item): item is ScheduleItem => Boolean(item));
   const selectedSchedule = selectedSchedules.length === 1 ? selectedSchedules[0] : null;
 
-  async function login(username: string, password: string) {
+  async function login(username: string) {
     if (!serverAvailable) throw new Error("内部サーバーへ接続できません");
-    const payload = await groupWatcherApi.login(username, password);
+    const payload = await groupWatcherApi.login(username);
     applyServerPayload(payload);
     setToast(`${payload.state.members.find((member) => member.id === payload.currentUserId)?.name ?? "ユーザー"}としてログインしました`);
   }
@@ -536,8 +534,19 @@ export default function Home() {
     const source = schedules.find((item) => item.id === id);
     if (!source) return;
     const duration = Math.max(0, daysBetween(source.date, source.endDate || source.date));
+    const targetEndDate = dateKey(addDays(new Date(`${target.date}T12:00:00`), duration));
+    if (source.memberId === target.memberId && source.date === target.date) return;
+    const sourceMemberName = members.find((member) => member.id === source.memberId)?.name ?? "削除済みユーザー";
+    const targetMemberName = members.find((member) => member.id === target.memberId)?.name ?? "削除済みユーザー";
+    const sourceDateLabel = source.endDate && source.endDate !== source.date ? `${source.date} ～ ${source.endDate}` : source.date;
+    const targetDateLabel = targetEndDate !== target.date ? `${target.date} ～ ${targetEndDate}` : target.date;
+    const confirmed = window.confirm(`「${source.title}」を移動しますか？\n\n移動元：${sourceMemberName}／${sourceDateLabel}\n移動先：${targetMemberName}／${targetDateLabel}`);
+    if (!confirmed) {
+      setToast("予定の移動をキャンセルしました");
+      return;
+    }
     markMutation("予定移動", `${source.title}を${target.date}へ移動`);
-    setSchedules((items) => items.map((item) => item.id === id ? { ...item, memberId: target.memberId, date: target.date, endDate: dateKey(addDays(new Date(`${target.date}T12:00:00`), duration)) } : item));
+    setSchedules((items) => items.map((item) => item.id === id ? { ...item, memberId: target.memberId, date: target.date, endDate: targetEndDate } : item));
     setSelectedScheduleIds([id]);
     setSelectedCell(target);
     setClipboard((value) => value?.mode === "cut" && value.items.some((item) => item.id === id) ? null : value);
@@ -593,10 +602,6 @@ export default function Home() {
       color: String(form.get("color")),
       extension: String(form.get("extension") ?? ""),
     };
-    const password = String(form.get("password") ?? "");
-    const existingAccount = existing ? authAccounts.find((account) => account.memberId === existing.id) : undefined;
-    const changePassword = !existingAccount || form.get("changePassword") === "on";
-    if (changePassword && password !== String(form.get("passwordConfirmation") ?? "")) { setToast("確認用パスワードが一致しません"); return; }
     await saveQueueRef.current;
     try {
       const payload = await groupWatcherApi.saveMemberAccount({
@@ -605,8 +610,6 @@ export default function Home() {
         member,
         username: String(form.get("accountId") ?? "").trim(),
         role: String(form.get("role") ?? "user") as AuthRole,
-        password,
-        changePassword,
       }, csrfToken);
       applyServerPayload(payload);
       setMemberEditor(null);
@@ -630,7 +633,7 @@ export default function Home() {
     await saveQueueRef.current;
     try {
       const account = authAccounts.find((item) => item.memberId === member.id);
-      const payload = await groupWatcherApi.saveMemberAccount({ operation: "delete", version: versionRef.current, member, username: account?.username ?? "", role: account?.role ?? "room", password: "", changePassword: false }, csrfToken);
+      const payload = await groupWatcherApi.saveMemberAccount({ operation: "delete", version: versionRef.current, member, username: account?.username ?? "", role: account?.role ?? "room" }, csrfToken);
       applyServerPayload(payload);
       if (selectedCell?.memberId === member.id) setSelectedCell(null);
       setToast("ユーザーと関連予定を削除しました");
@@ -1118,8 +1121,6 @@ function ScheduleModal({ editor, members, categories, onClose, onSubmit, onDelet
 function MemberModal({ member, account, onClose, onSubmit }: { member: Member | null; account: AuthAccount | null; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   const [role, setRole] = useState<AuthRole>(account?.role ?? (member?.group === "試験室" ? "room" : "user"));
   const [username, setUsername] = useState<string | null>(null);
-  const [password, setPassword] = useState("");
-  const [changePassword, setChangePassword] = useState(!account);
   return (
     <ModalShell title={member ? "ユーザーを編集" : "ユーザーを追加"} eyebrow="USER MANAGEMENT" onClose={onClose}>
       <form onSubmit={onSubmit} className="modal-form">
@@ -1130,9 +1131,6 @@ function MemberModal({ member, account, onClose, onSubmit }: { member: Member | 
         <label className="field"><span>内線</span><input name="extension" type="text" inputMode="tel" defaultValue={member?.extension ?? ""} /></label>
         <label className="field full"><span>権限</span><select name="role" value={role} onChange={(event) => setRole(event.target.value as AuthRole)}><option value="admin">管理者</option><option value="user">一般</option><option value="room">試験室（閲覧のみ）</option></select><small className="field-note">管理者はユーザー管理可、一般は予定編集可、試験室は閲覧のみです</small></label>
         <label className="field full"><span>アカウントID</span><input name="accountId" minLength={3} maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._@-]{2,63}" autoCapitalize="none" autoComplete="off" value={username ?? account?.username ?? ""} onChange={(event) => setUsername(event.target.value)} required={role !== "room"} /><small className="field-note">試験室権限でログイン不要の場合だけ空欄にできます</small></label>
-        {account && <label className="check-field full"><input name="changePassword" type="checkbox" checked={changePassword} onChange={(event) => setChangePassword(event.target.checked)} /><span><b>パスワードを変更する</b><small>チェックしない場合は現在のパスワードを維持します</small></span></label>}
-        <label className="field full"><span>{account ? "新しいパスワード" : "パスワード"}</span><input name="password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={!changePassword} /><small className="field-note">文字数制限はありません。空欄（パスワードなし）も設定できます</small></label>
-        <label className="field full"><span>パスワード（確認）</span><input name="passwordConfirmation" type="password" autoComplete="new-password" disabled={!changePassword} /></label>
         <footer><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button className="primary-button" type="submit">{member ? "変更を保存" : "ユーザーを追加"}</button></footer>
       </form>
     </ModalShell>

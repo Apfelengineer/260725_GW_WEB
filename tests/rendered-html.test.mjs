@@ -33,11 +33,16 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /Shift<\/kbd>＋クリックで複数選択/);
   assert.match(page, /onDoubleClick/);
   assert.match(page, /onDrop/);
+  const dragMoveFunction = page.slice(page.indexOf("function moveSchedule"), page.indexOf("useEffect", page.indexOf("function moveSchedule")));
+  assert.match(dragMoveFunction, /window\.confirm\(`「\$\{source\.title\}」を移動しますか？/);
+  assert.match(dragMoveFunction, /予定の移動をキャンセルしました/);
+  assert.ok(dragMoveFunction.indexOf("window.confirm") < dragMoveFunction.indexOf('markMutation("予定移動"'));
   assert.match(page, /予定種別を追加/);
   assert.match(page, /LoginScreen/);
   assert.match(page, /autoComplete="username"/);
-  assert.match(page, /autoComplete="current-password"/);
-  assert.doesNotMatch(page, /利用者を選択してログイン|デモ認証/);
+  assert.doesNotMatch(page, /autoComplete="current-password"|type="password"/);
+  assert.match(page, /社内システムで認証済み/);
+  assert.doesNotMatch(page, /デモ認証/);
   assert.match(page, /新規予定作成/);
   assert.match(page, /name="endDate"/);
   assert.match(page, /name="timePreset"/);
@@ -209,7 +214,7 @@ test("試験室3室の空き状況ページと署名付きJSON連携を提供す
   await access(new URL("public/technology-center-logo-white.png", root));
 });
 
-test("認証情報を予定データから分離して正式ログインを提供する", async () => {
+test("社内システム配下でパスワード不要のユーザー選択ログインを提供する", async () => {
   const [api, auth, client, manager, page] = await Promise.all([
     readFile(new URL("public/api.php", root), "utf8"),
     readFile(new URL("public/auth.php", root), "utf8"),
@@ -220,14 +225,13 @@ test("認証情報を予定データから分離して正式ログインを提�
   const loginSection = api.slice(api.indexOf("if ($action === 'login')"), api.indexOf("if ($action === 'logout')"));
   const accountListSection = auth.slice(auth.indexOf("function kptc_auth_account_list"), auth.indexOf("function kptc_auth_enabled_admin_count"));
   assert.match(api, /authenticated'=>false/);
-  assert.match(api, /kptc_auth_verify/);
+  assert.match(api, /kptc_auth_select_user/);
   assert.match(api, /session_regenerate_id\(true\)/);
-  assert.doesNotMatch(loginSection, /デモ版へログイン|\$input\['memberId'\]/);
+  assert.doesNotMatch(loginSection, /デモ版へログイン|\$input\['memberId'\]|\$input\['password'\]|kptc_auth_verify/);
   assert.match(auth, /CREATE TABLE IF NOT EXISTS auth_users/);
   assert.match(auth, /password_hash/);
-  assert.match(auth, /password_verify/);
-  assert.match(auth, /auth_login_attempts/);
-  assert.match(auth, />= 5/);
+  assert.match(auth, /kptc_auth_placeholder_hash/);
+  assert.doesNotMatch(auth, /password_verify|auth_login_attempts/);
   assert.match(api, /require_admin\(\)/);
   assert.match(api, /KPTC_PUBLIC_AVAILABILITY_PAGE_URL/);
   assert.match(api, /最後の管理者を変更できません/);
@@ -236,15 +240,8 @@ test("認証情報を予定データから分離して正式ログインを提�
   assert.match(page, /<select autoComplete="username"/);
   assert.match(page, /試験室（閲覧のみ）/);
   assert.match(page, /name="accountId"/);
-  assert.match(page, /name="password"/);
-  assert.match(page, /name="changePassword"/);
-  assert.match(page, /文字数制限はありません。空欄（パスワードなし）も設定できます/);
-  assert.doesNotMatch(page, /name="password"[^>]*minLength|name="password"[^>]*maxLength/);
-  assert.doesNotMatch(auth, /パスワードは12〜256文字/);
-  assert.match(auth, /kptc_auth_password_material/);
-  assert.match(auth, /hash\('sha512', \$password\)/);
-  assert.match(api, /\$changePassword/);
-  assert.doesNotMatch(loginSection, /strlen\(\$password\)/);
+  assert.doesNotMatch(page, /name="password"|name="changePassword"|パスワード（確認）/);
+  assert.doesNotMatch(api, /\$changePassword|\$input\['password'\]/);
   assert.doesNotMatch(page, /AuthAccountModal|tab === "accounts"/);
   assert.match(page, /currentRole === "admin"/);
   assert.match(page, /canEditSchedule/);
@@ -253,8 +250,9 @@ test("認証情報を予定データから分離して正式ログインを提�
   assert.match(api, /一般ユーザーはユーザー・予定種別を変更できません/);
   assert.match(auth, /'admin','user','room'/);
   assert.match(auth, /role IN \('admin','user'\)/);
-  assert.match(client, /JSON\.stringify\(\{ username, password \}\)/);
-  assert.match(manager, /--password-stdin/);
+  assert.match(client, /JSON\.stringify\(\{ username \}\)/);
+  assert.doesNotMatch(client, /JSON\.stringify\(\{ username, password \}\)/);
+  assert.doesNotMatch(manager, /--password-stdin|command === 'password'/);
   assert.doesNotMatch(manager, /SELECT \*/);
 });
 

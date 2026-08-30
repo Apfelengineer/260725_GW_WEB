@@ -138,8 +138,8 @@ export const groupWatcherApi = {
   bootstrap() {
     return this.request<BootstrapResponse>("bootstrap");
   },
-  login(username: string, password: string) {
-    return this.request<AuthenticatedBootstrapResponse>("login", { method: "POST", body: JSON.stringify({ username, password }) });
+  login(username: string) {
+    return this.request<AuthenticatedBootstrapResponse>("login", { method: "POST", body: JSON.stringify({ username }) });
   },
   guestLogin() {
     return this.request<AuthenticatedBootstrapResponse>("guest-login", { method: "POST", body: "{}" });
@@ -153,7 +153,7 @@ export const groupWatcherApi = {
   undo(auditId: number, version: number, csrfToken: string) {
     return this.request<AuthenticatedBootstrapResponse>("undo", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ auditId, version }) });
   },
-  saveMemberAccount(input: { operation: "save" | "delete"; version: number; member: Member; username: string; role: AuthRole; password: string; changePassword: boolean }, csrfToken: string) {
+  saveMemberAccount(input: { operation: "save" | "delete"; version: number; member: Member; username: string; role: AuthRole }, csrfToken: string) {
     return this.request<AuthenticatedBootstrapResponse>("member-account", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify(input) });
   },
 };

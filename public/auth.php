@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-/* 内部サーバー専用。認証情報を予定データから分離してSQLiteへ保存します。 */
+/* 内部サーバー専用。ユーザーと権限を予定データから分離してSQLiteへ保存します。 */
 
 function kptc_auth_create_tables(PDO $pdo): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS auth_users (
@@ -40,12 +40,6 @@ function kptc_auth_create_tables(PDO $pdo): void {
     $columns = $pdo->query('PRAGMA table_info(auth_users)')->fetchAll(PDO::FETCH_COLUMN, 1);
     if (!in_array('auth_revision', $columns, true)) $pdo->exec('ALTER TABLE auth_users ADD COLUMN auth_revision INTEGER NOT NULL DEFAULT 1');
     $pdo->exec('CREATE INDEX IF NOT EXISTS auth_users_member_id_idx ON auth_users(member_id)');
-    $pdo->exec("CREATE TABLE IF NOT EXISTS auth_login_attempts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        attempt_key TEXT NOT NULL,
-        attempted_at INTEGER NOT NULL
-    )");
-    $pdo->exec('CREATE INDEX IF NOT EXISTS auth_login_attempts_key_time_idx ON auth_login_attempts(attempt_key, attempted_at)');
 }
 
 function kptc_auth_normalize_username(string $username): string {
@@ -56,37 +50,12 @@ function kptc_auth_validate_username(string $username): void {
     if (!preg_match('/^[a-z0-9][a-z0-9._@-]{2,63}$/', $username)) throw new InvalidArgumentException('ユーザー名は3〜64文字の半角英数字・._@-で指定してください');
 }
 
-function kptc_auth_password_material(string $password): string {
-    // bcrypt環境でも長い入力が途中で切られないよう、固定長へ変換してから適応的ハッシュへ渡します。
-    return 'kptc-sha512:' . hash('sha512', $password);
-}
-
-function kptc_auth_password_hash(string $password): string {
-    // 空文字を含む任意長のパスワードを、平文ではなく常にハッシュで保存します。
+function kptc_auth_placeholder_hash(): string {
+    // 旧DBとの互換性のため必須列を維持し、ログインには使用しないランダム値を保存します。
     $algorithm = defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT;
-    $hash = password_hash(kptc_auth_password_material($password), $algorithm);
-    if (!is_string($hash)) throw new RuntimeException('パスワードを安全に保存できません');
+    $hash = password_hash(bin2hex(random_bytes(32)), $algorithm);
+    if (!is_string($hash)) throw new RuntimeException('アカウントを初期化できません');
     return $hash;
-}
-
-function kptc_auth_attempt_key(string $username, string $ipAddress): string {
-    return hash('sha256', kptc_auth_normalize_username($username) . "\n" . $ipAddress);
-}
-
-function kptc_auth_is_rate_limited(PDO $pdo, string $attemptKey): bool {
-    $cutoff = time() - 15 * 60;
-    $pdo->prepare('DELETE FROM auth_login_attempts WHERE attempted_at < ?')->execute([$cutoff]);
-    $statement = $pdo->prepare('SELECT COUNT(*) FROM auth_login_attempts WHERE attempt_key=? AND attempted_at>=?');
-    $statement->execute([$attemptKey, $cutoff]);
-    return (int)$statement->fetchColumn() >= 5;
-}
-
-function kptc_auth_record_failure(PDO $pdo, string $attemptKey): void {
-    $pdo->prepare('INSERT INTO auth_login_attempts(attempt_key,attempted_at) VALUES(?,?)')->execute([$attemptKey, time()]);
-}
-
-function kptc_auth_clear_failures(PDO $pdo, string $attemptKey): void {
-    $pdo->prepare('DELETE FROM auth_login_attempts WHERE attempt_key=?')->execute([$attemptKey]);
 }
 
 function kptc_auth_find_user(PDO $pdo, string $username): ?array {
@@ -96,23 +65,10 @@ function kptc_auth_find_user(PDO $pdo, string $username): ?array {
     return is_array($row) ? $row : null;
 }
 
-function kptc_auth_verify(PDO $pdo, string $username, string $password, string $ipAddress): ?array {
-    $normalized = kptc_auth_normalize_username($username);
-    $attemptKey = kptc_auth_attempt_key($normalized, $ipAddress);
-    if (kptc_auth_is_rate_limited($pdo, $attemptKey)) throw new OverflowException('ログイン試行回数が上限に達しました。15分後にお試しください');
-    $user = kptc_auth_find_user($pdo, $normalized);
-    $hash = is_array($user) ? (string)$user['password_hash'] : kptc_auth_password_hash(bin2hex(random_bytes(16)));
-    $usesCurrentMaterial = password_verify(kptc_auth_password_material($password), $hash);
-    // 旧方式のハッシュも受け入れ、ログイン成功後に現在の方式へ置き換えます。
-    $valid = ($usesCurrentMaterial || password_verify($password, $hash)) && is_array($user) && (int)$user['enabled'] === 1;
-    if (!$valid) {
-        kptc_auth_record_failure($pdo, $attemptKey);
-        return null;
-    }
-    kptc_auth_clear_failures($pdo, $attemptKey);
-    if (!$usesCurrentMaterial || password_needs_rehash($hash, defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT)) {
-        $pdo->prepare('UPDATE auth_users SET password_hash=?,updated_at=? WHERE id=?')->execute([kptc_auth_password_hash($password), date(DATE_ATOM), $user['id']]);
-    }
+function kptc_auth_select_user(PDO $pdo, string $username): ?array {
+    // 社内システム側で認証済みであることを前提に、画面へ表示する有効ユーザーだけを受け付けます。
+    $user = kptc_auth_find_user($pdo, $username);
+    if (!is_array($user) || (int)$user['enabled'] !== 1 || !in_array((string)$user['role'], ['admin', 'user'], true)) return null;
     $pdo->prepare('UPDATE auth_users SET last_login_at=?,updated_at=? WHERE id=?')->execute([date(DATE_ATOM), date(DATE_ATOM), $user['id']]);
     return $user;
 }
@@ -122,7 +78,7 @@ function kptc_auth_user_count(PDO $pdo): int {
 }
 
 function kptc_auth_account_list(PDO $pdo): array {
-    // パスワードハッシュを含めず、管理画面に必要な項目だけを返します。
+    // DB互換用の未使用ハッシュを含めず、管理画面に必要な項目だけを返します。
     $rows = $pdo->query('SELECT id,username,member_id,role,enabled,created_at,updated_at,last_login_at FROM auth_users ORDER BY username')->fetchAll(PDO::FETCH_ASSOC);
     return array_map(static fn(array $row): array => [
         'id'=>(int)$row['id'],
