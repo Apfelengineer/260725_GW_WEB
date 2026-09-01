@@ -5,6 +5,7 @@ import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
+const repositoryRoot = new URL("../../", import.meta.url);
 
 test("KPTC Scheduler の主要機能を提供する", async () => {
   // 主要画面・通信層・サーバーAPIをまとめて読み、必須機能の手掛かりを検査します。
@@ -124,10 +125,10 @@ test("実運用に必要なVite・React・PHP構成だけを保持する", async
   const packageJson = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
   assert.deepEqual(Object.keys(packageJson.dependencies).sort(), ["react", "react-dom"]);
   assert.deepEqual(Object.keys(packageJson.devDependencies).sort(), ["@types/node", "@types/react", "@types/react-dom", "@vitejs/plugin-react", "typescript", "vite"]);
-  assert.match(packageJson.scripts.build, /build:internal/);
-  assert.match(packageJson.scripts.build, /build:public/);
-  assert.match(packageJson.scripts["build:internal"], /vite\.internal\.config\.ts/);
-  assert.match(packageJson.scripts["build:public"], /vite\.public\.config\.ts/);
+  assert.match(packageJson.scripts.build, /build:origin/);
+  assert.match(packageJson.scripts.build, /build:tamanegi/);
+  assert.match(packageJson.scripts["build:origin"], /vite\.origin\.config\.ts/);
+  assert.match(packageJson.scripts["build:tamanegi"], /vite\.tamanegi\.config\.ts/);
   for (const unused of ["app/layout.tsx", "app/chatgpt-auth.ts", "vite.config.ts", "next.config.ts", "drizzle.config.ts", "postcss.config.mjs", "worker/index.ts", "db/index.ts", "examples/d1/db/schema.ts"]) {
     await assert.rejects(access(new URL(unused, root)));
   }
@@ -138,9 +139,9 @@ test("共有用画像を同梱する", async () => {
 });
 
 test("システム資料を同梱する", async () => {
-  await access(new URL("docs/KPTC_Scheduler_現行アプリケーション仕様書.pdf", root));
-  await access(new URL("docs/KPTC_Scheduler_独立Linuxサーバー構築・移行手順書.pdf", root));
-  await access(new URL("docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf", root));
+  await access(new URL("docs/KPTC_Scheduler_現行アプリケーション仕様書.pdf", repositoryRoot));
+  await access(new URL("docs/KPTC_Scheduler_独立Linuxサーバー構築・移行手順書.pdf", repositoryRoot));
+  await access(new URL("docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf", repositoryRoot));
 });
 
 test("試験室の空き状況ページと署名付きJSON連携を提供する", async () => {
@@ -148,8 +149,8 @@ test("試験室の空き状況ページと署名付きJSON連携を提供する"
   const [page, styles, internalVite, publicVite, phpApi, publicApi, jsonPublisher, jsonContract, roomConfig, publisher, receiver, retryPublisher, monitor, publicHealth] = await Promise.all([
     readFile(new URL("app/reservations-page.tsx", root), "utf8"),
     readFile(new URL("app/reservations.css", root), "utf8"),
-    readFile(new URL("vite.internal.config.ts", root), "utf8"),
-    readFile(new URL("vite.public.config.ts", root), "utf8"),
+    readFile(new URL("vite.origin.config.ts", root), "utf8"),
+    readFile(new URL("vite.tamanegi.config.ts", root), "utf8"),
     readFile(new URL("public/api.php", root), "utf8"),
     readFile(new URL("public/public-availability.php", root), "utf8"),
     readFile(new URL("public/availability-json.php", root), "utf8"),
@@ -292,8 +293,8 @@ test("社内システム配下でパスワード不要のユーザー選択ロ�
 
 test("内部用と外部用の配布ファイルを許可リストで分離する", async () => {
   const copier = await readFile(new URL("scripts/copy-distribution-files.mjs", root), "utf8");
-  const internalSection = copier.slice(copier.indexOf("internal:"), copier.indexOf("public:"));
-  const publicSection = copier.slice(copier.indexOf("public:"));
+  const internalSection = copier.slice(copier.indexOf("origin:"), copier.indexOf("tamanegi:"));
+  const publicSection = copier.slice(copier.indexOf("tamanegi:"));
   assert.match(internalSection, /public\/api\.php/);
   assert.match(internalSection, /runtime-config\.php/);
   assert.match(internalSection, /public\/auth\.php/);
@@ -311,6 +312,16 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   assert.doesNotMatch(publicSection, /api\.php|auth\.php|manage-auth-user|publish-availability-cli|group-watcher\.sqlite/);
   await access(new URL("deploy/kptc-availability-publish.timer", root));
   await access(new URL("deploy/kptc-availability-monitor.timer", root));
+});
+
+test("ビルド前とビルド後のフォルダを分離する", async () => {
+  await access(new URL("01_source/package.json", repositoryRoot));
+  await access(new URL("02_release/origin/index.html", repositoryRoot));
+  await access(new URL("02_release/tamanegi/index.html", repositoryRoot));
+  await access(new URL("02_release/SHA256SUMS", repositoryRoot));
+  for (const oldPath of ["app", "public", "sakura", "server-runtime-snapshot", "dist-internal", "dist-public"]) {
+    await assert.rejects(access(new URL(oldPath, repositoryRoot)));
+  }
 });
 
 test("分離配置でも公開領域外の実行設定を探索する", async () => {

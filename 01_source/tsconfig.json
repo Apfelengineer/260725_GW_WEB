@@ -17,8 +17,8 @@
     "app/**/*.ts",
     "app/**/*.tsx",
     "sakura/**/*.tsx",
-    "vite.sakura.config.ts",
-    "vite.internal.config.ts",
-    "vite.public.config.ts"
+    "vite.dev.config.ts",
+    "vite.origin.config.ts",
+    "vite.tamanegi.config.ts"
   ]
 }

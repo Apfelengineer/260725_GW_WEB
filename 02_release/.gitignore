@@ -1,0 +1,10 @@
+# ビルド後の配布フォルダーへ機密データを誤って追加しないための除外規則です。
+*.sqlite
+*.sqlite-*
+*.db
+*.pem
+*.key
+.env*
+internal-env.php
+public-env.php
+public-availability.json

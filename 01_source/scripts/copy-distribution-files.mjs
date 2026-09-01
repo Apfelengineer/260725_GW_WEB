@@ -1,13 +1,13 @@
 /** ビルド先へ用途別の許可ファイルだけをコピーし、内部情報の混入を防ぎます。 */
-import { copyFile, mkdir } from "node:fs/promises";
+import { copyFile, mkdir, unlink } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const target = process.argv[2];
 const distributions = {
-  internal: {
-    directory: "dist-internal",
+  origin: {
+    directory: "origin",
     files: [
       "public/api.php",
       "public/runtime-config.php",
@@ -22,8 +22,8 @@ const distributions = {
       "public/og.png",
     ],
   },
-  public: {
-    directory: "dist-public",
+  tamanegi: {
+    directory: "tamanegi",
     files: [
       "public/runtime-config.php",
       "public/availability-contract.php",
@@ -38,11 +38,15 @@ const distributions = {
   },
 };
 
-if (!(target in distributions)) throw new Error("internal または public を指定してください");
+if (!(target in distributions)) throw new Error("origin または tamanegi を指定してください");
 const distribution = distributions[target];
-const destination = resolve(root, distribution.directory);
+const destination = resolve(root, "../02_release", distribution.directory);
 await mkdir(destination, { recursive: true });
 for (const source of distribution.files) await copyFile(resolve(root, source), resolve(destination, source.split("/").at(-1)));
 
-// 公開側はディレクトリURL（/GW/calendar）だけで表示できるようindex.htmlも用意します。
-if (target === "public") await copyFile(resolve(destination, "reservations.html"), resolve(destination, "index.html"));
+// tamanegi側はディレクトリURLだけで表示できるようindex.htmlへ統一します。
+if (target === "tamanegi") {
+  const generatedHtml = resolve(destination, "reservations.html");
+  await copyFile(generatedHtml, resolve(destination, "index.html"));
+  await unlink(generatedHtml);
+}
