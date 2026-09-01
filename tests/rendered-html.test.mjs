@@ -211,7 +211,9 @@ test("試験室の空き状況ページと署名付きJSON連携を提供する"
   assert.match(jsonPublisher, /kptc_public_rooms_from_state/);
   assert.match(jsonPublisher, /array_column\(\$rooms, 'id'\)/);
   assert.doesNotMatch(jsonPublisher, /repeatUntil|\$repeat/);
-  assert.match(roomConfig, /\(\$member\['group'\] \?\? ''\) !== '試験室'/);
+  assert.match(roomConfig, /function kptc_public_room_ids\(\): array/);
+  assert.match(roomConfig, /return \['m6', 'm7', 'm8'\]/);
+  assert.match(roomConfig, /公開対象の試験室ユーザーが見つかりません/);
   assert.match(roomConfig, /\$memberId \. '\.png'/);
   assert.match(roomConfig, /電磁波妨害評価装置\(G-TEM\)/);
   assert.match(roomConfig, /パルスサージシステム/);
