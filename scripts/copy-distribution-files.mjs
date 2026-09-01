@@ -30,6 +30,9 @@ const distributions = {
       "public/public-availability.php",
       "public/health-availability.php",
       "public/technology-center-logo-white.png",
+      "public/m6.png",
+      "public/m7.png",
+      "public/m8.png",
     ],
   },
 };

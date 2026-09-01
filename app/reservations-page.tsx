@@ -7,7 +7,7 @@ import { japaneseHolidays } from "./lib/group-watcher-api";
 import "./reservations.css";
 
 const roomIds = ["m6", "m7", "m8"];
-type PublicRoom = { id: string; name: string; initials: string };
+type PublicRoom = { id: string; name: string; image: string };
 type PublicStatus = "morning_available" | "afternoon_available" | "reserved" | "maintenance";
 type PublicAvailabilityResponse = {
   updatedAt: string;
@@ -15,9 +15,9 @@ type PublicAvailabilityResponse = {
 };
 
 const rooms: PublicRoom[] = [
-  { id: "m6", name: "電波暗室", initials: "電波" },
-  { id: "m7", name: "電磁波妨害評価装置(G-TEM)", initials: "G-TEM" },
-  { id: "m8", name: "パルスサージシステム", initials: "サージ" },
+  { id: "m6", name: "電波暗室", image: "m6.png" },
+  { id: "m7", name: "電磁波妨害評価装置(G-TEM)", image: "m7.png" },
+  { id: "m8", name: "パルスサージシステム", image: "m8.png" },
 ];
 const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -98,7 +98,7 @@ export default function ReservationsPage() {
     <main className="reservation-page">
       <section className="reservation-board">
         <header className="reservation-header">
-          <span className="room-emblem">{room.initials}</span>
+          <span className="room-emblem"><img src={`./${room.image}`} alt={`${room.name}の設備写真`} /></span>
           <div><h1>{room.name} 空き状況</h1>{roomId === "m8" && <p className="equipment-note">(入力インパルス試験機、静電気試験機、サージイミュニティ試験機、FTB試験機、低周波EMC試験機)</p>}</div>
           <time>更新：{updatedAt ? new Date(updatedAt).toLocaleString("ja-JP", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</time>
         </header>

@@ -163,6 +163,10 @@ test("試験室3室の空き状況ページと署名付きJSON連携を提供す
   assert.match(page, /電波暗室/);
   assert.match(page, /電磁波妨害評価装置\(G-TEM\)/);
   assert.match(page, /パルスサージシステム/);
+  assert.match(page, /image: "m6\.png"/);
+  assert.match(page, /image: "m7\.png"/);
+  assert.match(page, /image: "m8\.png"/);
+  assert.match(page, /alt={`\$\{room\.name\}の設備写真`}/);
   assert.doesNotMatch(page, /KPTC SCHEDULER \/ LAB AVAILABILITY/);
   assert.match(page, /入力インパルス試験機/);
   assert.match(page, /ご予約・お問い合わせ:xxx@yyy\/075-xxx-xxxx/);
@@ -183,6 +187,8 @@ test("試験室3室の空き状況ページと署名付きJSON連携を提供す
   assert.match(styles, /reservation-day\.saturday/);
   assert.match(styles, /reservation-day\.sunday/);
   assert.match(styles, /reservation-day\.reserved \{ color: #111; background: #555b60; \}/);
+  assert.match(styles, /\.room-emblem img/);
+  assert.match(styles, /object-fit: contain/);
   assert.match(styles, /width: min\(340px,46%\)/);
   assert.doesNotMatch(internalVite, /reservations\.html/);
   assert.match(publicVite, /reservations\.html/);
@@ -222,6 +228,9 @@ test("試験室3室の空き状況ページと署名付きJSON連携を提供す
   assert.match(publicHealth, /KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS/);
   await assert.rejects(access(new URL("public/availability-store.php", root)));
   await access(new URL("public/technology-center-logo-white.png", root));
+  await access(new URL("public/m6.png", root));
+  await access(new URL("public/m7.png", root));
+  await access(new URL("public/m8.png", root));
 });
 
 test("社内システム配下でパスワード不要のユーザー選択ログインを提供する", async () => {
