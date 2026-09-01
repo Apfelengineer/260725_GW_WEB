@@ -143,9 +143,9 @@ test("システム資料を同梱する", async () => {
   await access(new URL("docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf", root));
 });
 
-test("試験室3室の空き状況ページと署名付きJSON連携を提供する", async () => {
+test("試験室の空き状況ページと署名付きJSON連携を提供する", async () => {
   // 表示記号、配色、用途別画面、署名付き3か月JSON連携を確認します。
-  const [page, styles, internalVite, publicVite, phpApi, publicApi, jsonPublisher, jsonContract, publisher, receiver, retryPublisher, monitor, publicHealth] = await Promise.all([
+  const [page, styles, internalVite, publicVite, phpApi, publicApi, jsonPublisher, jsonContract, roomConfig, publisher, receiver, retryPublisher, monitor, publicHealth] = await Promise.all([
     readFile(new URL("app/reservations-page.tsx", root), "utf8"),
     readFile(new URL("app/reservations.css", root), "utf8"),
     readFile(new URL("vite.internal.config.ts", root), "utf8"),
@@ -154,6 +154,7 @@ test("試験室3室の空き状況ページと署名付きJSON連携を提供す
     readFile(new URL("public/public-availability.php", root), "utf8"),
     readFile(new URL("public/availability-json.php", root), "utf8"),
     readFile(new URL("public/availability-contract.php", root), "utf8"),
+    readFile(new URL("public/availability-room-config.php", root), "utf8"),
     readFile(new URL("public/availability-publisher.php", root), "utf8"),
     readFile(new URL("public/receive-availability.php", root), "utf8"),
     readFile(new URL("public/publish-availability-cli.php", root), "utf8"),
@@ -167,6 +168,8 @@ test("試験室3室の空き状況ページと署名付きJSON連携を提供す
   assert.match(page, /image: "m7\.png"/);
   assert.match(page, /image: "m8\.png"/);
   assert.match(page, /alt={`\$\{room\.name\}の設備写真`}/);
+  assert.match(page, /setRooms\(payload\.rooms\)/);
+  assert.doesNotMatch(page, /const roomIds/);
   assert.doesNotMatch(page, /KPTC SCHEDULER \/ LAB AVAILABILITY/);
   assert.match(page, /入力インパルス試験機/);
   assert.match(page, /ご予約・お問い合わせ:xxx@yyy\/075-xxx-xxxx/);
@@ -204,8 +207,17 @@ test("試験室3室の空き状況ページと署名付きJSON連携を提供す
   assert.match(jsonPublisher, /キャンセル待ち/);
   assert.match(jsonPublisher, /機器点検/);
   assert.match(jsonPublisher, /sourceVersion/);
+  assert.match(jsonPublisher, /'schemaVersion'=>2/);
+  assert.match(jsonPublisher, /kptc_public_rooms_from_state/);
+  assert.match(jsonPublisher, /array_column\(\$rooms, 'id'\)/);
   assert.doesNotMatch(jsonPublisher, /repeatUntil|\$repeat/);
+  assert.match(roomConfig, /\(\$member\['group'\] \?\? ''\) !== '試験室'/);
+  assert.match(roomConfig, /\$memberId \. '\.png'/);
+  assert.match(roomConfig, /電磁波妨害評価装置\(G-TEM\)/);
+  assert.match(roomConfig, /パルスサージシステム/);
   assert.match(jsonContract, /JSON_PRETTY_PRINT/);
+  assert.match(jsonContract, /KPTC_PUBLIC_MAX_ROOMS = 32/);
+  assert.match(jsonContract, /\['schemaVersion', 'sourceVersion', 'updatedAt', 'rangeStart', 'rangeEnd', 'rooms', 'availability'\]/);
   assert.match(jsonContract, /rename\(\$temporary, \$path\)/);
   assert.match(jsonContract, /kptc_validate_public_availability/);
   assert.doesNotMatch(jsonPublisher, /PDO|sqlite:|CREATE TABLE|public_meta/);
@@ -231,6 +243,7 @@ test("試験室3室の空き状況ページと署名付きJSON連携を提供す
   await access(new URL("public/m6.png", root));
   await access(new URL("public/m7.png", root));
   await access(new URL("public/m8.png", root));
+  await access(new URL("public/availability-room-config.php", root));
 });
 
 test("社内システム配下でパスワード不要のユーザー選択ログインを提供する", async () => {
@@ -283,6 +296,7 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   assert.match(internalSection, /runtime-config\.php/);
   assert.match(internalSection, /public\/auth\.php/);
   assert.match(internalSection, /publish-availability-cli\.php/);
+  assert.match(internalSection, /availability-room-config\.php/);
   assert.match(publicSection, /receive-availability\.php/);
   assert.match(publicSection, /public-availability\.php/);
   assert.match(publicSection, /health-availability\.php/);
@@ -291,6 +305,7 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   assert.match(publicSection, /reservations\.html/);
   assert.match(publicSection, /index\.html/);
   assert.doesNotMatch(publicSection, /availability-json\.php/);
+  assert.doesNotMatch(publicSection, /availability-room-config\.php/);
   assert.doesNotMatch(publicSection, /api\.php|auth\.php|manage-auth-user|publish-availability-cli|group-watcher\.sqlite/);
   await access(new URL("deploy/kptc-availability-publish.timer", root));
   await access(new URL("deploy/kptc-availability-monitor.timer", root));

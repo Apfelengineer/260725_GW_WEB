@@ -7,6 +7,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/availability-contract.php';
+require_once __DIR__ . '/availability-room-config.php';
 
 function kptc_schedule_occurs_on(array $schedule, string $targetKey): bool {
     $startKey = (string)($schedule['date'] ?? '');
@@ -51,20 +52,29 @@ function kptc_build_public_availability(array $state, int $sourceVersion): array
     $rangeStart = new DateTimeImmutable('first day of this month 00:00:00', $timezone);
     $rangeEnd = $rangeStart->modify('+3 months')->modify('-1 day');
     $schedules = is_array($state['schedules'] ?? null) ? $state['schedules'] : [];
-    $availability = array_fill_keys(KPTC_PUBLIC_ROOM_IDS, []);
-    foreach (KPTC_PUBLIC_ROOM_IDS as $roomId) {
+    $rooms = kptc_public_rooms_from_state($state);
+    $availability = array_fill_keys(array_column($rooms, 'id'), []);
+    foreach ($rooms as $room) {
+        $roomId = (string)$room['id'];
+        $memberId = (string)$room['memberId'];
         for ($date = $rangeStart; $date <= $rangeEnd; $date = $date->modify('+1 day')) {
             $key = $date->format('Y-m-d');
-            $status = kptc_public_day_status($schedules, $roomId, $key);
+            $status = kptc_public_day_status($schedules, $memberId, $key);
             if ($status !== null) $availability[$roomId][$key] = $status;
         }
     }
     return [
-        'schemaVersion'=>1,
+        'schemaVersion'=>2,
         'sourceVersion'=>$sourceVersion,
         'updatedAt'=>(new DateTimeImmutable('now', $timezone))->format(DATE_ATOM),
         'rangeStart'=>$rangeStart->format('Y-m-d'),
         'rangeEnd'=>$rangeEnd->format('Y-m-d'),
+        'rooms'=>array_map(static fn(array $room): array => [
+            'id'=>(string)$room['id'],
+            'name'=>(string)$room['name'],
+            'image'=>(string)$room['image'],
+            'description'=>(string)$room['description'],
+        ], $rooms),
         'availability'=>$availability,
     ];
 }

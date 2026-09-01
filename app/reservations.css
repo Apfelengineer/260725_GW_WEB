@@ -9,13 +9,14 @@ body { margin: 0; }
 .reservation-header { display: grid; grid-template-columns: 84px minmax(0,1fr) auto; gap: 18px; align-items: center; margin-bottom: 18px; }
 .room-emblem { display: grid; width: 78px; height: 78px; place-items: center; overflow: hidden; border: 4px solid #fff; border-radius: 14px; background: #f5fbfe; box-shadow: 0 5px 16px rgba(27,66,92,.25); }
 .room-emblem img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.room-image-fallback { display: grid; width: 100%; height: 100%; place-items: center; color: #fff; background: linear-gradient(135deg,#5b91ac,#164b6b); font-size: 15px; }
 .reservation-header h1 { margin: 5px 0 4px; font-size: clamp(25px,3vw,36px); letter-spacing: -.04em; }
 .reservation-header p { margin: 0; color: #607582; font-size: 11px; }
 .reservation-header .equipment-note { max-width: 760px; font-size: 10px; font-weight: 650; line-height: 1.5; }
 .reservation-header time { align-self: end; color: #536d7c; font-size: 11px; white-space: nowrap; }
-.room-switch { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-bottom: 8px; }
+.room-switch { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 7px; margin-bottom: 8px; }
 .room-switch a { padding: 10px; border: 1px solid #a8cbe0; color: #28566f; background: #f5fbfe; text-align: center; text-decoration: none; font-size: 12px; font-weight: 760; }
-.room-switch a:first-child { border-radius: 9px 0 0 9px; }.room-switch a:last-child { border-radius: 0 9px 9px 0; }
+.room-switch a,.room-switch a:first-child,.room-switch a:last-child { border-radius: 8px; }
 .room-switch a.active { border-color: var(--reservation-blue); color: #fff; background: linear-gradient(135deg,var(--reservation-blue),var(--reservation-blue-deep)); box-shadow: inset 0 1px rgba(255,255,255,.25); }
 .reception-period { margin-bottom: 14px; padding: 10px 16px; color: #fff; background: linear-gradient(90deg,#0753ed,#003ec8,#0753ed); text-align: center; font-size: 15px; font-weight: 800; letter-spacing: .05em; }
 /* 月別カレンダーと予約状態 */

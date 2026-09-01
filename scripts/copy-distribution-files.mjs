@@ -13,6 +13,7 @@ const distributions = {
       "public/runtime-config.php",
       "public/auth.php",
       "public/availability-contract.php",
+      "public/availability-room-config.php",
       "public/availability-json.php",
       "public/availability-publisher.php",
       "public/publish-availability-cli.php",

@@ -6,18 +6,18 @@ import { useEffect, useMemo, useState } from "react";
 import { japaneseHolidays } from "./lib/group-watcher-api";
 import "./reservations.css";
 
-const roomIds = ["m6", "m7", "m8"];
 type PublicRoom = { id: string; name: string; image: string };
 type PublicStatus = "morning_available" | "afternoon_available" | "reserved" | "maintenance";
 type PublicAvailabilityResponse = {
   updatedAt: string;
+  rooms?: Array<PublicRoom & { description?: string }>;
   availability: Record<string, Record<string, PublicStatus>>;
 };
 
-const rooms: PublicRoom[] = [
-  { id: "m6", name: "電波暗室", image: "m6.png" },
-  { id: "m7", name: "電磁波妨害評価装置(G-TEM)", image: "m7.png" },
-  { id: "m8", name: "パルスサージシステム", image: "m8.png" },
+const defaultRooms: Array<PublicRoom & { description?: string }> = [
+  { id: "m6", name: "電波暗室", image: "m6.png", description: "" },
+  { id: "m7", name: "電磁波妨害評価装置(G-TEM)", image: "m7.png", description: "" },
+  { id: "m8", name: "パルスサージシステム", image: "m8.png", description: "(入力インパルス試験機、静電気試験機、サージイミュニティ試験機、FTB試験機、低周波EMC試験機)" },
 ];
 const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -71,35 +71,42 @@ function MonthCalendar({ month, availability }: { month: Date; availability: Rec
 }
 
 export default function ReservationsPage() {
+  const [rooms, setRooms] = useState(defaultRooms);
   const [availability, setAvailability] = useState<Record<string, Record<string, PublicStatus>>>({});
   const [updatedAt, setUpdatedAt] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [failedImageRoomId, setFailedImageRoomId] = useState("");
   const requestedRoom = new URLSearchParams(window.location.search).get("room") || "m6";
-  const roomId = roomIds.includes(requestedRoom) ? requestedRoom : "m6";
-  const room = rooms.find((item) => item.id === roomId)!;
+  const room = rooms.find((item) => item.id === requestedRoom) ?? rooms[0] ?? defaultRooms[0];
+  const roomId = room.id;
   const months = useMemo(() => Array.from({ length: 3 }, (_, index) => addMonths(new Date(), index)), []);
+  const imageVersion = useMemo(() => Date.now(), []);
 
   useEffect(() => {
     document.title = `${room.name} 空き状況 | KPTC Scheduler`;
+  }, [room.name]);
+
+  useEffect(() => {
     fetch("./public-availability.php", { headers: { Accept: "application/json" } })
       .then(async (response) => {
         const payload = await response.json() as PublicAvailabilityResponse | { error?: string };
         if (!response.ok || !("availability" in payload)) throw new Error("error" in payload ? payload.error : "公開用データを取得できません");
         setAvailability(payload.availability);
+        if (Array.isArray(payload.rooms) && payload.rooms.length) setRooms(payload.rooms);
         setUpdatedAt(payload.updatedAt);
       })
       .catch(() => setError("空き情報を取得できませんでした。時間をおいて再読み込みしてください。"))
       .finally(() => setLoading(false));
-  }, [room.name]);
+  }, []);
 
   const finalMonth = months[2];
   return (
     <main className="reservation-page">
       <section className="reservation-board">
         <header className="reservation-header">
-          <span className="room-emblem"><img src={`./${room.image}`} alt={`${room.name}の設備写真`} /></span>
-          <div><h1>{room.name} 空き状況</h1>{roomId === "m8" && <p className="equipment-note">(入力インパルス試験機、静電気試験機、サージイミュニティ試験機、FTB試験機、低周波EMC試験機)</p>}</div>
+          <span className="room-emblem">{failedImageRoomId === roomId ? <b className="room-image-fallback">{room.name.slice(0, 2)}</b> : <img key={roomId} src={`./${room.image}?v=${imageVersion}`} alt={`${room.name}の設備写真`} onError={() => setFailedImageRoomId(roomId)} />}</span>
+          <div><h1>{room.name} 空き状況</h1>{room.description && <p className="equipment-note">{room.description}</p>}</div>
           <time>更新：{updatedAt ? new Date(updatedAt).toLocaleString("ja-JP", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</time>
         </header>
 
