@@ -2,7 +2,8 @@
 declare(strict_types=1);
 
 /* 公開側と内部側で共有する、個人情報を含まないJSON形式の検証・保存処理です。 */
-const KPTC_PUBLIC_ROOM_IDS = ['m6', 'm7', 'm8'];
+const KPTC_LEGACY_PUBLIC_ROOM_IDS = ['m6', 'm7', 'm8'];
+const KPTC_PUBLIC_MAX_ROOMS = 32;
 
 function kptc_availability_json_path(): string {
     $configured = trim((string)(getenv('KPTC_PUBLIC_AVAILABILITY_JSON') ?: ''));
@@ -29,12 +30,15 @@ function kptc_read_public_availability(): ?array {
 
 function kptc_validate_public_availability(array $payload): array {
     // 外部公開に不要な項目や未知の状態値を受け入れず、個人情報の混入を防ぎます。
-    $expectedKeys = ['schemaVersion', 'sourceVersion', 'updatedAt', 'rangeStart', 'rangeEnd', 'availability'];
+    $schemaVersion = $payload['schemaVersion'] ?? null;
+    if (!is_int($schemaVersion) || !in_array($schemaVersion, [1, 2], true)) throw new InvalidArgumentException('未対応のJSON形式です');
+    $expectedKeys = $schemaVersion === 2
+        ? ['schemaVersion', 'sourceVersion', 'updatedAt', 'rangeStart', 'rangeEnd', 'rooms', 'availability']
+        : ['schemaVersion', 'sourceVersion', 'updatedAt', 'rangeStart', 'rangeEnd', 'availability'];
     $actualKeys = array_keys($payload);
     sort($expectedKeys);
     sort($actualKeys);
     if ($actualKeys !== $expectedKeys) throw new InvalidArgumentException('JSONの項目が不正です');
-    if (($payload['schemaVersion'] ?? null) !== 1) throw new InvalidArgumentException('未対応のJSON形式です');
     if (!is_int($payload['sourceVersion']) || $payload['sourceVersion'] < 1) throw new InvalidArgumentException('更新番号が不正です');
     if (!is_string($payload['updatedAt']) || DateTimeImmutable::createFromFormat(DATE_ATOM, $payload['updatedAt']) === false) throw new InvalidArgumentException('更新日時が不正です');
     foreach (['rangeStart', 'rangeEnd'] as $key) {
@@ -47,14 +51,32 @@ function kptc_validate_public_availability(array $payload): array {
     $days = kptc_days_between($rangeStart, $rangeEnd);
     if ($days < 27 || $days > 93) throw new InvalidArgumentException('表示期間は3か月以内にしてください');
     if (!is_array($payload['availability'])) throw new InvalidArgumentException('試験室の構成が不正です');
+    $expectedRoomKeys = KPTC_LEGACY_PUBLIC_ROOM_IDS;
+    if ($schemaVersion === 2) {
+        if (!is_array($payload['rooms']) || !array_is_list($payload['rooms']) || count($payload['rooms']) < 1 || count($payload['rooms']) > KPTC_PUBLIC_MAX_ROOMS) throw new InvalidArgumentException('公開する試験室の件数が不正です');
+        $expectedRoomKeys = [];
+        foreach ($payload['rooms'] as $room) {
+            if (!is_array($room)) throw new InvalidArgumentException('試験室情報が不正です');
+            $roomExpectedKeys = ['id', 'name', 'image', 'description'];
+            $roomActualKeys = array_keys($room);
+            sort($roomExpectedKeys);
+            sort($roomActualKeys);
+            if ($roomActualKeys !== $roomExpectedKeys) throw new InvalidArgumentException('試験室情報の項目が不正です');
+            $roomId = $room['id'] ?? null;
+            if (!is_string($roomId) || !preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/', $roomId) || in_array($roomId, $expectedRoomKeys, true)) throw new InvalidArgumentException('試験室IDが不正です');
+            if (!is_string($room['name']) || trim($room['name']) === '' || strlen($room['name']) > 300) throw new InvalidArgumentException('試験室名が不正です');
+            if (!is_string($room['image']) || !preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}\.png$/', $room['image']) || basename($room['image']) !== $room['image']) throw new InvalidArgumentException('試験室画像が不正です');
+            if (!is_string($room['description']) || strlen($room['description']) > 900) throw new InvalidArgumentException('試験室の説明が不正です');
+            $expectedRoomKeys[] = $roomId;
+        }
+    }
     $roomKeys = array_keys($payload['availability']);
-    $expectedRoomKeys = KPTC_PUBLIC_ROOM_IDS;
     sort($roomKeys);
     sort($expectedRoomKeys);
     if ($roomKeys !== $expectedRoomKeys) throw new InvalidArgumentException('試験室の構成が不正です');
     $allowedStatuses = ['maintenance', 'reserved', 'morning_available', 'afternoon_available'];
     foreach ($payload['availability'] as $roomId => $dates) {
-        if (!in_array($roomId, KPTC_PUBLIC_ROOM_IDS, true) || !is_array($dates)) throw new InvalidArgumentException('試験室の空き情報が不正です');
+        if (!in_array($roomId, $expectedRoomKeys, true) || !is_array($dates)) throw new InvalidArgumentException('試験室の空き情報が不正です');
         foreach ($dates as $date => $status) {
             $parsedDate = is_string($date) ? DateTimeImmutable::createFromFormat('!Y-m-d', $date, new DateTimeZone('Asia/Tokyo')) : false;
             if (!is_string($date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || $parsedDate === false || $parsedDate->format('Y-m-d') !== $date || $date < $payload['rangeStart'] || $date > $payload['rangeEnd']) throw new InvalidArgumentException('空き情報の日付が不正です');
