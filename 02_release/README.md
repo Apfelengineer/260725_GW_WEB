@@ -6,7 +6,10 @@
 
 - `origin/`: 内部サーバーoriginのスケジューラー公開フォルダへ配置します。
 - `tamanegi/`: 外部サーバーtamanegiの空き状況公開フォルダへ配置します。
+- `renkon/`: 既存社内システムとの接続を試すための模擬サイトです。
 - `SHA256SUMS`: 配布ファイルが壊れたり、別の内容へ変わったりしていないか確認する一覧です。
+
+`renkon/`は確認専用です。本番環境では社内システムがすでに存在するため、originや社内サーバーへ配置する必要はありません。必要な場合だけ、`renkon/config.js`のスケジューラーURLとカレンダーURLを書き換えて検証用Webサーバーへ配置します。
 
 ## 再生成方法
 
@@ -19,7 +22,7 @@ pnpm run check
 pnpm test
 ```
 
-`pnpm run build`は`origin/`と`tamanegi/`を作り直し、最後に`SHA256SUMS`を更新します。古いハッシュ名付きJavaScript・CSSは残りません。
+`pnpm run build`は`origin/`、`tamanegi/`、`renkon/`を作り直し、最後に`SHA256SUMS`を更新します。古いハッシュ名付きJavaScript・CSSは残りません。
 
 ## 意図的に含めていないもの
 

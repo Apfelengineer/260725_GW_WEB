@@ -127,6 +127,7 @@ test("実運用に必要なVite・React・PHP構成だけを保持する", async
   assert.deepEqual(Object.keys(packageJson.devDependencies).sort(), ["@types/node", "@types/react", "@types/react-dom", "@vitejs/plugin-react", "typescript", "vite"]);
   assert.match(packageJson.scripts.build, /build:origin/);
   assert.match(packageJson.scripts.build, /build:tamanegi/);
+  assert.match(packageJson.scripts.build, /build:renkon/);
   assert.match(packageJson.scripts["build:origin"], /vite\.origin\.config\.ts/);
   assert.match(packageJson.scripts["build:tamanegi"], /vite\.tamanegi\.config\.ts/);
   for (const unused of ["app/layout.tsx", "app/chatgpt-auth.ts", "vite.config.ts", "next.config.ts", "drizzle.config.ts", "postcss.config.mjs", "worker/index.ts", "db/index.ts", "examples/d1/db/schema.ts"]) {
@@ -273,6 +274,7 @@ test("社内システム配下でパスワード不要のユーザー選択ロ�
   assert.doesNotMatch(accountListSection, /password_hash/);
   assert.match(page, /ゲストとしてログイン/);
   assert.match(page, /<select autoComplete="username"/);
+  assert.doesNotMatch(page, /new URLSearchParams\(window\.location\.search\)\.get\("userId"\)/);
   assert.match(page, /試験室（閲覧のみ）/);
   assert.match(page, /name="accountId"/);
   assert.doesNotMatch(page, /name="password"|name="changePassword"|パスワード（確認）/);
@@ -314,10 +316,37 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   await access(new URL("deploy/kptc-availability-monitor.timer", root));
 });
 
+test("renkon模擬サイトでユーザーIDと2つのリンクを独立して提供する", async () => {
+  const [html, script, config, styles, copier] = await Promise.all([
+    readFile(new URL("renkon/index.html", root), "utf8"),
+    readFile(new URL("renkon/app.js", root), "utf8"),
+    readFile(new URL("renkon/config.js", root), "utf8"),
+    readFile(new URL("renkon/styles.css", root), "utf8"),
+    readFile(new URL("scripts/copy-distribution-files.mjs", root), "utf8"),
+  ]);
+  assert.match(html, /pattern="\[0-9\]\{3\}"/);
+  assert.match(html, /inputmode="numeric"/);
+  assert.match(html, /ユーザーIDを設定/);
+  assert.match(html, /スケジューラーを開く/);
+  assert.match(html, /試験室の空き状況を見る/);
+  assert.match(html, /target="_blank"/);
+  assert.match(script, /\^\\d\{3\}\$/);
+  assert.match(script, /schedulerLink\.href = config\.schedulerUrl/);
+  assert.match(script, /calendarLink\.href = config\.calendarUrl/);
+  assert.doesNotMatch(script, /searchParams\.set|userIdParameter|aria-disabled/);
+  assert.doesNotMatch(script, /window\.location\.assign/);
+  assert.match(config, /schedulerUrl/);
+  assert.match(config, /calendarUrl/);
+  assert.match(styles, /@media \(max-width: 620px\)/);
+  assert.match(copier, /renkon\/index\.html/);
+  assert.match(copier, /renkon\/config\.js/);
+});
+
 test("ビルド前とビルド後のフォルダを分離する", async () => {
   await access(new URL("01_source/package.json", repositoryRoot));
   await access(new URL("02_release/origin/index.html", repositoryRoot));
   await access(new URL("02_release/tamanegi/index.html", repositoryRoot));
+  await access(new URL("02_release/renkon/index.html", repositoryRoot));
   await access(new URL("02_release/SHA256SUMS", repositoryRoot));
   for (const oldPath of ["app", "public", "sakura", "server-runtime-snapshot", "dist-internal", "dist-public"]) {
     await assert.rejects(access(new URL(oldPath, repositoryRoot)));

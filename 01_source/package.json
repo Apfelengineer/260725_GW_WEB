@@ -7,9 +7,10 @@
   },
   "scripts": {
     "dev": "vite --config vite.dev.config.ts",
-    "build": "pnpm run build:origin && pnpm run build:tamanegi && node scripts/write-release-manifest.mjs",
+    "build": "pnpm run build:origin && pnpm run build:tamanegi && pnpm run build:renkon && node scripts/write-release-manifest.mjs",
     "build:origin": "vite build --config vite.origin.config.ts && node scripts/copy-distribution-files.mjs origin",
     "build:tamanegi": "vite build --config vite.tamanegi.config.ts && node scripts/copy-distribution-files.mjs tamanegi",
+    "build:renkon": "node scripts/copy-distribution-files.mjs renkon",
     "test": "node --test tests/rendered-html.test.mjs",
     "check": "tsc --noEmit"
   },
