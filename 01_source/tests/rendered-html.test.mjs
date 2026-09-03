@@ -298,6 +298,35 @@ test("ログイン画面なしの一般モードとパスワード付き管理�
   assert.doesNotMatch(manager, /SELECT \*/);
 });
 
+test("renkonの暗号化トークンがないスケジューラ要求を拒否する", async () => {
+  const [entry, gate, api, auth, issuer, renkonConfig] = await Promise.all([
+    readFile(new URL("public/scheduler-entry.php", root), "utf8"),
+    readFile(new URL("public/portal-access.php", root), "utf8"),
+    readFile(new URL("public/api.php", root), "utf8"),
+    readFile(new URL("public/auth.php", root), "utf8"),
+    readFile(new URL("renkon/open-scheduler.php", root), "utf8"),
+    readFile(new URL("renkon/renkon-config.php", root), "utf8"),
+  ]);
+  assert.match(issuer, /'AES-128-ECB'/);
+  assert.match(issuer, /openssl_encrypt\(\$use_id, \$method, \$key\)/);
+  assert.match(issuer, /format\('Ymd'\) \. '_user_' \. \$userId/);
+  assert.match(issuer, /\^\\d\{3\}\$\/D/);
+  assert.match(issuer, /rawurlencode\(\$encrypted\)/);
+  assert.match(renkonConfig, /KPTC_RENKON_SCHEDULER_URL/);
+  assert.match(renkonConfig, /KPTC_PORTAL_TOKEN_KEY/);
+  assert.match(renkonConfig, /'test'/);
+  assert.match(gate, /AES-128-ECB/);
+  assert.match(gate, /openssl_decrypt/);
+  assert.match(gate, /\^\(\\d\{8\}\)_user_\(\\d\{3\}\)\$\/D/);
+  assert.match(gate, /hash_equals\(kptc_portal_today\(\), \$matches\[1\]\)/);
+  assert.match(gate, /http_response_code\(403\)/);
+  assert.match(entry, /kptc_portal_authorize_token\(\$token\)/);
+  assert.match(api, /kptc_portal_session_is_authorized\(\)/);
+  assert.match(api, /kptc_portal_forbidden\(true\)/);
+  assert.match(auth, /portal_access_granted/);
+  assert.match(auth, /portal_user_id/);
+});
+
 test("内部用と外部用の配布ファイルを許可リストで分離する", async () => {
   const copier = await readFile(new URL("scripts/copy-distribution-files.mjs", root), "utf8");
   const internalSection = copier.slice(copier.indexOf("origin:"), copier.indexOf("tamanegi:"));
@@ -305,6 +334,8 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   assert.match(internalSection, /public\/api\.php/);
   assert.match(internalSection, /runtime-config\.php/);
   assert.match(internalSection, /public\/auth\.php/);
+  assert.match(internalSection, /public\/portal-access\.php/);
+  assert.match(internalSection, /public\/scheduler-entry\.php/);
   assert.match(internalSection, /publish-availability-cli\.php/);
   assert.match(internalSection, /availability-room-config\.php/);
   assert.match(publicSection, /receive-availability\.php/);
@@ -321,11 +352,12 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   await access(new URL("deploy/kptc-availability-monitor.timer", root));
 });
 
-test("renkon模擬サイトでユーザーIDと2つのリンクを独立して提供する", async () => {
-  const [html, script, config, styles, copier] = await Promise.all([
+test("renkon模擬サイトでユーザーIDから暗号化入口へのリンクを作る", async () => {
+  const [html, script, config, issuer, styles, copier] = await Promise.all([
     readFile(new URL("renkon/index.html", root), "utf8"),
     readFile(new URL("renkon/app.js", root), "utf8"),
     readFile(new URL("renkon/config.js", root), "utf8"),
+    readFile(new URL("renkon/open-scheduler.php", root), "utf8"),
     readFile(new URL("renkon/styles.css", root), "utf8"),
     readFile(new URL("scripts/copy-distribution-files.mjs", root), "utf8"),
   ]);
@@ -336,20 +368,25 @@ test("renkon模擬サイトでユーザーIDと2つのリンクを独立して�
   assert.match(html, /試験室の空き状況を見る/);
   assert.match(html, /target="_blank"/);
   assert.match(script, /\^\\d\{3\}\$/);
-  assert.match(script, /schedulerLink\.href = config\.schedulerUrl/);
+  assert.match(script, /open-scheduler\.php\?user_id=/);
   assert.match(script, /calendarLink\.href = config\.calendarUrl/);
-  assert.doesNotMatch(script, /searchParams\.set|userIdParameter|aria-disabled/);
+  assert.match(script, /aria-disabled/);
   assert.doesNotMatch(script, /window\.location\.assign/);
-  assert.match(config, /schedulerUrl/);
+  assert.doesNotMatch(config, /schedulerUrl/);
   assert.match(config, /calendarUrl/);
+  assert.match(issuer, /openssl_encrypt/);
+  assert.match(issuer, /Location:/);
   assert.match(styles, /@media \(max-width: 620px\)/);
+  assert.match(styles, /system-link\.is-disabled/);
   assert.match(copier, /renkon\/index\.html/);
   assert.match(copier, /renkon\/config\.js/);
+  assert.match(copier, /renkon\/open-scheduler\.php/);
 });
 
 test("ビルド前とビルド後のフォルダを分離する", async () => {
   await access(new URL("01_source/package.json", repositoryRoot));
-  await access(new URL("02_release/origin/index.html", repositoryRoot));
+  await access(new URL("02_release/origin/index.php", repositoryRoot));
+  await assert.rejects(access(new URL("02_release/origin/index.html", repositoryRoot)));
   await access(new URL("02_release/tamanegi/index.html", repositoryRoot));
   await access(new URL("02_release/renkon/index.html", repositoryRoot));
   await access(new URL("02_release/SHA256SUMS", repositoryRoot));

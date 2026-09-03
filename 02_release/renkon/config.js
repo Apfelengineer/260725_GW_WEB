@@ -1,8 +1,8 @@
 /**
  * renkonは社内システム連携の確認専用です。
- * 実際のURLに合わせる場合は、次の2項目だけを書き換えます。
+ * 公開カレンダーのURLを実際の配置先に合わせて書き換えます。
+ * スケジューラURLはrenkon-config.phpで管理します。
  */
 window.KPTC_RENKON_CONFIG = Object.freeze({
-  schedulerUrl: "https://apfelrunner.sakura.ne.jp/GW/schedule/",
   calendarUrl: "https://apfelrunner.sakura.ne.jp/GW/calendar/",
 });

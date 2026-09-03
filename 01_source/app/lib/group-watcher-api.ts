@@ -76,6 +76,7 @@ export type AuthenticatedBootstrapResponse = {
   state: SharedState;
   version: number;
   currentUserId: string;
+  portalUserId: string;
   username: string;
   role: SessionRole;
   adminModePasswordConfigured: boolean;

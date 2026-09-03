@@ -23,13 +23,13 @@
         <div class="intro">
           <p class="eyebrow">SCHEDULE &amp; LAB AVAILABILITY</p>
           <h1 id="portal-title">予定表・試験室空き状況</h1>
-          <p>ユーザーIDの設定と、各システムへの移動を別々に操作できます。</p>
+          <p>ユーザーIDを設定すると、安全な専用リンクからスケジューラーを開けます。</p>
         </div>
 
         <section class="portal-section" aria-labelledby="user-id-title">
           <div class="section-heading">
             <span class="step-number" aria-hidden="true">1</span>
-            <div><h2 id="user-id-title">ユーザーID</h2><p>入力欄の動作だけを確認します。現在は他画面へ送信しません。</p></div>
+            <div><h2 id="user-id-title">ユーザーID</h2><p>入力したIDは、日付とともに暗号化してスケジューラーへ渡します。</p></div>
           </div>
           <form id="user-id-form" novalidate>
             <label for="user-id">3桁のユーザーID</label>
@@ -61,8 +61,8 @@
           </div>
 
           <div class="system-links">
-            <a id="scheduler-link" class="system-link" href="#">
-              <span><b>スケジューラーを開く</b><small>社内スケジューラーを開きます</small></span>
+            <a id="scheduler-link" class="system-link is-disabled" href="#" aria-disabled="true">
+              <span><b>スケジューラーを開く</b><small>先に3桁のユーザーIDを設定してください</small></span>
               <span aria-hidden="true">→</span>
             </a>
             <a id="calendar-link" class="system-link" href="#" target="_blank" rel="noopener noreferrer">

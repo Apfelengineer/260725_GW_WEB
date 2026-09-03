@@ -111,6 +111,16 @@ function kptc_auth_active_session_user(PDO $pdo): ?array {
     return $user;
 }
 
+function kptc_auth_reset_session_preserving_portal(): void {
+    // 操作モードを再初期化しても、renkonで確認済みの当日アクセス情報は保持します。
+    $_SESSION = [
+        'portal_access_granted'=>!empty($_SESSION['portal_access_granted']),
+        'portal_user_id'=>(string)($_SESSION['portal_user_id'] ?? ''),
+        'portal_token_date'=>(string)($_SESSION['portal_token_date'] ?? ''),
+        'portal_authorized_at'=>(int)($_SESSION['portal_authorized_at'] ?? 0),
+    ];
+}
+
 function kptc_auth_start_general_session(PDO $pdo, array $state): array {
     // ログイン画面を使わず、予定表に存在する最初の有効な一般・管理者アカウントを操作記録の主体にします。
     $memberIds = [];
@@ -141,8 +151,10 @@ function kptc_auth_start_general_session(PDO $pdo, array $state): array {
     }
     if (!is_array($user)) throw new RuntimeException('一般モードを開始できません');
 
+    // renkonで確認済みの入口情報を残したまま、一般モードの操作セッションを開始します。
+    $portalSession = $_SESSION;
     session_regenerate_id(true);
-    $_SESSION = [
+    $_SESSION = $portalSession + [
         'auth_user_id'=>(int)$user['id'],
         'auth_revision'=>(int)$user['auth_revision'],
         'authenticated_at'=>time(),

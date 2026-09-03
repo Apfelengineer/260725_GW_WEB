@@ -5,6 +5,7 @@ require_once __DIR__ . '/runtime-config.php';
 kptc_load_runtime_config('internal');
 require_once __DIR__ . '/availability-publisher.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/portal-access.php';
 
 /*
  * 内部Linuxサーバー上で動作する共有APIです。
@@ -14,19 +15,8 @@ require_once __DIR__ . '/auth.php';
 // API応答をJSONに統一し、共有データをブラウザや中継キャッシュへ残さないようにします。
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
-$scriptDirectory = rtrim(str_replace('\\', '/', dirname((string)($_SERVER['SCRIPT_NAME'] ?? '/'))), '/');
-$cookiePath = trim((string)(getenv('KPTC_SESSION_COOKIE_PATH') ?: '')) ?: ($scriptDirectory === '' || $scriptDirectory === '.' ? '/' : $scriptDirectory . '/');
-$cookieSecureSetting = getenv('KPTC_SESSION_COOKIE_SECURE');
-$cookieSecure = $cookieSecureSetting === false ? !empty($_SERVER['HTTPS']) : $cookieSecureSetting === '1';
-session_name('KPTC_SCHEDULER_SESSION');
-session_set_cookie_params([
-    'lifetime' => 0,
-    'path' => $cookiePath,
-    'secure' => $cookieSecure,
-    'httponly' => true,
-    'samesite' => 'Strict',
-]);
-session_start();
+kptc_portal_start_session();
+if (!kptc_portal_session_is_authorized()) kptc_portal_forbidden(true);
 
 function respond(array $payload, int $status = 200): never {
     http_response_code($status);
@@ -373,12 +363,12 @@ function bootstrap_payload(PDO $pdo): array {
     $record = current_record($pdo);
     $user = kptc_auth_active_session_user($pdo);
     if ($user === null) {
-        $_SESSION = [];
+        kptc_auth_reset_session_preserving_portal();
         $user = kptc_auth_start_general_session($pdo, $record['state']);
     }
     $memberId = (string)$user['member_id'];
     if (member_name($record['state'], $memberId) === '削除済みユーザー') {
-        $_SESSION = [];
+        kptc_auth_reset_session_preserving_portal();
         $user = kptc_auth_start_general_session($pdo, $record['state']);
         $memberId = (string)$user['member_id'];
     }
@@ -386,6 +376,7 @@ function bootstrap_payload(PDO $pdo): array {
         'authenticated'=>true,
         'currentUserId'=>$memberId,
         'username'=>(string)$user['username'],
+        'portalUserId'=>(string)($_SESSION['portal_user_id'] ?? ''),
         'role'=>(string)$user['role'],
         'adminModePasswordConfigured'=>kptc_auth_admin_password_configured($pdo),
         'csrfToken'=>csrf(),

@@ -146,6 +146,14 @@ button:focus-visible, .calendar-link:focus-visible { outline: 3px solid rgba(8, 
 }
 
 .system-link:hover { border-color: #8cb6ca; background: #eaf5fa; }
+.system-link.is-disabled {
+  border-color: #d8e1e6;
+  color: #73828c;
+  background: #f3f5f6;
+  cursor: not-allowed;
+  opacity: .72;
+}
+.system-link.is-disabled:hover { border-color: #d8e1e6; background: #f3f5f6; }
 .system-link b, .system-link small { display: block; }
 .system-link b { font-size: .96rem; }
 .system-link small { margin-top: 5px; color: #6f818e; font-size: .76rem; }

@@ -1,5 +1,5 @@
 /** ビルド先へ用途別の許可ファイルだけをコピーし、内部情報の混入を防ぎます。 */
-import { copyFile, mkdir, rm, unlink } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,6 +12,8 @@ const distributions = {
       "public/api.php",
       "public/runtime-config.php",
       "public/auth.php",
+      "public/portal-access.php",
+      "public/scheduler-entry.php",
       "public/availability-contract.php",
       "public/availability-room-config.php",
       "public/availability-json.php",
@@ -44,6 +46,8 @@ const distributions = {
       "renkon/styles.css",
       "renkon/config.js",
       "renkon/app.js",
+      "renkon/renkon-config.php",
+      "renkon/open-scheduler.php",
     ],
   },
 };
@@ -54,6 +58,16 @@ const destination = resolve(root, "../02_release", distribution.directory);
 if (distribution.clean) await rm(destination, { recursive: true, force: true });
 await mkdir(destination, { recursive: true });
 for (const source of distribution.files) await copyFile(resolve(root, source), resolve(destination, source.split("/").at(-1)));
+
+// originはPHP入口でトークンを検証してから画面を返すため、生成HTMLをindex.phpへ連結します。
+if (target === "origin") {
+  const generatedHtml = resolve(destination, "index.html");
+  const entryTemplate = resolve(destination, "scheduler-entry.php");
+  const [php, html] = await Promise.all([readFile(entryTemplate, "utf8"), readFile(generatedHtml, "utf8")]);
+  await writeFile(resolve(destination, "index.php"), `${php}${html}`, "utf8");
+  await unlink(generatedHtml);
+  await unlink(entryTemplate);
+}
 
 // tamanegi側はディレクトリURLだけで表示できるようindex.htmlへ統一します。
 if (target === "tamanegi") {
