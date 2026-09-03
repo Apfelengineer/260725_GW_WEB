@@ -10,10 +10,8 @@ import {
   japaneseHolidays,
   type AuditEntry,
   type AuthAccount,
-  type AuthRole,
   type AuthenticatedBootstrapResponse,
   type AvailabilityPublishStatus,
-  type LoginUser,
   type Member,
   type ScheduleCategory,
   type ScheduleItem,
@@ -39,6 +37,7 @@ type PendingMoveState = {
   targetDateLabel: string;
 };
 type ManagementTab = "members" | "categories" | "audit";
+type AdminModal = "enter" | "password" | null;
 
 // 日付はタイムゾーン境界で前後しないよう、常に正午を基準に計算します。
 const weekdayNames = ["日", "月", "火", "水", "木", "金", "土"];
@@ -159,40 +158,6 @@ function EmptyState({ children }: { children: React.ReactNode }) {
   return <div className="empty-state"><span aria-hidden="true">○</span><p>{children}</p></div>;
 }
 
-function LoginScreen({ serverAvailable, setupRequired, loginUsers, onLogin, onGuestLogin }: { serverAvailable: boolean; setupRequired: boolean; loginUsers: LoginUser[]; onLogin: (username: string) => Promise<void>; onGuestLogin: () => Promise<void> }) {
-  const [username, setUsername] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitting(true);
-    setError("");
-    try { await onLogin(username); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "ログインできませんでした"); }
-    finally { setSubmitting(false); }
-  }
-  async function guestLogin() {
-    setSubmitting(true);
-    setError("");
-    try { await onGuestLogin(); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "ゲストとしてログインできませんでした"); }
-    finally { setSubmitting(false); }
-  }
-  return (
-    <main className="auth-screen">
-      <form className="login-card" onSubmit={submit}>
-        <Logo />
-        <div><span className="eyebrow">USER SELECTION</span><h1>KPTC Schedulerへログイン</h1><p>社内システムで認証済みのため、利用するユーザーを選択してください。</p></div>
-        <label className="field"><span>ユーザー</span><select autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required><option value="" disabled>ユーザーを選択</option>{loginUsers.map((user) => <option value={user.username} key={user.username}>{user.name}（{user.role === "admin" ? "管理者" : "一般"}）</option>)}</select></label>
-        {error && <p className="login-error" role="alert">{error}</p>}
-        <button className="primary-button" type="submit" disabled={!serverAvailable || !username || submitting}>{submitting ? "ログイン中…" : "選択したユーザーでログイン"}</button>
-        <button className="secondary-button guest-login-button" type="button" disabled={!serverAvailable || submitting} onClick={guestLogin}>ゲストとしてログイン</button>
-        <small>{!serverAvailable ? "内部サーバーへ接続できません。管理者へお問い合わせください。" : setupRequired ? "初期アカウントが未設定です。管理用コマンドで管理者を作成してください。" : "権限とセッションはサーバー側で管理されます。"}</small>
-      </form>
-    </main>
-  );
-}
-
 export default function Home() {
   // サーバーと共有する業務データと、画面内だけで使う選択状態を分けて保持します。
   const [section, setSection] = useState<Section>("schedule");
@@ -217,11 +182,10 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [setupRequired, setSetupRequired] = useState(false);
-  const [loginUsers, setLoginUsers] = useState<LoginUser[]>([]);
   const [csrfToken, setCsrfToken] = useState("");
-  const [currentUsername, setCurrentUsername] = useState("");
-  const [currentRole, setCurrentRole] = useState<SessionRole>("guest");
+  const [currentRole, setCurrentRole] = useState<SessionRole>("user");
+  const [adminModal, setAdminModal] = useState<AdminModal>(null);
+  const [adminModePasswordConfigured, setAdminModePasswordConfigured] = useState(false);
   const [authAccounts, setAuthAccounts] = useState<AuthAccount[]>([]);
   const [publicAvailabilityUrl, setPublicAvailabilityUrl] = useState(defaultPublicAvailabilityUrl);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
@@ -244,8 +208,8 @@ export default function Home() {
     versionRef.current = payload.version;
     setCsrfToken(payload.csrfToken);
     setCurrentUserId(payload.currentUserId);
-    setCurrentUsername(payload.username);
     setCurrentRole(payload.role);
+    setAdminModePasswordConfigured(payload.adminModePasswordConfigured);
     setPublicAvailabilityUrl(payload.publicAvailabilityPageUrl || defaultPublicAvailabilityUrl);
     setAuthAccounts(payload.authAccounts);
     if (payload.role !== "admin") setSection("schedule");
@@ -264,8 +228,7 @@ export default function Home() {
     let active = true;
     groupWatcherApi.bootstrap().then((payload) => {
       if (!active) return;
-      if (payload.authenticated) applyServerPayload(payload);
-      else { setSetupRequired(payload.setupRequired); setLoginUsers(payload.loginUsers); }
+      applyServerPayload(payload);
       setAuthReady(true);
     }).catch(() => {
       if (!active) return;
@@ -342,33 +305,36 @@ export default function Home() {
   const selectedSchedules = selectedScheduleIds.map((id) => schedules.find((item) => item.id === id)).filter((item): item is ScheduleItem => Boolean(item));
   const selectedSchedule = selectedSchedules.length === 1 ? selectedSchedules[0] : null;
 
-  async function login(username: string) {
+  async function enterAdminMode(password: string) {
     if (!serverAvailable) throw new Error("内部サーバーへ接続できません");
-    const payload = await groupWatcherApi.login(username);
-    applyServerPayload(payload);
-    setToast(`${payload.state.members.find((member) => member.id === payload.currentUserId)?.name ?? "ユーザー"}としてログインしました`);
-  }
-
-  async function guestLogin() {
-    if (!serverAvailable) throw new Error("内部サーバーへ接続できません");
-    const payload = await groupWatcherApi.guestLogin();
-    applyServerPayload(payload);
-    setToast("ゲストとしてログインしました（閲覧専用）");
-  }
-
-  async function logout() {
-    if (serverAvailable && csrfToken) {
-      try { await groupWatcherApi.logout(csrfToken); } catch { /* 画面側のログアウトは継続します。 */ }
-    }
-    setCurrentUserId(null);
-    setCurrentUsername("");
-    setCurrentRole("guest");
-    setAuthAccounts([]);
-    setSection("schedule");
     try {
-      const payload = await groupWatcherApi.bootstrap();
-      if (!payload.authenticated) { setLoginUsers(payload.loginUsers); setSetupRequired(payload.setupRequired); }
-    } catch { /* ログイン画面側で接続エラーを表示します。 */ }
+      const payload = await groupWatcherApi.enterAdminMode(password, csrfToken);
+      applyServerPayload(payload);
+      setAdminModal(null);
+      setToast("管理者モードへ切り替えました");
+    } catch (reason) {
+      throw reason;
+    }
+  }
+
+  async function exitAdminMode() {
+    if (!serverAvailable) return;
+    try {
+      const payload = await groupWatcherApi.exitAdminMode(csrfToken);
+      applyServerPayload(payload);
+      setAdminModal(null);
+      setSection("schedule");
+      setToast("一般モードへ戻りました");
+    } catch (reason) {
+      setToast(reason instanceof Error ? reason.message : "一般モードへ戻せませんでした");
+    }
+  }
+
+  async function changeAdminPassword(currentPassword: string, newPassword: string) {
+    const payload = await groupWatcherApi.changeAdminPassword(currentPassword, newPassword, csrfToken);
+    applyServerPayload(payload);
+    setAdminModal(null);
+    setToast("管理者パスワードを変更しました");
   }
 
   async function undoAudit(entry: AuditEntry) {
@@ -657,12 +623,13 @@ export default function Home() {
     };
     await saveQueueRef.current;
     try {
+      const account = existing ? authAccounts.find((item) => item.memberId === existing.id) : null;
       const payload = await groupWatcherApi.saveMemberAccount({
         operation: "save",
         version: versionRef.current,
         member,
-        username: String(form.get("accountId") ?? "").trim(),
-        role: String(form.get("role") ?? "user") as AuthRole,
+        username: account?.username ?? (member.group === "試験室" ? "" : `member-${member.id}`),
+        role: account?.role ?? (member.group === "試験室" ? "room" : "user"),
       }, csrfToken);
       applyServerPayload(payload);
       setMemberEditor(null);
@@ -677,7 +644,7 @@ export default function Home() {
   async function deleteMember(member: Member) {
     if (!canManageUsers) return;
     if (member.id === currentUserId) {
-      setToast("ログイン中のユーザーは削除できません");
+      setToast("操作記録に使用中のユーザーは削除できません");
       return;
     }
     const count = schedules.filter((item) => item.memberId === member.id).length;
@@ -787,7 +754,7 @@ export default function Home() {
   }
 
   if (!authReady) return <div className="auth-screen"><Logo /><p>共有データを読み込んでいます…</p></div>;
-  if (!currentUserId) return <LoginScreen serverAvailable={serverAvailable} setupRequired={setupRequired} loginUsers={loginUsers} onLogin={login} onGuestLogin={guestLogin} />;
+  if (!currentUserId) return <div className="auth-screen"><Logo /><p>内部サーバーへ接続できません。管理者へお問い合わせください。</p></div>;
 
   return (
     <div className="app-shell">
@@ -808,7 +775,10 @@ export default function Home() {
           ))}
         </div>
 
-        {currentMember ? <div className="sidebar-user"><Avatar member={currentMember} small /><span><b>{currentMember.name}</b><small>{currentRole === "admin" ? "管理者" : currentRole === "user" ? "一般" : "試験室"}・{currentUsername}</small></span><button aria-label="ログアウト" title="ログアウト" onClick={logout}>↪</button></div> : <div className="sidebar-user sidebar-empty-user"><span><b>ゲスト</b><small>閲覧専用</small></span><button aria-label="ログアウト" title="ログアウト" onClick={logout}>↪</button></div>}
+        <div className="admin-mode-control">
+          {currentRole === "admin" ? <button onClick={exitAdminMode}>一般モードへ戻る</button> : <button onClick={() => setAdminModal("enter")}>管理者モードへ</button>}
+        </div>
+        {currentMember ? <div className="sidebar-user"><Avatar member={currentMember} small /><span><b>{currentMember.name}</b><small>{currentRole === "admin" ? "管理者モード" : "一般モード"}</small></span></div> : null}
       </aside>
 
       <main className="main-area">
@@ -816,6 +786,7 @@ export default function Home() {
           <div className="mobile-brand"><Logo /></div>
           <label className="global-search"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="予定・メンバーを検索" aria-label="予定・メンバーを検索" /><kbd>⌘ K</kbd></label>
           <div className="topbar-actions">
+            <button className="secondary-button mode-switch-button" onClick={currentRole === "admin" ? exitAdminMode : () => setAdminModal("enter")}>{currentRole === "admin" ? "一般モードへ" : "管理者モード"}</button>
             {canManageUsers && availabilityPublish && <span className={`publish-badge ${availabilityPublish.pending ? "pending" : "ok"}`} title={availabilityPublish.lastSuccessAt ? `最終送信: ${new Date(availabilityPublish.lastSuccessAt).toLocaleString("ja-JP")}` : "送信実績なし"}>{availabilityPublish.pending ? `△ 公開JSON再送待ち${availabilityPublish.consecutiveFailures ? ` (${availabilityPublish.consecutiveFailures})` : ""}` : "● 公開JSON送信済み"}</span>}
             <span className={`sync-badge ${syncStatus}`}>{canEditSchedule ? (syncStatus === "saved" ? "● 共有済み" : syncStatus === "saving" ? "○ 保存中" : "△ オフライン") : "● 閲覧専用"}</span>
             {canEditSchedule && <button className="primary-button" onClick={() => openCreateSchedule()}><span>＋</span> 予定を登録</button>}
@@ -867,7 +838,7 @@ export default function Home() {
             onMoveCategory={moveCategory}
             auditLogs={auditLogs}
             onUndo={undoAudit}
-            authAccounts={authAccounts}
+            onChangeAdminPassword={() => setAdminModal("password")}
           />
         )}
       </main>
@@ -880,8 +851,10 @@ export default function Home() {
       </nav>
 
       {pendingMove && <MoveConfirmationModal move={pendingMove} onCancel={cancelScheduleMove} onConfirm={confirmScheduleMove} />}
+      {adminModal === "enter" && <AdminModeModal configured={adminModePasswordConfigured} onClose={() => setAdminModal(null)} onSubmit={enterAdminMode} />}
+      {adminModal === "password" && currentRole === "admin" && <AdminPasswordModal onClose={() => setAdminModal(null)} onSubmit={changeAdminPassword} />}
       {scheduleEditor && canEditSchedule && <ScheduleModal editor={scheduleEditor} members={members} categories={categories} onClose={() => setScheduleEditor(null)} onSubmit={saveSchedule} onDelete={scheduleEditor.mode === "edit" ? () => deleteSchedules([scheduleEditor.item.id]) : undefined} />}
-      {memberEditor && canManageUsers && <MemberModal member={memberEditor === "new" ? null : memberEditor} account={memberEditor === "new" ? null : authAccounts.find((item) => item.memberId === memberEditor.id) ?? null} onClose={() => setMemberEditor(null)} onSubmit={saveMember} />}
+      {memberEditor && canManageUsers && <MemberModal member={memberEditor === "new" ? null : memberEditor} onClose={() => setMemberEditor(null)} onSubmit={saveMember} />}
       {categoryEditor && <CategoryModal category={categoryEditor === "new" ? null : categoryEditor} onClose={() => setCategoryEditor(null)} onSubmit={saveCategory} />}
       {contextMenu && canEditSchedule && (
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} role="menu">
@@ -1111,7 +1084,7 @@ function MonthView({ calendarDate, members, schedules, categories, editable, sel
   );
 }
 
-function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs, onUndo, onAddMember, onEditMember, onDeleteMember, onMoveMember, onAddCategory, onEditCategory, onDeleteCategory, onMoveCategory, authAccounts }: {
+function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs, onUndo, onAddMember, onEditMember, onDeleteMember, onMoveMember, onAddCategory, onEditCategory, onDeleteCategory, onMoveCategory, onChangeAdminPassword }: {
   tab: ManagementTab;
   setTab: (tab: ManagementTab) => void;
   members: Member[];
@@ -1127,16 +1100,15 @@ function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs
   onEditCategory: (category: ScheduleCategory) => void;
   onDeleteCategory: (category: ScheduleCategory) => void;
   onMoveCategory: (category: ScheduleCategory, direction: -1 | 1) => void;
-  authAccounts: AuthAccount[];
+  onChangeAdminPassword: () => void;
 }) {
   const addAction = tab === "members" ? onAddMember : tab === "categories" ? onAddCategory : null;
-  const roleLabel = (role: AuthRole) => role === "admin" ? "管理者" : role === "user" ? "一般" : "試験室";
   return (
     <div className="standard-page management-page">
-      <div className="page-heading"><div><span className="eyebrow">MANAGEMENT</span><h1>ユーザー・予定種別管理</h1><p>ユーザー情報とログイン設定を同じ編集画面で管理します</p></div>{addAction && <button className="primary-button" onClick={addAction}>＋ {tab === "members" ? "ユーザーを追加" : "予定種別を追加"}</button>}</div>
+      <div className="page-heading"><div><span className="eyebrow">ADMIN MODE</span><h1>ユーザー・試験室・予定種別管理</h1><p>管理者モードで、利用者と試験室、予定種別を管理します</p></div><div className="page-heading-actions"><button className="secondary-button" onClick={onChangeAdminPassword}>管理者パスワード変更</button>{addAction && <button className="primary-button" onClick={addAction}>＋ {tab === "members" ? "ユーザー・試験室を追加" : "予定種別を追加"}</button>}</div></div>
       <div className="management-tabs"><button className={tab === "members" ? "active" : ""} onClick={() => setTab("members")}>ユーザー <span>{members.length}</span></button><button className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}>予定種別 <span>{categories.length}</span></button><button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}>操作履歴 <span>{auditLogs.length}</span></button></div>
       {tab === "members" ? (
-        <div className="members-table-wrap"><table className="members-table"><thead><tr><th>表示順</th><th>ユーザー</th><th>所属</th><th>アカウントID</th><th>権限</th><th>内線</th><th>操作</th></tr></thead><tbody>{members.map((member, index) => { const account = authAccounts.find((item) => item.memberId === member.id); const role: AuthRole = account?.role ?? (member.group === "試験室" ? "room" : "user"); return <tr key={member.id}><td><div className="order-control"><b>{index + 1}</b><button type="button" aria-label={`${member.name}を上へ`} disabled={index === 0} onClick={() => onMoveMember(member, -1)}>↑</button><button type="button" aria-label={`${member.name}を下へ`} disabled={index === members.length - 1} onClick={() => onMoveMember(member, 1)}>↓</button></div></td><td><Avatar member={member} small /><b>{member.name}</b></td><td>{member.group}</td><td><code>{account?.username ?? "—"}</code></td><td><span className={`role-badge ${role}`}>{roleLabel(role)}</span></td><td><span>{member.extension || "—"}</span></td><td className="table-actions"><button onClick={() => onEditMember(member)}>編集</button><button className="danger" onClick={() => onDeleteMember(member)}>削除</button></td></tr>; })}</tbody></table></div>
+        <div className="members-table-wrap"><table className="members-table"><thead><tr><th>表示順</th><th>ユーザー／試験室</th><th>種別</th><th>内線</th><th>操作</th></tr></thead><tbody>{members.map((member, index) => <tr key={member.id}><td><div className="order-control"><b>{index + 1}</b><button type="button" aria-label={`${member.name}を上へ`} disabled={index === 0} onClick={() => onMoveMember(member, -1)}>↑</button><button type="button" aria-label={`${member.name}を下へ`} disabled={index === members.length - 1} onClick={() => onMoveMember(member, 1)}>↓</button></div></td><td><Avatar member={member} small /><b>{member.name}</b></td><td><span className={`role-badge ${member.group === "試験室" ? "room" : "user"}`}>{member.group === "試験室" ? "試験室" : "一般ユーザー"}</span></td><td><span>{member.extension || "—"}</span></td><td className="table-actions"><button onClick={() => onEditMember(member)}>編集</button><button className="danger" onClick={() => onDeleteMember(member)}>削除</button></td></tr>)}</tbody></table></div>
       ) : tab === "categories" ? (
         <div className="category-management-list">{categories.map((category, index) => <article key={category.id}><div className="order-control category-order"><b>{index + 1}</b><button type="button" aria-label={`${category.name}を上へ`} disabled={index === 0} onClick={() => onMoveCategory(category, -1)}>↑</button><button type="button" aria-label={`${category.name}を下へ`} disabled={index === categories.length - 1} onClick={() => onMoveCategory(category, 1)}>↓</button></div><span className="category-swatch" style={{ background: category.color }} /><div><h2>{category.name}</h2><p>使用中の予定 {schedules.filter((item) => item.category === category.name).length}件</p></div><button onClick={() => onEditCategory(category)}>編集</button><button className="danger" onClick={() => onDeleteCategory(category)}>削除</button></article>)}</div>
       ) : (
@@ -1148,6 +1120,61 @@ function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs
 
 function ModalShell({ title, eyebrow, onClose, children }: { title: string; eyebrow: string; onClose: () => void; children: React.ReactNode }) {
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="modal" role="dialog" aria-modal="true" aria-label={title}><header><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div><button onClick={onClose} aria-label="閉じる">×</button></header>{children}</section></div>;
+}
+
+function AdminModeModal({ configured, onClose, onSubmit }: { configured: boolean; onClose: () => void; onSubmit: (password: string) => Promise<void> }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const password = String(new FormData(event.currentTarget).get("password") ?? "");
+    setSubmitting(true);
+    setError("");
+    try { await onSubmit(password); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "管理者モードへ切り替えられませんでした"); }
+    finally { setSubmitting(false); }
+  }
+  return (
+    <ModalShell title="管理者モードへ切り替え" eyebrow="ADMIN MODE" onClose={onClose}>
+      <form className="modal-form compact-form" onSubmit={submit}>
+        <p className="modal-guidance full">ユーザー・試験室の管理機能を使用するには、管理者パスワードを入力してください。</p>
+        <label className="field full"><span>管理者パスワード</span><input name="password" type="password" autoComplete="current-password" autoFocus disabled={!configured} required /></label>
+        {!configured && <p className="form-notice error full">管理者パスワードが未設定です。サーバー管理者による初期設定が必要です。</p>}
+        {error && <p className="form-notice error full" role="alert">{error}</p>}
+        <footer><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button type="submit" className="primary-button" disabled={!configured || submitting}>{submitting ? "確認中…" : "管理者モードへ"}</button></footer>
+      </form>
+    </ModalShell>
+  );
+}
+
+function AdminPasswordModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (currentPassword: string, newPassword: string) => Promise<void> }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const currentPassword = String(form.get("currentPassword") ?? "");
+    const newPassword = String(form.get("newPassword") ?? "");
+    const confirmation = String(form.get("confirmation") ?? "");
+    if (newPassword !== confirmation) { setError("新しいパスワードが一致しません"); return; }
+    setSubmitting(true);
+    setError("");
+    try { await onSubmit(currentPassword, newPassword); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "管理者パスワードを変更できませんでした"); }
+    finally { setSubmitting(false); }
+  }
+  return (
+    <ModalShell title="管理者パスワード変更" eyebrow="ADMIN SECURITY" onClose={onClose}>
+      <form className="modal-form compact-form" onSubmit={submit}>
+        <p className="modal-guidance full">8〜128文字の新しいパスワードを設定してください。</p>
+        <label className="field full"><span>現在のパスワード</span><input name="currentPassword" type="password" autoComplete="current-password" autoFocus required /></label>
+        <label className="field full"><span>新しいパスワード</span><input name="newPassword" type="password" minLength={8} maxLength={128} autoComplete="new-password" required /></label>
+        <label className="field full"><span>新しいパスワード（確認）</span><input name="confirmation" type="password" minLength={8} maxLength={128} autoComplete="new-password" required /></label>
+        {error && <p className="form-notice error full" role="alert">{error}</p>}
+        <footer><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button type="submit" className="primary-button" disabled={submitting}>{submitting ? "変更中…" : "パスワードを変更"}</button></footer>
+      </form>
+    </ModalShell>
+  );
 }
 
 function MoveConfirmationModal({ move, onCancel, onConfirm }: { move: PendingMoveState; onCancel: () => void; onConfirm: () => void }) {
@@ -1197,9 +1224,7 @@ function ScheduleModal({ editor, members, categories, onClose, onSubmit, onDelet
   );
 }
 
-function MemberModal({ member, account, onClose, onSubmit }: { member: Member | null; account: AuthAccount | null; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  const [role, setRole] = useState<AuthRole>(account?.role ?? (member?.group === "試験室" ? "room" : "user"));
-  const [username, setUsername] = useState<string | null>(null);
+function MemberModal({ member, onClose, onSubmit }: { member: Member | null; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   return (
     <ModalShell title={member ? "ユーザーを編集" : "ユーザーを追加"} eyebrow="USER MANAGEMENT" onClose={onClose}>
       <form onSubmit={onSubmit} className="modal-form">
@@ -1208,8 +1233,7 @@ function MemberModal({ member, account, onClose, onSubmit }: { member: Member | 
         <label className="field color-field"><span>表示色</span><input name="color" type="color" defaultValue={member?.color ?? "#268b7d"} /></label>
         <label className="field"><span>所属</span><select name="group" defaultValue={member?.group ?? "電気通信係"}>{groups.slice(1).map((groupName) => <option key={groupName}>{groupName}</option>)}</select></label>
         <label className="field"><span>内線</span><input name="extension" type="text" inputMode="tel" defaultValue={member?.extension ?? ""} /></label>
-        <label className="field full"><span>権限</span><select name="role" value={role} onChange={(event) => setRole(event.target.value as AuthRole)}><option value="admin">管理者</option><option value="user">一般</option><option value="room">試験室（閲覧のみ）</option></select><small className="field-note">管理者はユーザー管理可、一般は予定編集可、試験室は閲覧のみです</small></label>
-        <label className="field full"><span>アカウントID</span><input name="accountId" minLength={3} maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._@-]{2,63}" autoCapitalize="none" autoComplete="off" value={username ?? account?.username ?? ""} onChange={(event) => setUsername(event.target.value)} required={role !== "room"} /><small className="field-note">試験室権限でログイン不要の場合だけ空欄にできます</small></label>
+        <p className="modal-guidance full">所属を「試験室」にすると部屋として、「電気通信係」にすると一般ユーザーとして予定表へ追加されます。</p>
         <footer><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button className="primary-button" type="submit">{member ? "変更を保存" : "ユーザーを追加"}</button></footer>
       </form>
     </ModalShell>

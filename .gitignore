@@ -43,3 +43,6 @@ next-env.d.ts
 /outputs/
 /work/
 /tmp/
+
+# local PHP runtime data
+/GW/

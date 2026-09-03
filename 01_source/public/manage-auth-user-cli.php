@@ -14,10 +14,11 @@ require_once __DIR__ . '/auth.php';
 $databasePath = trim((string)(getenv('KPTC_INTERNAL_SCHEDULER_DB') ?: '')) ?: dirname(__DIR__, 2) . '/GW/group-watcher.sqlite';
 $pdo = new PDO('sqlite:' . $databasePath);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+$pdo->exec('CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
 kptc_auth_create_tables($pdo);
 
 function kptc_auth_cli_usage(): never {
-    fwrite(STDERR, "Usage:\n  php manage-auth-user-cli.php list\n  php manage-auth-user-cli.php create <username> <member-id> [admin|user|room]\n  php manage-auth-user-cli.php enable|disable <username>\n");
+    fwrite(STDERR, "Usage:\n  php manage-auth-user-cli.php list\n  php manage-auth-user-cli.php create <username> <member-id> [admin|user|room]\n  php manage-auth-user-cli.php enable|disable <username>\n  php manage-auth-user-cli.php set-admin-mode-password\n");
     exit(2);
 }
 
@@ -51,6 +52,22 @@ try {
         $statement->execute([$command === 'enable' ? 1 : 0, date(DATE_ATOM), $username]);
         if ($statement->rowCount() !== 1) throw new RuntimeException('ユーザーが見つかりません');
         fwrite(STDOUT, ucfirst($command) . "d: {$username}\n");
+        exit(0);
+    }
+    if ($command === 'set-admin-mode-password') {
+        fwrite(STDOUT, "New admin mode password (8-128 characters): ");
+        $hideInput = DIRECTORY_SEPARATOR === '/' && function_exists('shell_exec') && trim((string)shell_exec('command -v stty 2>/dev/null')) !== '';
+        if ($hideInput) shell_exec('stty -echo');
+        try {
+            $password = rtrim((string)fgets(STDIN), "\r\n");
+        } finally {
+            if ($hideInput) {
+                shell_exec('stty echo');
+                fwrite(STDOUT, PHP_EOL);
+            }
+        }
+        kptc_auth_set_admin_password($pdo, $password);
+        fwrite(STDOUT, "Admin mode password updated.\n");
         exit(0);
     }
     kptc_auth_cli_usage();

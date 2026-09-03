@@ -58,7 +58,7 @@ export type AvailabilityPublishStatus = {
 };
 
 export type AuthRole = "admin" | "user" | "room";
-export type SessionRole = AuthRole | "guest";
+export type SessionRole = "admin" | "user";
 
 export type AuthAccount = {
   id: number;
@@ -71,16 +71,14 @@ export type AuthAccount = {
   lastLoginAt: string | null;
 };
 
-export type LoginUser = { username: string; memberId: string; name: string; role: "admin" | "user" };
-
 export type AuthenticatedBootstrapResponse = {
   authenticated: true;
-  setupRequired: false;
   state: SharedState;
   version: number;
   currentUserId: string;
   username: string;
   role: SessionRole;
+  adminModePasswordConfigured: boolean;
   csrfToken: string;
   publicAvailabilityPageUrl: string;
   authAccounts: AuthAccount[];
@@ -88,13 +86,7 @@ export type AuthenticatedBootstrapResponse = {
   availabilityPublish: AvailabilityPublishStatus;
 };
 
-export type UnauthenticatedBootstrapResponse = {
-  authenticated: false;
-  setupRequired: boolean;
-  loginUsers: LoginUser[];
-};
-
-export type BootstrapResponse = AuthenticatedBootstrapResponse | UnauthenticatedBootstrapResponse;
+export type BootstrapResponse = AuthenticatedBootstrapResponse;
 
 export const groups = ["すべてのグループ", "電気通信係", "試験室"] as const;
 
@@ -138,14 +130,14 @@ export const groupWatcherApi = {
   bootstrap() {
     return this.request<BootstrapResponse>("bootstrap");
   },
-  login(username: string) {
-    return this.request<AuthenticatedBootstrapResponse>("login", { method: "POST", body: JSON.stringify({ username }) });
+  enterAdminMode(password: string, csrfToken: string) {
+    return this.request<AuthenticatedBootstrapResponse>("admin-mode-enter", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ password }) });
   },
-  guestLogin() {
-    return this.request<AuthenticatedBootstrapResponse>("guest-login", { method: "POST", body: "{}" });
+  exitAdminMode(csrfToken: string) {
+    return this.request<AuthenticatedBootstrapResponse>("admin-mode-exit", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: "{}" });
   },
-  logout(csrfToken: string) {
-    return this.request<{ ok: boolean }>("logout", { method: "POST", headers: { "X-CSRF-Token": csrfToken } });
+  changeAdminPassword(currentPassword: string, newPassword: string, csrfToken: string) {
+    return this.request<AuthenticatedBootstrapResponse>("admin-mode-password", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ currentPassword, newPassword }) });
   },
   save(state: SharedState, version: number, csrfToken: string, action: string, summary: string) {
     return this.request<AuthenticatedBootstrapResponse>("save", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ state, version, action, summary }) });

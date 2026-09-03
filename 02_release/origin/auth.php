@@ -65,14 +65,6 @@ function kptc_auth_find_user(PDO $pdo, string $username): ?array {
     return is_array($row) ? $row : null;
 }
 
-function kptc_auth_select_user(PDO $pdo, string $username): ?array {
-    // 社内システム側で認証済みであることを前提に、画面へ表示する有効ユーザーだけを受け付けます。
-    $user = kptc_auth_find_user($pdo, $username);
-    if (!is_array($user) || (int)$user['enabled'] !== 1 || !in_array((string)$user['role'], ['admin', 'user'], true)) return null;
-    $pdo->prepare('UPDATE auth_users SET last_login_at=?,updated_at=? WHERE id=?')->execute([date(DATE_ATOM), date(DATE_ATOM), $user['id']]);
-    return $user;
-}
-
 function kptc_auth_user_count(PDO $pdo): int {
     return (int)$pdo->query('SELECT COUNT(*) FROM auth_users')->fetchColumn();
 }
@@ -92,19 +84,6 @@ function kptc_auth_account_list(PDO $pdo): array {
     ], $rows);
 }
 
-function kptc_auth_login_user_list(PDO $pdo, array $state): array {
-    // ログイン画面には管理者・一般ユーザーだけを氏名付きで返し、試験室アカウントは表示しません。
-    $memberNames = [];
-    foreach ($state['members'] ?? [] as $member) $memberNames[(string)$member['id']] = (string)$member['name'];
-    $rows = $pdo->query("SELECT username,member_id,role FROM auth_users WHERE enabled=1 AND role IN ('admin','user') ORDER BY username")->fetchAll(PDO::FETCH_ASSOC);
-    return array_values(array_map(static fn(array $row): array => [
-        'username'=>(string)$row['username'],
-        'memberId'=>(string)$row['member_id'],
-        'name'=>$memberNames[(string)$row['member_id']] ?? '削除済みユーザー',
-        'role'=>(string)$row['role'],
-    ], array_filter($rows, static fn(array $row): bool => isset($memberNames[(string)$row['member_id']]))));
-}
-
 function kptc_auth_enabled_admin_count(PDO $pdo): int {
     return (int)$pdo->query("SELECT COUNT(*) FROM auth_users WHERE role='admin' AND enabled=1")->fetchColumn();
 }
@@ -117,10 +96,6 @@ function kptc_auth_active_session_user(PDO $pdo): ?array {
     $idleTimeout = max(300, (int)(getenv('KPTC_AUTH_IDLE_TIMEOUT') ?: 1800));
     $absoluteTimeout = max($idleTimeout, (int)(getenv('KPTC_AUTH_ABSOLUTE_TIMEOUT') ?: 43200));
     if ($authenticatedAt < $now - $absoluteTimeout || $lastActivityAt < $now - $idleTimeout) return null;
-    if (!empty($_SESSION['guest'])) {
-        $_SESSION['last_activity_at'] = $now;
-        return ['id'=>0, 'username'=>'guest', 'member_id'=>'guest', 'role'=>'guest', 'enabled'=>1, 'auth_revision'=>1];
-    }
     if ($authUserId < 1) return null;
     $statement = $pdo->prepare('SELECT id,username,member_id,role,enabled,auth_revision FROM auth_users WHERE id=?');
     $statement->execute([$authUserId]);
@@ -130,7 +105,83 @@ function kptc_auth_active_session_user(PDO $pdo): ?array {
     if (isset($_SESSION['auth_revision']) && (int)$_SESSION['auth_revision'] !== $revision) return null;
     $_SESSION['auth_revision'] = $revision;
     $_SESSION['last_activity_at'] = $now;
+    // アカウント固有の旧権限は互換用に保持し、画面上の権限はモードで決定します。
+    $user['account_role'] = (string)$user['role'];
+    $user['role'] = !empty($_SESSION['admin_mode']) ? 'admin' : 'user';
     return $user;
+}
+
+function kptc_auth_start_general_session(PDO $pdo, array $state): array {
+    // ログイン画面を使わず、予定表に存在する最初の有効な一般・管理者アカウントを操作記録の主体にします。
+    $memberIds = [];
+    $fallbackMemberId = '';
+    foreach ($state['members'] ?? [] as $member) {
+        $memberId = (string)($member['id'] ?? '');
+        if ($memberId === '') continue;
+        $memberIds[$memberId] = true;
+        if ($fallbackMemberId === '' && (string)($member['group'] ?? '') !== '試験室') $fallbackMemberId = $memberId;
+    }
+    if ($fallbackMemberId === '') throw new RuntimeException('一般モードに対応するユーザーが見つかりません');
+
+    $rows = $pdo->query("SELECT id,username,member_id,role,enabled,auth_revision FROM auth_users WHERE enabled=1 AND role IN ('user','admin') ORDER BY CASE role WHEN 'user' THEN 0 ELSE 1 END,id")->fetchAll(PDO::FETCH_ASSOC);
+    $user = null;
+    foreach ($rows as $row) {
+        if (isset($memberIds[(string)$row['member_id']])) { $user = $row; break; }
+    }
+    if (!is_array($user)) {
+        // 新規環境でもすぐ一般モードを利用できるよう、内部処理専用アカウントを一度だけ作成します。
+        $now = date(DATE_ATOM);
+        $existing = kptc_auth_find_user($pdo, 'system-general');
+        if (is_array($existing)) {
+            $pdo->prepare("UPDATE auth_users SET member_id=?,role='user',enabled=1,auth_revision=auth_revision+1,updated_at=? WHERE id=?")->execute([$fallbackMemberId,$now,(int)$existing['id']]);
+        } else {
+            $pdo->prepare("INSERT INTO auth_users(username,member_id,password_hash,role,enabled,auth_revision,created_at,updated_at) VALUES('system-general',?,?,'user',1,1,?,?)")->execute([$fallbackMemberId,kptc_auth_placeholder_hash(),$now,$now]);
+        }
+        $user = kptc_auth_find_user($pdo, 'system-general');
+    }
+    if (!is_array($user)) throw new RuntimeException('一般モードを開始できません');
+
+    session_regenerate_id(true);
+    $_SESSION = [
+        'auth_user_id'=>(int)$user['id'],
+        'auth_revision'=>(int)$user['auth_revision'],
+        'authenticated_at'=>time(),
+        'last_activity_at'=>time(),
+        'admin_mode'=>false,
+        'csrf'=>bin2hex(random_bytes(24)),
+    ];
+    $user['account_role'] = (string)$user['role'];
+    $user['role'] = 'user';
+    return $user;
+}
+
+function kptc_auth_admin_password_hash(PDO $pdo): ?string {
+    $statement = $pdo->prepare("SELECT value FROM app_meta WHERE key='admin_mode_password_hash'");
+    $statement->execute();
+    $value = $statement->fetchColumn();
+    return is_string($value) && $value !== '' ? $value : null;
+}
+
+function kptc_auth_admin_password_configured(PDO $pdo): bool {
+    return kptc_auth_admin_password_hash($pdo) !== null;
+}
+
+function kptc_auth_validate_admin_password(string $password): void {
+    $length = function_exists('mb_strlen') ? mb_strlen($password) : strlen($password);
+    if ($length < 8 || $length > 128) throw new InvalidArgumentException('管理者パスワードは8〜128文字で設定してください');
+}
+
+function kptc_auth_set_admin_password(PDO $pdo, string $password): void {
+    kptc_auth_validate_admin_password($password);
+    $algorithm = defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_DEFAULT;
+    $hash = password_hash($password, $algorithm);
+    if (!is_string($hash)) throw new RuntimeException('管理者パスワードを保存できません');
+    $pdo->prepare("INSERT OR REPLACE INTO app_meta(key,value) VALUES('admin_mode_password_hash',?)")->execute([$hash]);
+}
+
+function kptc_auth_verify_admin_password(PDO $pdo, string $password): bool {
+    $hash = kptc_auth_admin_password_hash($pdo);
+    return $hash !== null && password_verify($password, $hash);
 }
 
 // 認証補助ファイルへ直接アクセスされた場合は内容を返しません。

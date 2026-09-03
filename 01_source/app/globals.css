@@ -102,7 +102,10 @@ button, select { cursor: pointer; }
 .group-電気通信係 { background: #8b67c8; box-shadow: 0 0 0 3px rgba(139,103,200,.12); }
 .group-試験室 { background: #537f8e; box-shadow: 0 0 0 3px rgba(83,127,142,.12); }
 
-.sidebar-user { display: grid; grid-template-columns: 32px minmax(0,1fr) 24px; gap: 10px; align-items: center; margin-top: auto; padding: 15px 8px 4px; border-top: 1px solid rgba(255,255,255,.08); }
+.admin-mode-control { margin-top: auto; padding: 14px 7px 0; border-top: 1px solid rgba(255,255,255,.08); }
+.admin-mode-control button { width: 100%; min-height: 34px; border: 1px solid rgba(255,255,255,.14); border-radius: 8px; color: #cfe0eb; background: rgba(255,255,255,.06); font-size: 9px; font-weight: 700; }
+.admin-mode-control button:hover { background: rgba(255,255,255,.11); }
+.sidebar-user { display: grid; grid-template-columns: 32px minmax(0,1fr); gap: 10px; align-items: center; padding: 12px 8px 4px; }
 .sidebar-user > span { display: flex; min-width: 0; flex-direction: column; }
 .sidebar-user b { overflow: hidden; color: #eef5f8; font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-user small { margin-top: 2px; color: #748ba0; font-size: 9px; }
@@ -133,6 +136,7 @@ button, select { cursor: pointer; }
 .global-search input::placeholder { color: #9ba4af; }
 .global-search kbd { padding: 3px 6px; border: 1px solid #e0e4e8; border-radius: 5px; color: #8b96a2; background: #fff; font-size: 9px; box-shadow: 0 1px 0 #dfe3e7; white-space: nowrap; }
 .topbar-actions { display: flex; align-items: center; gap: 9px; }
+.mode-switch-button { min-height: 33px; padding-inline: 11px; white-space: nowrap; }
 .sync-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 0 9px; border-radius: 13px; color: #0b7569; background: #e5f5f1; font-size: 8px; font-weight: 730; white-space: nowrap; }
 .sync-badge.saving { color: #7b6822; background: #fff7d9; }
 .sync-badge.offline { color: #b14f3c; background: #fff0eb; }
@@ -255,6 +259,7 @@ button, select { cursor: pointer; }
 .management-tabs button { min-height: 34px; padding: 0 14px; border: 0; border-radius: 8px; color: #6e7d89; background: transparent; font-size: 10px; font-weight: 700; }
 .management-tabs button.active { color: #fff; background: #19344e; }
 .management-tabs span { margin-left: 5px; opacity: .7; }
+.page-heading-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .table-actions { display: flex; gap: 6px; white-space: nowrap; }
 .members-table td:last-child .danger,.category-management-list .danger { color: #c4513a; }
 .role-badge { display: inline-flex; padding: 4px 7px; border-radius: 8px; color: #5f6f7c; background: #f0f3f5; font-size: 7.5px; font-weight: 750; }
@@ -292,6 +297,9 @@ button, select { cursor: pointer; }
 .color-field input[type="color"] { padding: 4px; }
 .check-field { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid #e3e8eb; border-radius: 10px; background: #fafbfc; }.check-field input { width: 15px; height: 15px; accent-color: var(--teal); }.check-field span { display: flex; flex-direction: column; }.check-field b { font-size: 9px; }.check-field small { margin-top: 3px; color: #89949e; font-size: 7.5px; }
 .modal-form footer { display: flex; justify-content: flex-end; gap: 9px; padding-top: 5px; }
+.modal-guidance { margin: 0; color: #60717e; font-size: 10px; line-height: 1.7; }
+.form-notice { margin: 0; padding: 9px 11px; border-radius: 8px; font-size: 9px; line-height: 1.6; }
+.form-notice.error { border: 1px solid #efc2b8; color: #a43e2d; background: #fff2ef; }
 .move-confirmation { display: grid; gap: 18px; padding: 22px 24px 24px; }
 .move-confirmation > p { margin: 0; color: #435462; font-size: 11px; line-height: 1.7; }
 .move-confirmation > p b { color: var(--ink); font-size: 12px; }
@@ -317,15 +325,9 @@ button, select { cursor: pointer; }
 .context-menu button:last-child { color: #c4513a; }
 .mobile-nav { display: none; }
 
-/* ログイン画面 */
+/* 初期読込・接続エラー画面 */
 .auth-screen { display: grid; min-height: 100vh; place-items: center; align-content: center; gap: 18px; padding: 24px; color: #dfeaf3; background: radial-gradient(circle at 18% 95%,rgba(33,180,157,.16),transparent 30%),linear-gradient(145deg,#0d243b,#081829); }
 .auth-screen > p { color: #8fa5b8; font-size: 11px; }
-.login-card { display: flex; width: min(440px,100%); flex-direction: column; gap: 24px; padding: 32px; border: 1px solid rgba(255,255,255,.12); border-radius: 20px; background: rgba(255,255,255,.97); box-shadow: 0 30px 80px rgba(0,0,0,.28); color: var(--ink); }
-.login-card .brand-copy b { color: var(--ink); }.login-card .brand-copy small { color: #7d8c99; }
-.login-card h1 { margin: 4px 0 7px; font-size: 23px; letter-spacing: -.04em; }.login-card p { margin: 0; color: #71808c; font-size: 10px; line-height: 1.7; }
-.login-card .primary-button { min-height: 43px; }.login-card > small { color: #909aa3; font-size: 8px; text-align: center; }
-.login-card .guest-login-button { min-height: 40px; border-color: #cdd8de; color: #355268; background: #f7fafb; font-weight: 700; }
-.login-card .login-error { padding: 9px 11px; border: 1px solid #efc2b8; border-radius: 8px; color: #a43e2d; background: #fff2ef; font-size: 9px; font-weight: 650; }
 
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
@@ -355,6 +357,8 @@ button, select { cursor: pointer; }
   .global-search { width: min(48vw,300px); height: 35px; margin-left: 10px; }
   .global-search kbd { display: none; }
   .topbar-actions { margin-left: auto; }
+  .topbar-actions .sync-badge { display: none; }
+  .mode-switch-button { padding-inline: 8px; font-size: 8px; }
   .publish-badge { display: none; }
   .page-layout,.standard-page { padding: 22px 14px 30px; }
   .page-heading h1 { font-size: 23px; }

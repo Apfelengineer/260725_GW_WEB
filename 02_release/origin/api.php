@@ -372,23 +372,22 @@ function public_availability_page_url(): string {
 function bootstrap_payload(PDO $pdo): array {
     $record = current_record($pdo);
     $user = kptc_auth_active_session_user($pdo);
-    if ($user === null && !empty($_SESSION['auth_user_id'])) {
+    if ($user === null) {
         $_SESSION = [];
-        session_regenerate_id(true);
+        $user = kptc_auth_start_general_session($pdo, $record['state']);
     }
-    $isGuest = ($user['role'] ?? '') === 'guest';
-    $memberId = $user === null ? null : (string)$user['member_id'];
-    if (!$isGuest && $memberId && member_name($record['state'], $memberId) === '削除済みユーザー') {
+    $memberId = (string)$user['member_id'];
+    if (member_name($record['state'], $memberId) === '削除済みユーザー') {
         $_SESSION = [];
-        $memberId = null;
+        $user = kptc_auth_start_general_session($pdo, $record['state']);
+        $memberId = (string)$user['member_id'];
     }
-    if ($memberId === null) return ['authenticated'=>false, 'setupRequired'=>kptc_auth_user_count($pdo) === 0, 'loginUsers'=>kptc_auth_login_user_list($pdo, $record['state'])];
     return $record + [
         'authenticated'=>true,
-        'setupRequired'=>false,
         'currentUserId'=>$memberId,
         'username'=>(string)$user['username'],
         'role'=>(string)$user['role'],
+        'adminModePasswordConfigured'=>kptc_auth_admin_password_configured($pdo),
         'csrfToken'=>csrf(),
         'publicAvailabilityPageUrl'=>public_availability_page_url(),
         'authAccounts'=>$user['role'] === 'admin' ? kptc_auth_account_list($pdo) : [],
@@ -405,53 +404,57 @@ function bootstrap_payload(PDO $pdo): array {
 $pdo = db();
 $action = $_GET['action'] ?? 'bootstrap';
 
-// 初期データ取得とログイン状態確認。
+// 初期データ取得時に一般モードのセッションを自動開始します。
 if ($action === 'bootstrap') respond(bootstrap_payload($pdo));
 
-// 社内システムで認証済みの利用者が選んだユーザーを確認し、新しいセッションを開始します。
-if ($action === 'login') {
+if ($action === 'admin-mode-enter') {
     require_post();
+    require_auth_user();
     $input = body();
-    $username = (string)($input['username'] ?? '');
-    if (strlen($username) < 3 || strlen($username) > 64) respond(['error'=>'選択したユーザーでログインできません'], 401);
-    if (kptc_auth_user_count($pdo) === 0) respond(['error'=>'管理者による初期アカウント設定が必要です', 'setupRequired'=>true], 503);
-    $user = kptc_auth_select_user($pdo, $username);
-    if ($user === null) respond(['error'=>'選択したユーザーでログインできません'], 401);
-    $memberId = (string)$user['member_id'];
-    $record = current_record($pdo);
-    $name = member_name($record['state'], $memberId);
-    if ($memberId === '' || $name === '削除済みユーザー') respond(['error'=>'対応するスケジューラーユーザーが見つかりません'], 403);
+    if (!kptc_auth_admin_password_configured($pdo)) respond(['error'=>'管理者パスワードが未設定です。サーバー管理者へお問い合わせください'], 503);
+    $lockedUntil = (int)($_SESSION['admin_mode_locked_until'] ?? 0);
+    if ($lockedUntil > time()) respond(['error'=>'確認に複数回失敗したため、しばらく待ってからお試しください'], 429);
+    if (!kptc_auth_verify_admin_password($pdo, (string)($input['password'] ?? ''))) {
+        $attempts = (int)($_SESSION['admin_mode_failed_attempts'] ?? 0) + 1;
+        $_SESSION['admin_mode_failed_attempts'] = $attempts;
+        if ($attempts >= 5) {
+            $_SESSION['admin_mode_locked_until'] = time() + 60;
+            $_SESSION['admin_mode_failed_attempts'] = 0;
+        }
+        respond(['error'=>'管理者パスワードが正しくありません'], 401);
+    }
     session_regenerate_id(true);
-    unset($_SESSION['guest']);
-    $_SESSION['auth_user_id'] = (int)$user['id'];
-    $_SESSION['authenticated_at'] = time();
+    $_SESSION['admin_mode'] = true;
     $_SESSION['last_activity_at'] = time();
-    $_SESSION['auth_revision'] = (int)$user['auth_revision'];
+    unset($_SESSION['admin_mode_failed_attempts'], $_SESSION['admin_mode_locked_until']);
     $_SESSION['csrf'] = bin2hex(random_bytes(24));
-    $stmt = $pdo->prepare('INSERT INTO audit_logs(actor_id,actor_name,action,summary,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?)');
-    $stmt->execute([$memberId,$name,'ログイン','ログイン',null,null,date(DATE_ATOM)]);
     respond(bootstrap_payload($pdo));
 }
 
-if ($action === 'guest-login') {
-    // ゲストはパスワードなしで閲覧できますが、更新APIでは必ず拒否されます。
+if ($action === 'admin-mode-exit') {
     require_post();
-    session_regenerate_id(true);
-    $_SESSION = [
-        'guest'=>true,
-        'authenticated_at'=>time(),
-        'last_activity_at'=>time(),
-        'csrf'=>bin2hex(random_bytes(24)),
-    ];
+    require_auth_user();
+    unset($_SESSION['admin_mode']);
+    $_SESSION['csrf'] = bin2hex(random_bytes(24));
     respond(bootstrap_payload($pdo));
 }
 
-if ($action === 'logout') {
+if ($action === 'admin-mode-password') {
     require_post();
-    require_auth();
-    $_SESSION = [];
-    session_destroy();
-    respond(['ok'=>true]);
+    $admin = require_admin();
+    $input = body();
+    $currentPassword = (string)($input['currentPassword'] ?? '');
+    $newPassword = (string)($input['newPassword'] ?? '');
+    if (!kptc_auth_verify_admin_password($pdo, $currentPassword)) respond(['error'=>'現在の管理者パスワードが正しくありません'], 401);
+    try {
+        kptc_auth_set_admin_password($pdo, $newPassword);
+    } catch (InvalidArgumentException $error) {
+        respond(['error'=>$error->getMessage()], 422);
+    }
+    $record = current_record($pdo);
+    $actorName = member_name($record['state'], (string)$admin['member_id']);
+    $pdo->prepare('INSERT INTO audit_logs(actor_id,actor_name,action,summary,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?)')->execute([(string)$admin['member_id'],$actorName,'管理者設定','管理者パスワードを変更',null,null,date(DATE_ATOM)]);
+    respond(bootstrap_payload($pdo));
 }
 
 if ($action === 'member-account') {
@@ -488,7 +491,7 @@ if ($action === 'member-account') {
 
         if ($operation === 'delete') {
             if ($memberIndex === null) throw new InvalidArgumentException('削除するユーザーが見つかりません');
-            if ($memberId === (string)$admin['member_id']) throw new InvalidArgumentException('ログイン中のユーザーは削除できません');
+            if ($memberId === (string)$admin['member_id']) throw new InvalidArgumentException('操作記録に使用中のユーザーは削除できません');
             array_splice($state['members'], $memberIndex, 1);
             $state['schedules'] = array_values(array_filter($state['schedules'], static fn(array $schedule): bool => ($schedule['memberId'] ?? '') !== $memberId));
             if (is_array($account)) $pdo->prepare('DELETE FROM auth_users WHERE id=?')->execute([(int)$account['id']]);
@@ -509,7 +512,7 @@ if ($action === 'member-account') {
             $withoutLogin = $role === 'room' && $username === '';
             if ($withoutLogin) {
                 if (is_array($account)) {
-                    if ((int)$account['id'] === (int)$admin['id']) throw new InvalidArgumentException('ログイン中の管理者アカウントは削除できません');
+                    if ((int)$account['id'] === (int)$admin['id']) throw new InvalidArgumentException('操作記録に使用中のアカウントは削除できません');
                     $pdo->prepare('DELETE FROM auth_users WHERE id=?')->execute([(int)$account['id']]);
                 }
             } else {

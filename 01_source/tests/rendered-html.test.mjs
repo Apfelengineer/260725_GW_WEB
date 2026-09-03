@@ -49,11 +49,12 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /<dt>移動先<\/dt>/);
   assert.match(page, />移動する<\/button>/);
   assert.match(page, /予定種別を追加/);
-  assert.match(page, /LoginScreen/);
-  assert.match(page, /autoComplete="username"/);
-  assert.doesNotMatch(page, /autoComplete="current-password"|type="password"/);
-  assert.match(page, /社内システムで認証済み/);
-  assert.doesNotMatch(page, /デモ認証/);
+  assert.doesNotMatch(page, /LoginScreen|ゲストとしてログイン|選択したユーザーでログイン/);
+  assert.match(page, /function AdminModeModal/);
+  assert.match(page, /管理者モードへ切り替え/);
+  assert.match(page, /autoComplete="current-password"/);
+  assert.match(page, /function AdminPasswordModal/);
+  assert.match(page, /管理者パスワード変更/);
   assert.match(page, /新規予定作成/);
   assert.match(page, /name="endDate"/);
   assert.match(page, /name="timePreset"/);
@@ -250,7 +251,7 @@ test("試験室の空き状況ページと署名付きJSON連携を提供する"
   await access(new URL("public/availability-room-config.php", root));
 });
 
-test("社内システム配下でパスワード不要のユーザー選択ログインを提供する", async () => {
+test("ログイン画面なしの一般モードとパスワード付き管理者モードを提供する", async () => {
   const [api, auth, client, manager, page] = await Promise.all([
     readFile(new URL("public/api.php", root), "utf8"),
     readFile(new URL("public/auth.php", root), "utf8"),
@@ -258,38 +259,42 @@ test("社内システム配下でパスワード不要のユーザー選択ロ�
     readFile(new URL("public/manage-auth-user-cli.php", root), "utf8"),
     readFile(new URL("app/page.tsx", root), "utf8"),
   ]);
-  const loginSection = api.slice(api.indexOf("if ($action === 'login')"), api.indexOf("if ($action === 'logout')"));
   const accountListSection = auth.slice(auth.indexOf("function kptc_auth_account_list"), auth.indexOf("function kptc_auth_enabled_admin_count"));
-  assert.match(api, /authenticated'=>false/);
-  assert.match(api, /kptc_auth_select_user/);
+  assert.doesNotMatch(api, /authenticated'=>false|if \(\$action === 'login'\)|guest-login|if \(\$action === 'logout'\)/);
+  assert.match(api, /kptc_auth_start_general_session/);
+  assert.match(api, /admin-mode-enter/);
+  assert.match(api, /admin-mode-exit/);
+  assert.match(api, /admin-mode-password/);
+  assert.match(api, /admin_mode_failed_attempts/);
+  assert.match(api, /admin_mode_locked_until/);
   assert.match(api, /session_regenerate_id\(true\)/);
-  assert.doesNotMatch(loginSection, /デモ版へログイン|\$input\['memberId'\]|\$input\['password'\]|kptc_auth_verify/);
   assert.match(auth, /CREATE TABLE IF NOT EXISTS auth_users/);
   assert.match(auth, /password_hash/);
   assert.match(auth, /kptc_auth_placeholder_hash/);
-  assert.doesNotMatch(auth, /password_verify|auth_login_attempts/);
+  assert.match(auth, /admin_mode_password_hash/);
+  assert.match(auth, /password_verify/);
+  assert.match(auth, /PASSWORD_ARGON2ID/);
+  assert.match(auth, /管理者パスワードは8〜128文字/);
+  assert.match(auth, /\$user\['role'\] = !empty\(\$_SESSION\['admin_mode'\]\) \? 'admin' : 'user'/);
   assert.match(api, /require_admin\(\)/);
   assert.match(api, /KPTC_PUBLIC_AVAILABILITY_PAGE_URL/);
   assert.match(api, /最後の管理者を変更できません/);
   assert.doesNotMatch(accountListSection, /password_hash/);
-  assert.match(page, /ゲストとしてログイン/);
-  assert.match(page, /<select autoComplete="username"/);
-  assert.doesNotMatch(page, /new URLSearchParams\(window\.location\.search\)\.get\("userId"\)/);
-  assert.match(page, /試験室（閲覧のみ）/);
-  assert.match(page, /name="accountId"/);
-  assert.doesNotMatch(page, /name="password"|name="changePassword"|パスワード（確認）/);
-  assert.doesNotMatch(api, /\$changePassword|\$input\['password'\]/);
-  assert.doesNotMatch(page, /AuthAccountModal|tab === "accounts"/);
+  assert.doesNotMatch(page, /LoginScreen|<select autoComplete="username"|name="accountId"|name="role"/);
+  assert.match(page, /name="password"/);
+  assert.match(page, /name="currentPassword"/);
+  assert.match(page, /name="newPassword"/);
+  assert.match(page, /ユーザー・試験室を追加/);
+  assert.match(page, /所属を「試験室」にすると部屋として/);
   assert.match(page, /currentRole === "admin"/);
   assert.match(page, /canEditSchedule/);
-  assert.match(api, /guest-login/);
   assert.match(api, /require_schedule_editor/);
   assert.match(api, /一般ユーザーはユーザー・予定種別を変更できません/);
   assert.match(auth, /'admin','user','room'/);
-  assert.match(auth, /role IN \('admin','user'\)/);
-  assert.match(client, /JSON\.stringify\(\{ username \}\)/);
-  assert.doesNotMatch(client, /JSON\.stringify\(\{ username, password \}\)/);
-  assert.doesNotMatch(manager, /--password-stdin|command === 'password'/);
+  assert.match(client, /enterAdminMode/);
+  assert.match(client, /exitAdminMode/);
+  assert.match(client, /changeAdminPassword/);
+  assert.match(manager, /set-admin-mode-password/);
   assert.doesNotMatch(manager, /SELECT \*/);
 });
 
