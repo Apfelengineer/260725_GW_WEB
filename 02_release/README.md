@@ -9,7 +9,9 @@
 - `renkon/`: 既存社内システムとの接続を試すための模擬サイトです。
 - `SHA256SUMS`: 配布ファイルが壊れたり、別の内容へ変わったりしていないか確認する一覧です。
 
-`renkon/`は確認専用です。本番環境では社内システムがすでに存在するため、originや社内サーバーへ配置する必要はありません。必要な場合だけ、`renkon/config.js`のスケジューラーURLとカレンダーURLを書き換えて検証用Webサーバーへ配置します。
+`renkon/`は確認専用です。本番環境では社内システムがすでに存在するため、originや社内サーバーへ配置する必要はありません。既存社内システムには`open-scheduler.php`相当のトークン発行処理を組み込みます。検証先のスケジューラーURLは`renkon/renkon-config.php`または環境変数`KPTC_RENKON_SCHEDULER_URL`、カレンダーURLは`renkon/config.js`で設定します。
+
+originの入口はトークンを検証する`index.php`です。旧`index.html`は配置しません。tamanegiの入口は`index.html`に統一しており、旧`reservations.html`は不要です。
 
 ## 再生成方法
 

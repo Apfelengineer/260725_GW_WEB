@@ -388,6 +388,8 @@ test("ビルド前とビルド後のフォルダを分離する", async () => {
   await access(new URL("02_release/origin/index.php", repositoryRoot));
   await assert.rejects(access(new URL("02_release/origin/index.html", repositoryRoot)));
   await access(new URL("02_release/tamanegi/index.html", repositoryRoot));
+  await assert.rejects(access(new URL("02_release/tamanegi/reservations.html", repositoryRoot)));
+  await assert.rejects(access(new URL("02_release/origin/scheduler-entry.php", repositoryRoot)));
   await access(new URL("02_release/renkon/index.html", repositoryRoot));
   await access(new URL("02_release/SHA256SUMS", repositoryRoot));
   for (const oldPath of ["app", "public", "sakura", "server-runtime-snapshot", "dist-internal", "dist-public"]) {
