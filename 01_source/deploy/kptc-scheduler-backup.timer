@@ -1,0 +1,11 @@
+[Unit]
+Description=Back up KPTC Scheduler at 22:00 Japan time daily
+
+[Timer]
+OnCalendar=*-*-* 22:00:00 Asia/Tokyo
+Persistent=true
+AccuracySec=1min
+Unit=kptc-scheduler-backup.service
+
+[Install]
+WantedBy=timers.target

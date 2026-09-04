@@ -12,6 +12,7 @@
     "build:tamanegi": "vite build --config vite.tamanegi.config.ts && node scripts/copy-distribution-files.mjs tamanegi",
     "build:renkon": "node scripts/copy-distribution-files.mjs renkon",
     "test": "node --test tests/rendered-html.test.mjs",
+    "test:backup": "php tests/scheduler-backup.test.php",
     "check": "tsc --noEmit"
   },
   "dependencies": {

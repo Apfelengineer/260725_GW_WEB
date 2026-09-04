@@ -339,6 +339,9 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   assert.match(internalSection, /public\/auth\.php/);
   assert.match(internalSection, /public\/portal-access\.php/);
   assert.match(internalSection, /public\/scheduler-entry\.php/);
+  assert.match(internalSection, /public\/backup-scheduler-cli\.php/);
+  assert.match(internalSection, /public\/restore-scheduler-cli\.php/);
+  assert.doesNotMatch(publicSection, /scheduler-backup\.php|backup-scheduler-cli\.php|restore-scheduler-cli\.php/);
   assert.match(internalSection, /publish-availability-cli\.php/);
   assert.match(internalSection, /availability-room-config\.php/);
   assert.match(publicSection, /receive-availability\.php/);

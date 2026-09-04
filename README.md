@@ -101,7 +101,37 @@ php manage-auth-user-cli.php list
 
 重要: 一般モードでも予定を編集できます。指定CBC形式は暗号化のみであり、改ざん検出・トークンの有効期限・一度限りの使用・本人確認は提供しません。ランダムIVは再利用を防ぐ仕組みではありません。既定鍵を本番の秘密鍵として使わず、リバースプロキシ、VPNまたは社内ネットワーク制限も併用してください。
 
-## 共有API
+## 毎日22時の最新JSONバックアップ
+
+`backup-scheduler-cli.php`は日本時間の当日以降に終了する予定を、未来側の上限なしで保存します。開始が過去でも当日以降まで継続する予定は含めます。ユーザー・試験室・予定種別・互換用アカウント・管理者パスワードのハッシュも含み、過去に終了した予定と操作履歴は含めません。本番DBの予定は削除しません。
+
+- さくらの保存先: `/home/apfelrunner/GW/backups/scheduler-latest.json`
+- Ubuntuの保存先例: `/var/lib/kptc-scheduler/backups/scheduler-latest.json`
+- 変更する場合: 内部設定の`KPTC_SCHEDULER_BACKUP_JSON`に絶対パスを指定
+- 未設定の場合: 内部DBの隣の`backups/scheduler-latest.json`
+
+元DBを読み取り専用のトランザクションで検査し、JSONを一時ファイルへ書き込み、読み戻し・SHA-256確認・一時SQLiteへの復元試験に成功した後だけ最新版を原子的に置き換えます。DB破損・必須項目の欠落などで失敗した場合は直前の正常JSONを保持し、非0の終了コードとエラーログを返します。保存ファイルは所有者のみ読み書き可能（600）、新規保存フォルダは700です。正常終了後に世代別ファイルは残りません。並行実行防止用の`.lock`は必要なファイルです。
+
+```bash
+php backup-scheduler-cli.php
+php restore-scheduler-cli.php /非公開保存先/scheduler-latest.json /非公開保存先/restored.sqlite
+```
+
+復元処理は未使用のファイル名にだけ新しいDBを作ります。本番DBへ自動で上書き・切替はしません。管理者は復元したDBを確認してから、利用を止めた状態で内部設定のDBパスを新しいDBへ切り替えてください。既存ブラウザのセッションも終了させ、renkonから入り直してください。公開JSONの更新世代が復元DBより先へ進んでいる場合は、管理者が世代番号の整合を取ってから公開送信を再開してください。過去の予定・操作履歴は復元されません。
+
+さくらでは既存の送信・監視cronを維持して次を追加します（サーバー時刻が日本時間であることを確認）。
+
+```cron
+0 22 * * * /usr/local/bin/php /home/apfelrunner/www/GW/schedule/backup-scheduler-cli.php >/home/apfelrunner/GW/scheduler-backup.log 2>&1
+```
+
+Ubuntu 24.04では`01_source/deploy/kptc-scheduler-backup.service`と`.timer`を`/etc/systemd/system/`へ置き、配置パス・実行ユーザー・環境設定パスを確認後、`systemctl enable --now kptc-scheduler-backup.timer`で有効化します。実行時刻は明示的に`Asia/Tokyo`の22時、停止中の取り逃しは起動後に実行します。ログは`journalctl -u kptc-scheduler-backup.service`で確認できます。
+
+注意: このJSONは公開カレンダー用JSONとは別です。機密情報を含むためWeb公開領域・GitHubへ置かないでください。環境設定や共通鍵・画像は含まれません。最新版のみのため誤削除が正常なデータとして翌日保存された場合は戻せず、同一サーバー全体の故障にも対応できません。通常の整合性チェックで検出できない意味上のデータ破損もあり、完全な検知を保証するものではありません。メール通知・別サーバーへの複製は現時点では含みません。
+
+検証: `cd 01_source && pnpm run test:backup`（PHPのSQLite3・PDO SQLite拡張が必要）。
+
+## 共有APIの処理
 
 `01_source/public/api.php` が内部の共有データ、一般／管理者モード、操作履歴、変更取り消しを提供します。予定を保存・削除・取り消した後、試験室3室の当月を含む3か月分を公開可能な空き状態へ変換し、`01_source/public/availability-publisher.php` が外部サーバーへ送ります。連携に失敗しても予定の保存は取り消さず、内部DBへ再送待ち、連続失敗回数、最終試行・成功日時、エラー概要を記録します。
 

@@ -5,6 +5,7 @@
 ## 配布先
 
 - `origin/`: 内部サーバーoriginのスケジューラー公開フォルダへ配置します。
+- originの`backup-scheduler-cli.php`と`restore-scheduler-cli.php`はCLI専用です。バックアップJSON本体はWeb公開領域外へ保存します。
 - `tamanegi/`: 外部サーバーtamanegiの空き状況公開フォルダへ配置します。
 - `renkon/`: 既存社内システムとの接続を試すための模擬サイトです。
 - `SHA256SUMS`: 配布ファイルが壊れたり、別の内容へ変わったりしていないか確認する一覧です。
