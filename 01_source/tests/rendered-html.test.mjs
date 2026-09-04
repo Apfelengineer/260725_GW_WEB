@@ -307,18 +307,21 @@ test("renkonの暗号化トークンがないスケジューラ要求を拒否�
     readFile(new URL("renkon/open-scheduler.php", root), "utf8"),
     readFile(new URL("renkon/renkon-config.php", root), "utf8"),
   ]);
-  assert.match(issuer, /'AES-128-ECB'/);
-  assert.match(issuer, /openssl_encrypt\(\$use_id, \$method, \$key\)/);
-  assert.match(issuer, /format\('Ymd'\) \. '_user_' \. \$userId/);
+  assert.match(issuer, /'AES-256-CBC'/);
+  assert.match(issuer, /openssl_random_pseudo_bytes/);
+  assert.match(issuer, /OPENSSL_RAW_DATA/);
+  assert.match(issuer, /base64_encode\(\$randomIv \. \$encryptedRaw\)/);
   assert.match(issuer, /\^\\d\{3\}\$\/D/);
   assert.match(issuer, /rawurlencode\(\$encrypted\)/);
   assert.match(renkonConfig, /KPTC_RENKON_SCHEDULER_URL/);
   assert.match(renkonConfig, /KPTC_PORTAL_TOKEN_KEY/);
-  assert.match(renkonConfig, /'test'/);
-  assert.match(gate, /AES-128-ECB/);
+  assert.match(renkonConfig, /'SecretKey999'/);
+  assert.match(renkonConfig, /hash\('sha256', \$secret, true\)/);
+  assert.match(gate, /AES-256-CBC/);
   assert.match(gate, /openssl_decrypt/);
-  assert.match(gate, /\^\(\\d\{8\}\)_user_\(\\d\{3\}\)\$\/D/);
-  assert.match(gate, /hash_equals\(kptc_portal_today\(\), \$matches\[1\]\)/);
+  assert.ok(gate.includes('/^user_([0-9]{3})$/D'));
+  assert.match(gate, /base64_decode\(\$encrypted, true\)/);
+  assert.doesNotMatch(gate, /portal_token_date|kptc_portal_today|AES-128-ECB/);
   assert.match(gate, /http_response_code\(403\)/);
   assert.match(entry, /kptc_portal_authorize_token\(\$token\)/);
   assert.match(api, /kptc_portal_session_is_authorized\(\)/);

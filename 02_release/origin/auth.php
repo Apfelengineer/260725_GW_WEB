@@ -112,11 +112,11 @@ function kptc_auth_active_session_user(PDO $pdo): ?array {
 }
 
 function kptc_auth_reset_session_preserving_portal(): void {
-    // 操作モードを再初期化しても、renkonで確認済みの当日アクセス情報は保持します。
+    // 操作モードを再初期化しても、renkonで確認済みのCBCアクセス情報は保持します。
     $_SESSION = [
         'portal_access_granted'=>!empty($_SESSION['portal_access_granted']),
         'portal_user_id'=>(string)($_SESSION['portal_user_id'] ?? ''),
-        'portal_token_date'=>(string)($_SESSION['portal_token_date'] ?? ''),
+        'portal_token_method'=>(string)($_SESSION['portal_token_method'] ?? ''),
         'portal_authorized_at'=>(int)($_SESSION['portal_authorized_at'] ?? 0),
     ];
 }

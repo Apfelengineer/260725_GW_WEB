@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/renkon-config.php';
 
-/* 入力された3桁IDを当日の日付と組み合わせ、指定方式で暗号化してoriginへ転送します。 */
+/* user_3桁IDを毎回異なるIVでCBC暗号化し、IV＋暗号文をBase64化してoriginへ転送します。 */
 header('Cache-Control: no-store');
 header('Referrer-Policy: no-referrer');
 $userId = isset($_GET['user_id']) && is_string($_GET['user_id']) ? trim($_GET['user_id']) : '';
@@ -14,11 +14,18 @@ if (preg_match('/^\d{3}$/D', $userId) !== 1 || !function_exists('openssl_encrypt
     exit;
 }
 
-$method = 'AES-128-ECB';
+$method = 'AES-256-CBC';
 $key = kptc_renkon_token_key();
-$use_id = (new DateTimeImmutable('now', new DateTimeZone('Asia/Tokyo')))->format('Ymd') . '_user_' . $userId;
-$encrypted = openssl_encrypt($use_id, $method, $key);
-if (!is_string($encrypted) || $encrypted === '') {
+$data = 'user_' . $userId;
+try {
+    $ivLength = openssl_cipher_iv_length($method);
+    if ($ivLength !== 16) throw new RuntimeException('Invalid IV length');
+    $randomIv = openssl_random_pseudo_bytes($ivLength, $strong);
+    if (!$strong || strlen($randomIv) !== $ivLength) throw new RuntimeException('IV generation failed');
+    $encryptedRaw = openssl_encrypt($data, $method, $key, OPENSSL_RAW_DATA, $randomIv);
+    if (!is_string($encryptedRaw)) throw new RuntimeException('Encryption failed');
+    $encrypted = base64_encode($randomIv . $encryptedRaw);
+} catch (Throwable $error) {
     http_response_code(500);
     header('Content-Type: text/plain; charset=utf-8');
     echo 'Token generation failed';

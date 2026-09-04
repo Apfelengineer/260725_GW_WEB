@@ -3,16 +3,12 @@ declare(strict_types=1);
 
 /* renkon（社内ポータル）から渡された暗号化トークンを検証し、内部画面の入口を保護します。 */
 
-const KPTC_PORTAL_TOKEN_METHOD = 'AES-128-ECB';
-
-function kptc_portal_today(): string {
-    return (new DateTimeImmutable('now', new DateTimeZone('Asia/Tokyo')))->format('Ymd');
-}
+const KPTC_PORTAL_TOKEN_METHOD = 'AES-256-CBC';
 
 function kptc_portal_token_key(): string {
     // 指定された試験用キーを既定値とし、本番では内部設定ファイルの環境変数で差し替えられます。
-    $key = (string)(getenv('KPTC_PORTAL_TOKEN_KEY') ?: 'test');
-    return $key !== '' ? $key : 'test';
+    $secret = (string)(getenv('KPTC_PORTAL_TOKEN_KEY') ?: 'SecretKey999');
+    return hash('sha256', $secret, true);
 }
 
 function kptc_portal_start_session(): void {
@@ -34,10 +30,16 @@ function kptc_portal_start_session(): void {
 
 function kptc_portal_decrypt_token(string $encrypted): ?array {
     if ($encrypted === '' || strlen($encrypted) > 512 || !function_exists('openssl_decrypt')) return null;
-    $userInformation = openssl_decrypt($encrypted, KPTC_PORTAL_TOKEN_METHOD, kptc_portal_token_key());
-    if (!is_string($userInformation) || !preg_match('/^(\d{8})_user_(\d{3})$/D', $userInformation, $matches)) return null;
-    if (!hash_equals(kptc_portal_today(), $matches[1])) return null;
-    return ['date'=>$matches[1], 'userId'=>$matches[2]];
+    // IV（先頭16バイト）と暗号文を厳密に分離し、不正なBase64・長さは復号前に拒否します。
+    $combined = base64_decode($encrypted, true);
+    $ivLength = openssl_cipher_iv_length(KPTC_PORTAL_TOKEN_METHOD);
+    if (!is_string($combined) || $ivLength !== 16 || strlen($combined) <= $ivLength) return null;
+    $ciphertext = substr($combined, $ivLength);
+    if (strlen($ciphertext) % 16 !== 0) return null;
+    $iv = substr($combined, 0, $ivLength);
+    $userInformation = openssl_decrypt($ciphertext, KPTC_PORTAL_TOKEN_METHOD, kptc_portal_token_key(), OPENSSL_RAW_DATA, $iv);
+    if (!is_string($userInformation) || !preg_match('/^user_([0-9]{3})$/D', $userInformation, $matches)) return null;
+    return ['userId'=>$matches[1]];
 }
 
 function kptc_portal_authorize_token(string $encrypted): bool {
@@ -45,8 +47,8 @@ function kptc_portal_authorize_token(string $encrypted): bool {
     if ($identity === null) return false;
 
     $sameIdentity = !empty($_SESSION['portal_access_granted'])
-        && hash_equals((string)($_SESSION['portal_user_id'] ?? ''), $identity['userId'])
-        && hash_equals((string)($_SESSION['portal_token_date'] ?? ''), $identity['date']);
+        && ($_SESSION['portal_token_method'] ?? '') === KPTC_PORTAL_TOKEN_METHOD
+        && hash_equals((string)($_SESSION['portal_user_id'] ?? ''), $identity['userId']);
     if (!$sameIdentity) {
         // 別の利用者として入り直す場合は、前の一般・管理者モードを引き継ぎません。
         session_regenerate_id(true);
@@ -54,7 +56,7 @@ function kptc_portal_authorize_token(string $encrypted): bool {
     }
     $_SESSION['portal_access_granted'] = true;
     $_SESSION['portal_user_id'] = $identity['userId'];
-    $_SESSION['portal_token_date'] = $identity['date'];
+    $_SESSION['portal_token_method'] = KPTC_PORTAL_TOKEN_METHOD;
     $_SESSION['portal_authorized_at'] = time();
     return true;
 }
@@ -62,7 +64,7 @@ function kptc_portal_authorize_token(string $encrypted): bool {
 function kptc_portal_session_is_authorized(): bool {
     return !empty($_SESSION['portal_access_granted'])
         && preg_match('/^\d{3}$/D', (string)($_SESSION['portal_user_id'] ?? '')) === 1
-        && hash_equals(kptc_portal_today(), (string)($_SESSION['portal_token_date'] ?? ''));
+        && ($_SESSION['portal_token_method'] ?? '') === KPTC_PORTAL_TOKEN_METHOD;
 }
 
 function kptc_portal_forbidden(bool $json = false): never {

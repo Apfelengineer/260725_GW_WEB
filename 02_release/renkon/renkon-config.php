@@ -14,8 +14,8 @@ function kptc_renkon_scheduler_url(): string {
 }
 
 function kptc_renkon_token_key(): string {
-    $key = (string)(getenv('KPTC_PORTAL_TOKEN_KEY') ?: 'test');
-    return $key !== '' ? $key : 'test';
+    $secret = (string)(getenv('KPTC_PORTAL_TOKEN_KEY') ?: 'SecretKey999');
+    return hash('sha256', $secret, true);
 }
 
 if (isset($_SERVER['SCRIPT_FILENAME']) && realpath((string)$_SERVER['SCRIPT_FILENAME']) === __FILE__) {

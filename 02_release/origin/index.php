@@ -5,7 +5,7 @@ require_once __DIR__ . '/runtime-config.php';
 kptc_load_runtime_config('internal');
 require_once __DIR__ . '/portal-access.php';
 
-/* スケジューラ画面の入口。renkonが発行した当日用トークンがない要求は403で終了します。 */
+/* スケジューラ画面の入口。renkonが発行したCBCトークンがない要求は403で終了します。 */
 header('Cache-Control: no-store');
 header('Referrer-Policy: no-referrer');
 kptc_portal_start_session();
