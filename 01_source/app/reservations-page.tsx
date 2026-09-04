@@ -128,7 +128,7 @@ export default function ReservationsPage() {
           <span><b>ー</b>メンテナンス</span>
         </div>
 
-        <div className="reservation-contact"><strong>ご予約・お問い合わせ:xxx@yyy/075-xxx-xxxx</strong><small>ご利用の際には必ずメールか電話でお問い合わせをお願いします。</small></div>
+        <div className="reservation-contact"><strong>ご予約・お問い合わせ:denki@kptc.jp/075-315-8634</strong><small>ご利用の際には必ずメールか電話でお問い合わせをお願いします。</small></div>
 
         <footer>{/* 添付のロゴ画像を公開画面のフッターへ表示します。 */}
           <img src="./technology-center-logo-white.png" alt="技術センター" />

@@ -175,7 +175,7 @@ test("試験室の空き状況ページと署名付きJSON連携を提供する"
   assert.doesNotMatch(page, /const roomIds/);
   assert.doesNotMatch(page, /KPTC SCHEDULER \/ LAB AVAILABILITY/);
   assert.match(page, /入力インパルス試験機/);
-  assert.match(page, /ご予約・お問い合わせ:xxx@yyy\/075-xxx-xxxx/);
+  assert.match(page, /ご予約・お問い合わせ:denki@kptc\.jp\/075-315-8634/);
   assert.match(page, /必ずメールか電話でお問い合わせ/);
   assert.match(page, /technology-center-logo-white\.png/);
   assert.doesNotMatch(page, /KPTC Schedulerへ戻る|予約の登録・変更/);
