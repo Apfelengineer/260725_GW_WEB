@@ -27,8 +27,8 @@ if (!kptc_portal_authorize_token($token)) kptc_portal_forbidden();
     <meta property="og:type" content="website" />
     <meta property="og:image" content="./og.png" />
     <title>KPTC Scheduler｜チームと試験室の予定をひと目で</title>
-    <script type="module" crossorigin src="./assets/main-Bp_zSfpi.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/main-DPEKaoOp.css">
+    <script type="module" crossorigin src="./assets/main-C6jqDZ2E.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/main-BK32juDp.css">
   </head>
   <body>
     <!-- Reactがこの要素内へ画面全体を描画します。 -->

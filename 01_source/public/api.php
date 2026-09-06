@@ -330,10 +330,6 @@ function require_auth_user(): array {
     return $user;
 }
 
-function require_auth(): string {
-    return (string)require_auth_user()['member_id'];
-}
-
 function require_admin(): array {
     $user = require_auth_user();
     if (($user['role'] ?? '') !== 'admin') respond(['error'=>'管理者権限が必要です'], 403);

@@ -65,10 +65,6 @@ function kptc_auth_find_user(PDO $pdo, string $username): ?array {
     return is_array($row) ? $row : null;
 }
 
-function kptc_auth_user_count(PDO $pdo): int {
-    return (int)$pdo->query('SELECT COUNT(*) FROM auth_users')->fetchColumn();
-}
-
 function kptc_auth_account_list(PDO $pdo): array {
     // DB互換用の未使用ハッシュを含めず、管理画面に必要な項目だけを返します。
     $rows = $pdo->query('SELECT id,username,member_id,role,enabled,created_at,updated_at,last_login_at FROM auth_users ORDER BY username')->fetchAll(PDO::FETCH_ASSOC);
@@ -105,8 +101,7 @@ function kptc_auth_active_session_user(PDO $pdo): ?array {
     if (isset($_SESSION['auth_revision']) && (int)$_SESSION['auth_revision'] !== $revision) return null;
     $_SESSION['auth_revision'] = $revision;
     $_SESSION['last_activity_at'] = $now;
-    // アカウント固有の旧権限は互換用に保持し、画面上の権限はモードで決定します。
-    $user['account_role'] = (string)$user['role'];
+    // アカウント固有の旧権限ではなく、画面上の一般／管理者モードで権限を決定します。
     $user['role'] = !empty($_SESSION['admin_mode']) ? 'admin' : 'user';
     return $user;
 }
@@ -162,7 +157,6 @@ function kptc_auth_start_general_session(PDO $pdo, array $state): array {
         'admin_mode'=>false,
         'csrf'=>bin2hex(random_bytes(24)),
     ];
-    $user['account_role'] = (string)$user['role'];
     $user['role'] = 'user';
     return $user;
 }

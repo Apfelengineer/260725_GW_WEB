@@ -263,7 +263,6 @@ button, select { cursor: pointer; }
 .table-actions { display: flex; gap: 6px; white-space: nowrap; }
 .members-table td:last-child .danger,.category-management-list .danger { color: #c4513a; }
 .role-badge { display: inline-flex; padding: 4px 7px; border-radius: 8px; color: #5f6f7c; background: #f0f3f5; font-size: 7.5px; font-weight: 750; }
-.role-badge.admin { color: #8a5313; background: #fff3d9; }
 .role-badge.room { color: #346879; background: #e7f3f6; }
 .category-management-list { display: grid; grid-template-columns: repeat(auto-fill,minmax(250px,1fr)); gap: 12px; }
 .category-management-list article { display: grid; grid-template-columns: auto 12px minmax(0,1fr) auto auto; gap: 10px; align-items: center; padding: 17px; border: 1px solid var(--line); border-radius: 13px; background: #fff; box-shadow: 0 5px 20px rgba(28,43,60,.035); }
@@ -314,7 +313,6 @@ button, select { cursor: pointer; }
 .danger-button { margin-right: auto; color: #c4513a; }
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 100; display: flex; align-items: center; gap: 9px; padding: 12px 17px; border: 1px solid rgba(255,255,255,.15); border-radius: 11px; color: #fff; background: #102a40; box-shadow: 0 14px 34px rgba(8,25,39,.24); font-size: 10px; font-weight: 680; animation: toast-in .25s ease; }.toast span { display: grid; width: 19px; height: 19px; place-items: center; border-radius: 50%; color: #0f6e63; background: #bdede5; font-size: 10px; }
 .empty-state { display: grid; min-height: 330px; place-items: center; align-content: center; border: 1px dashed #d6dde2; border-radius: 14px; color: #8e99a3; background: #fff; }.empty-state span { font-size: 24px; opacity: .5; }.empty-state p { font-size: 10px; }
-.sidebar-empty-user { grid-template-columns: 1fr; color: #7f93a5; font-size: 9px; }
 .context-menu { position: fixed; z-index: 120; display: grid; width: 150px; overflow: hidden; padding: 5px; border: 1px solid #dfe4e8; border-radius: 10px; background: #fff; box-shadow: 0 15px 38px rgba(16,35,53,.2); }
 .context-menu button { display: flex; min-height: 33px; align-items: center; padding: 0 10px; border: 0; border-radius: 7px; color: #40515f; background: transparent; font-size: 9px; text-align: left; }
 .context-menu button span { width: 22px; color: #87949f; }
