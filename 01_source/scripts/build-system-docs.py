@@ -6,7 +6,8 @@ from reportlab.pdfbase.ttfonts import TTFont
 import os
 from reportlab.lib import colors
 from reportlab.lib.styles import ParagraphStyle
-from reportlab.platypus import Paragraph, Table, TableStyle
+from reportlab.platypus import Image, Paragraph, Table, TableStyle
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,8 @@ def p(text): return ('p', text)
 def code(text): return ('code', text.strip('\n'))
 def table(headers, rows, widths=None): return ('table', headers, rows, widths)
 def flow(*lines): return ('flow', lines)
+def architecture(): return ('architecture',)
+def picture(path, caption='', max_height=390): return ('picture', str(path), caption, max_height)
 def page(title, *items): return (title, items)
 
 def render(filename, title, pages):
@@ -35,7 +38,7 @@ def render(filename, title, pages):
         c.setFillColor(colors.HexColor('#123c61')); c.rect(0,H-12,W,12,fill=1,stroke=0)
         c.setFont(FONT,8); c.drawString(40,H-35,'KPTC Scheduler  /  '+title)
         c.setStrokeColor(colors.HexColor('#d5e2eb')); c.line(40,43,W-40,43)
-        c.setFont(FONT,8); c.drawString(40,29,'2026-09-04 改訂  |  実装基準 main / 1977897')
+        c.setFont(FONT,8); c.drawString(40,29,'2026-09-06 改訂  |  実装基準 main / ccdd425')
         c.drawRightString(W-40,29,f'{number} / {len(pages)}')
         y=H-65
         def draw(obj,gap=10):
@@ -68,6 +71,48 @@ def render(filename, title, pages):
                     t.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),colors.HexColor('#e6f1f4')),('BOX',(0,0),(-1,-1),.7,colors.HexColor('#91b5c2')),('TOPPADDING',(0,0),(-1,-1),9),('BOTTOMPADDING',(0,0),(-1,-1),9)]))
                     draw(t,4)
                     if index<len(item[1])-1: draw(Paragraph('↓',BODY),4)
+            elif kind=='architecture':
+                # 3つのサーバー相当領域と、その間を通る情報を1枚の論理図として示します。
+                labels = [
+                    '<b>renkon</b><br/>社内システム模擬サイト<br/><br/>・3桁ユーザーIDを受け取る<br/>・CBCトークンを発行<br/>・予定とDBは保持しない',
+                    '<b>origin</b><br/>内部スケジューラー<br/><br/>・トークン検証<br/>・予定表、PHP API<br/>・SQLiteと非公開バックアップ',
+                    '<b>tamanegi</b><br/>外部公開カレンダー<br/><br/>・署名付きJSONを受信<br/>・3か月の空き状況を表示<br/>・内部DBは保持しない',
+                ]
+                arrows = ['CBC<br/>token付き<br/>URL<br/><b>→</b>', '署名付き<br/>JSON<br/><b>→</b>']
+                cells = [Paragraph(labels[0],SMALL),Paragraph(arrows[0],SMALL),Paragraph(labels[1],SMALL),Paragraph(arrows[1],SMALL),Paragraph(labels[2],SMALL)]
+                t=Table([cells],colWidths=[142,44,142,44,142],rowHeights=[145])
+                t.setStyle(TableStyle([
+                    ('BACKGROUND',(0,0),(0,0),colors.HexColor('#fff3d7')),
+                    ('BACKGROUND',(2,0),(2,0),colors.HexColor('#dbe9f3')),
+                    ('BACKGROUND',(4,0),(4,0),colors.HexColor('#e2f1e8')),
+                    ('BOX',(0,0),(0,0),1,colors.HexColor('#c99625')),
+                    ('BOX',(2,0),(2,0),1,colors.HexColor('#3c7497')),
+                    ('BOX',(4,0),(4,0),1,colors.HexColor('#438360')),
+                    ('VALIGN',(0,0),(-1,-1),'MIDDLE'),('ALIGN',(1,0),(3,0),'CENTER'),
+                    ('LEFTPADDING',(0,0),(-1,-1),8),('RIGHTPADDING',(0,0),(-1,-1),8),
+                    ('TOPPADDING',(0,0),(-1,-1),9),('BOTTOMPADDING',(0,0),(-1,-1),9),
+                ]))
+                draw(t,10)
+            elif kind=='picture':
+                path,caption,max_height=item[1:]
+                source=Path(path)
+                if not source.exists(): raise FileNotFoundError(source)
+                image_width,image_height=ImageReader(str(source)).getSize()
+                max_width=WIDTH-12
+                scale=min(max_width/image_width,max_height/image_height)
+                visual=Image(str(source),width=image_width*scale,height=image_height*scale)
+                rows=[[visual]]
+                if caption: rows.append([Paragraph(escape(caption),SMALL)])
+                box=Table(rows,colWidths=[WIDTH],hAlign='LEFT')
+                box.setStyle(TableStyle([
+                    ('ALIGN',(0,0),(-1,0),'CENTER'),('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+                    ('BOX',(0,0),(-1,0),.5,colors.HexColor('#c9d8e2')),
+                    ('BACKGROUND',(0,1),(-1,-1),colors.HexColor('#f5f8fa')),
+                    ('LEFTPADDING',(0,0),(-1,-1),6),('RIGHTPADDING',(0,0),(-1,-1),6),
+                    ('TOPPADDING',(0,0),(-1,0),6),('BOTTOMPADDING',(0,0),(-1,0),6),
+                    ('TOPPADDING',(0,1),(-1,-1),6),('BOTTOMPADDING',(0,1),(-1,-1),6),
+                ]))
+                draw(box,10)
         c.showPage()
     c.save()
     print(f'{out}: {len(pages)} pages')
@@ -82,7 +127,19 @@ table(['項目','現行仕様'],[
 ('今回追加','毎日22時（日本時間）、当日以降の予定を最新1世代の非公開JSONへ保存。新規SQLiteへの復元CLIを追加。'),
 ('資料範囲','機能、認証境界、公開変換、DB、バックアップ、運用上の制約。')],[95,WIDTH-95]),
 p('2026年9月4日のさくら環境：mainへ反映済み。22:28の手動バックアップは23件・8,036バイト、復元検証成功。定期実行は登録済みですが、この時点で翌日の自動実行は未観測です。'),
-table(['章','内容'],[(str(i),v) for i,v in enumerate(['構成とデータ境界','入口・権限・安全性','予定操作と管理','公開カレンダー','保存・API・配布','バックアップ仕様','復元仕様と受入基準'],1)],[45,WIDTH-45])),
+table(['章','内容'],[(label,v) for label,v in [('図','システム構成図（論理図）')]+[(str(i),v) for i,v in enumerate(['構成とデータ境界','入口・権限・安全性','予定操作と管理','公開カレンダー','保存・API・配布','バックアップ仕様','復元仕様と受入基準'],1)]],[45,WIDTH-45])),
+page('システム構成図（論理図）',
+p('社内利用者は社内システムを経由してoriginへ入り、一般公開の閲覧者はtamanegiだけへアクセスします。実線の矢印は要求またはデータが進む方向を表します。'),
+architecture(),
+table(['利用者と経路','役割・境界'],[
+('社内利用者 → renkon → origin','本番ではrenkonの役割を既存社内システムが担当します。上位システムで認証済みの3桁IDを暗号化し、ブラウザーをoriginへ転送します。'),
+('origin → tamanegi','originが内部予定から許可室の3か月分だけを生成し、署名付きHTTPSで送信します。一方向で、tamanegiから内部DBを読みません。'),
+('一般閲覧者 → tamanegi','認証なしで公開可能な空き状態だけを閲覧します。予定件名、利用者名、メモ、内部アカウントは公開しません。')],[165,WIDTH-165]),
+table(['論理領域','主な保持データ','公開範囲'],[
+('renkon','原則として予定データなし','開発・連携確認用。本番は既存社内サイトへ組込み'),
+('origin','SQLite、操作履歴、管理設定、最新バックアップJSON','社内LAN／VPN・社内認証の内側'),
+('tamanegi','公開用の単一JSON、表示用画像','インターネット公開')],[88,215,WIDTH-303]),
+p('共通鍵はrenkon-origin間のCBC用とorigin-tamanegi間のHMAC用を分けます。SQLiteとバックアップJSONはWeb公開領域の外に置き、tamanegiには配置しません。')),
 page('1  構成とデータ境界',
 flow('社内システム（開発時はrenkon） → CBCトークン付きURL','origin：予定表・PHP API・内部SQLite','originで3か月の空き状態に変換 → HMAC署名付きHTTPS POST','tamanegi：検証して単一JSONに保存 → 一般公開カレンダー'),
 table(['保管物','内容・扱い'],[

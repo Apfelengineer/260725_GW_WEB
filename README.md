@@ -19,6 +19,7 @@ PHP APIと内部用SQLiteへデータを保存するため、別端末・別ブ�
 - [現行アプリケーション仕様書（PDF）](docs/KPTC_Scheduler_現行アプリケーション仕様書.pdf)
 - [独立Linuxサーバー構築・移行手順書（PDF）](docs/KPTC_Scheduler_独立Linuxサーバー構築・移行手順書.pdf)
 - [ファイル機能・役割一覧とファイル間関係図（PDF）](docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf)
+- [スケジューラ操作マニュアル（PDF）](docs/KPTC_Scheduler_操作マニュアル.pdf)
 
 ## 実装済み
 
