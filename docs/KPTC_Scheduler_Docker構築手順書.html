@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KPTC Scheduler Docker構築手順書</title>
+  <style>
+    :root {
+      --navy: #12324a;
+      --blue: #1f67a5;
+      --pale: #edf6fb;
+      --green: #16745a;
+      --yellow: #fff5ce;
+      --red: #a93636;
+      --line: #ccd9e2;
+      --ink: #202a31;
+      --muted: #5b6973;
+      --paper: #fff;
+      --code: #16212a;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; color: var(--ink); background: #f3f7f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif; line-height: 1.8; }
+    header { color: #fff; background: linear-gradient(135deg, #0e2b40, #1f6790); padding: 46px max(24px, calc((100% - 1120px) / 2)); }
+    header p { max-width: 820px; margin: 10px 0 0; color: #dcebf4; }
+    header .tag { display: inline-block; padding: 3px 10px; border: 1px solid #8ec1df; border-radius: 999px; font-size: .82rem; }
+    h1 { margin: 12px 0 0; font-size: clamp(1.8rem, 4vw, 2.8rem); line-height: 1.3; }
+    h2 { margin-top: 0; color: var(--navy); font-size: 1.7rem; border-bottom: 3px solid #65a9d1; padding-bottom: 8px; }
+    h3 { margin-top: 2.2em; color: #164c70; font-size: 1.25rem; }
+    h4 { color: var(--navy); }
+    a { color: #075d9a; }
+    main { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 26px; padding: 30px 20px 70px; }
+    nav { position: sticky; top: 18px; align-self: start; max-height: calc(100vh - 36px); overflow: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+    nav b { color: var(--navy); }
+    nav ol { padding-left: 1.4rem; margin-bottom: 0; }
+    nav a { text-decoration: none; color: #334b5a; }
+    nav a:hover { text-decoration: underline; }
+    article { min-width: 0; }
+    section { margin-bottom: 24px; padding: 28px 32px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 5px 18px rgba(22, 52, 72, .05); }
+    .lead { font-size: 1.08rem; }
+    .callout { margin: 18px 0; padding: 14px 17px; border-left: 5px solid var(--blue); background: var(--pale); border-radius: 6px; }
+    .callout strong { color: var(--navy); }
+    .warning { border-left-color: #d49b16; background: var(--yellow); }
+    .danger { border-left-color: var(--red); background: #fff0f0; }
+    .success { border-left-color: var(--green); background: #eaf8f3; }
+    .checkpoint { border: 1px solid #91cbb8; background: #f1fbf7; border-radius: 8px; padding: 12px 16px; }
+    .checkpoint::before { content: "確認ポイント　"; color: var(--green); font-weight: 700; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #edf1f4; border-radius: 4px; padding: .1em .35em; }
+    pre { position: relative; overflow-x: auto; padding: 17px 18px; color: #e8f1f6; background: var(--code); border-radius: 9px; line-height: 1.55; font-size: .9rem; }
+    pre code { color: inherit; background: none; padding: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: .95rem; }
+    th, td { padding: 10px 12px; border: 1px solid var(--line); vertical-align: top; text-align: left; }
+    th { color: var(--navy); background: #eaf2f7; }
+    ul, ol { padding-left: 1.5rem; }
+    li + li { margin-top: .25rem; }
+    .flow { display: grid; grid-template-columns: 1fr 58px 1fr; gap: 8px; align-items: stretch; margin: 20px 0; }
+    .flow-box { padding: 18px; border: 2px solid #76a9c8; border-radius: 10px; background: #f8fcff; text-align: center; }
+    .flow-box b { display: block; color: var(--navy); font-size: 1.12rem; }
+    .arrow { display: grid; place-items: center; color: var(--blue); font-size: 2rem; font-weight: 700; }
+    .tree { white-space: pre; line-height: 1.45; }
+    .step { display: inline-grid; place-items: center; width: 2rem; height: 2rem; margin-right: .4rem; border-radius: 50%; color: #fff; background: var(--blue); font-weight: 700; }
+    .small { color: var(--muted); font-size: .9rem; }
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li::before { content: "□"; margin-right: .5rem; color: var(--blue); font-weight: 700; }
+    footer { max-width: 1120px; margin: -45px auto 40px; padding: 0 20px; color: var(--muted); font-size: .9rem; }
+    @media (max-width: 860px) {
+      main { display: block; }
+      nav { position: static; max-height: none; margin-bottom: 24px; }
+      section { padding: 23px 20px; }
+      .flow { grid-template-columns: 1fr; }
+      .arrow { transform: rotate(90deg); }
+    }
+    @media print {
+      body { background: #fff; font-size: 10.5pt; }
+      header { padding: 22mm 16mm; }
+      main { display: block; max-width: none; padding: 10mm 12mm; }
+      nav { display: none; }
+      section { border: 0; box-shadow: none; padding: 0; break-before: page; }
+      section:first-child { break-before: auto; }
+      pre { white-space: pre-wrap; word-break: break-all; }
+      a { color: inherit; text-decoration: none; }
+      footer { margin: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="tag">Ubuntu 24.04 / PHP 8.4 / Docker</span>
+    <h1>KPTC Scheduler<br>Docker構築手順書</h1>
+    <p>origin（内部スケジューラ）とtamanegi（外部向け空き状況）を別々のLinuxサーバーへ構築する手順です。サーバー管理を専門としていない方でも、上から順に作業できるよう説明しています。</p>
+  </header>
+
+  <main>
+    <nav aria-label="目次">
+      <b>目次</b>
+      <ol>
+        <li><a href="#overview">最初に全体像を確認</a></li>
+        <li><a href="#prepare">事前に準備するもの</a></li>
+        <li><a href="#files">必要ファイルと配置場所</a></li>
+        <li><a href="#docker-install">Dockerの導入</a></li>
+        <li><a href="#tamanegi">tamanegiの構築</a></li>
+        <li><a href="#origin">originの構築</a></li>
+        <li><a href="#https">URL・HTTPSの設定</a></li>
+        <li><a href="#initial">初期設定と通信確認</a></li>
+        <li><a href="#migration">既存データの移行</a></li>
+        <li><a href="#update">更新・停止・バックアップ</a></li>
+        <li><a href="#trouble">困ったときの確認</a></li>
+        <li><a href="#glossary">用語集</a></li>
+      </ol>
+    </nav>
+
+    <article>
+      <section id="overview">
+        <h2>1. 最初に全体像を確認</h2>
+        <p class="lead">結論から言うと、<strong>originとtamanegiは別々の物理サーバーまたは仮想サーバーに構築</strong>します。作業用フォルダ、Dockerコンテナ、保存領域も共有しません。</p>
+
+        <div class="flow" role="img" aria-label="originからtamanegiへの連携図">
+          <div class="flow-box"><b>originサーバー（内部）</b>社内だけで使うスケジューラ<br>SQLiteへ予定を保存</div>
+          <div class="arrow">→</div>
+          <div class="flow-box"><b>tamanegiサーバー（外部）</b>外部公開する空き状況<br>3か月分のJSONだけを保存</div>
+        </div>
+
+        <p>originは予定を保存すると、公開してよい情報だけをJSONへ変換し、ネットワーク越しにHTTPSでtamanegiの<code>receive-availability.php</code>へ送信します。tamanegiからoriginのSQLiteへ接続することはありません。</p>
+
+        <table>
+          <thead><tr><th>名称</th><th>役割</th><th>公開範囲</th><th>保存データ</th></tr></thead>
+          <tbody>
+            <tr><td><strong>origin</strong></td><td>予定の登録・編集・管理</td><td>社内ネットワークのみ</td><td>SQLite、最新バックアップJSON</td></tr>
+            <tr><td><strong>tamanegi</strong></td><td>試験室の空き状況表示</td><td>インターネット</td><td>公開用JSONのみ</td></tr>
+            <tr><td><strong>renkon相当</strong></td><td>社内システムから認証トークンを発行</td><td>既存社内システム</td><td>本番では今回のDocker構築対象外</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout danger"><strong>分離の原則：</strong>originのSQLiteやバックアップをtamanegiへ置かず、両サーバーで同じDockerボリュームやネットワークフォルダを共有しません。両者が共有するのは、tamanegiの受信URLとJSON署名用秘密値だけです。</div>
+        <div class="callout warning"><strong>大切：</strong>Dockerfileをダブルクリックして実行するわけではありません。それぞれのサーバーのターミナルで<code>docker build -f ...</code>を実行します。また、<code>docker/origin</code>などへ移動して構築すると必要ファイルが見つかりません。必ず各サーバーの構築用フォルダ最上位で実行してください。</div>
+      </section>
+
+      <section id="prepare">
+        <h2>2. 事前に準備するもの</h2>
+        <h3><span class="step">1</span>サーバーとURL</h3>
+        <p>次の値をサーバー管理者またはネットワーク管理者へ確認し、空欄へ記入してください。</p>
+        <table>
+          <thead><tr><th>確認項目</th><th>記入欄・例</th></tr></thead>
+          <tbody>
+            <tr><td>originのホスト名</td><td>例：<code>origin</code></td></tr>
+            <tr><td>originの社内URL</td><td>例：<code>https://scheduler.example.local/</code></td></tr>
+            <tr><td>tamanegiのホスト名</td><td>例：<code>tamanegi</code></td></tr>
+            <tr><td>tamanegiの公開URL</td><td>例：<code>https://calendar.example.jp/</code></td></tr>
+            <tr><td>tamanegiの受信URL</td><td>公開URL＋<code>receive-availability.php</code></td></tr>
+            <tr><td>各サーバーの管理用ユーザー</td><td><code>sudo</code>を使用できるユーザー</td></tr>
+          </tbody>
+        </table>
+
+        <h3><span class="step">2</span>通信と名前の設定</h3>
+        <ul class="checklist">
+          <li>tamanegiのドメイン名が、tamanegiサーバーのIPアドレスを示している</li>
+          <li>tamanegiは外部からTCP 443番（HTTPS）へ接続できる</li>
+          <li>originからtamanegiのTCP 443番へ接続できる</li>
+          <li>originは社内ネットワークからだけ接続できる</li>
+          <li>各URLに使用するHTTPS証明書を準備できる</li>
+        </ul>
+        <div class="callout"><strong>IPアドレスよりドメイン名を推奨：</strong>HTTPS証明書は通常ドメイン名に対して発行されます。IPアドレスを送信先へ直接指定すると、証明書の名前が一致せず通信に失敗する場合があります。</div>
+
+        <h3><span class="step">3</span>2種類の秘密値</h3>
+        <p>秘密値はそれぞれ別に作り、使い回さないでください。例として次の命令で64文字の値を作れます。</p>
+        <pre><code>openssl rand -hex 32</code></pre>
+        <table>
+          <thead><tr><th>秘密値</th><th>同じ値を持つ場所</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td><code>KPTC_PORTAL_TOKEN_KEY</code></td><td>originと既存社内システム</td><td>社内システムからoriginへ入るためのトークン</td></tr>
+            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_SECRET</code></td><td>originとtamanegi</td><td>公開JSONが正しい送信元から届いたことの確認</td></tr>
+          </tbody>
+        </table>
+        <div class="callout danger"><strong>禁止事項：</strong>実際の秘密値、SQLite、公開JSON、パスワードをGitHubへ保存しないでください。秘密値は後述する<code>/etc/kptc/*.env</code>だけへ保存し、権限を600にします。</div>
+      </section>
+
+      <section id="files">
+        <h2>3. 必要ファイルと配置場所</h2>
+        <h3>3-1. originサーバーへGitHubから取得</h3>
+        <p>まず<strong>originサーバーへ接続したターミナル</strong>で、origin専用の作業場所へ取得します。すでにGitが入っている前提です。</p>
+        <pre><code>sudo mkdir -p /opt/kptc-origin-build
+sudo chown "$USER":"$USER" /opt/kptc-origin-build
+cd /opt/kptc-origin-build
+git clone https://github.com/Apfelengineer/260725_GW_WEB.git
+cd 260725_GW_WEB
+git switch main</code></pre>
+        <p class="checkpoint">originサーバーで<code>pwd</code>の結果が<code>/opt/kptc-origin-build/260725_GW_WEB</code>になれば正しい場所です。</p>
+
+        <h3>3-2. tamanegiサーバーへGitHubから取得</h3>
+        <p>次に、originからログアウトして<strong>tamanegiサーバーへ接続した別のターミナル</strong>で、tamanegi専用の作業場所へ取得します。</p>
+        <pre><code>sudo mkdir -p /opt/kptc-tamanegi-build
+sudo chown "$USER":"$USER" /opt/kptc-tamanegi-build
+cd /opt/kptc-tamanegi-build
+git clone https://github.com/Apfelengineer/260725_GW_WEB.git
+cd 260725_GW_WEB
+git switch main</code></pre>
+        <p class="checkpoint">tamanegiサーバーで<code>pwd</code>の結果が<code>/opt/kptc-tamanegi-build/260725_GW_WEB</code>になれば正しい場所です。originの作業場所とは別物です。</p>
+
+        <div class="callout"><strong>同じGitHubリポジトリを取得する理由：</strong>Dockerfileが必要とするビルド後ファイルを確実に揃えるためです。両サーバーに同じ名前のGitHubフォルダがあっても、サーバーと絶対パスが異なり、コンテナもデータも混ざりません。Dockerイメージへ入るのは各Dockerfileが指定した側のファイルだけです。</div>
+
+        <h3>3-3. GitHubを使わず、必要ファイルだけ手作業で配置する場合</h3>
+        <p>ファイル転送ソフトを使う場合は、各サーバーへ必要な側だけを置けます。フォルダ名を変えても構いませんが、<strong>Dockerfileと<code>02_release</code>の相対位置は変えない</strong>でください。</p>
+        <h4>originサーバーだけに置くもの</h4>
+        <pre class="tree"><code>/opt/kptc-origin-build/260725_GW_WEB/
+├── .dockerignore
+├── 02_release/
+│   └── origin/          ← 内部スケジューラのビルド後ファイル一式
+└── docker/
+    └── origin/
+        ├── Dockerfile
+        ├── entrypoint.sh
+        ├── apache-security.conf
+        ├── kptc-cron
+        └── origin.env.example</code></pre>
+
+        <h4>tamanegiサーバーだけに置くもの</h4>
+        <pre class="tree"><code>/opt/kptc-tamanegi-build/260725_GW_WEB/
+├── .dockerignore
+├── 02_release/
+│   └── tamanegi/        ← 外部カレンダーのビルド後ファイル一式
+└── docker/
+    └── tamanegi/
+        ├── Dockerfile
+        ├── entrypoint.sh
+        ├── apache-security.conf
+        └── tamanegi.env.example</code></pre>
+
+        <table>
+          <thead><tr><th>構築先</th><th>最低限必要なもの</th><th>Dockerfileが読み込む場所</th></tr></thead>
+          <tbody>
+            <tr><td>origin</td><td><code>.dockerignore</code>、<code>docker/origin/</code>、<code>02_release/origin/</code></td><td><code>02_release/origin/</code>をコンテナの<code>/var/www/html/</code>へコピー</td></tr>
+            <tr><td>tamanegi</td><td><code>.dockerignore</code>、<code>docker/tamanegi/</code>、<code>02_release/tamanegi/</code></td><td><code>02_release/tamanegi/</code>をコンテナの<code>/var/www/html/</code>へコピー</td></tr>
+          </tbody>
+        </table>
+        <div class="callout warning"><strong>よくある間違い：</strong><code>cd docker/origin</code>の後に<code>docker build .</code>を実行すると、<code>02_release/origin</code>が構築範囲の外になり失敗します。originでは<code>/opt/kptc-origin-build/260725_GW_WEB</code>、tamanegiでは<code>/opt/kptc-tamanegi-build/260725_GW_WEB</code>で実行します。</div>
+      </section>
+
+      <section id="docker-install">
+        <h2>4. Ubuntu 24.04へDockerを導入</h2>
+        <p>originとtamanegiの両方で行います。すでに管理者がDockerを導入済みなら、最後の確認だけ行ってください。</p>
+        <p>以下はDocker公式のUbuntu向けAPTリポジトリを使う方法です。古いDockerパッケージがある環境や組織独自の管理方法がある場合は、先にサーバー管理者へ確認してください。</p>
+
+        <h3>4-1. 公式鍵と配布元を登録</h3>
+        <pre><code>sudo apt update
+sudo apt install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+sudo tee /etc/apt/sources.list.d/docker.sources &gt;/dev/null &lt;&lt;EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release &amp;&amp; echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+
+sudo apt update</code></pre>
+
+        <h3>4-2. Dockerを導入</h3>
+        <pre><code>sudo apt install -y docker-ce docker-ce-cli containerd.io \
+  docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+sudo docker run --rm hello-world</code></pre>
+        <p class="checkpoint">最後に<code>Hello from Docker!</code>が表示されれば導入成功です。本書では権限の誤設定を避けるため、以後のDocker命令に<code>sudo</code>を付けます。</p>
+        <p class="small">参照：<a href="https://docs.docker.com/engine/install/ubuntu/">Docker公式「Install Docker Engine on Ubuntu」</a></p>
+      </section>
+
+      <section id="tamanegi">
+        <h2>5. tamanegi（外部カレンダー）の構築</h2>
+        <p>先にtamanegiを起動し、JSONの受信先を用意します。以下は<strong>tamanegiサーバー</strong>で実行してください。</p>
+
+        <h3>5-1. 正しいフォルダへ移動</h3>
+        <pre><code>cd /opt/kptc-tamanegi-build/260725_GW_WEB
+pwd
+ls docker/tamanegi/Dockerfile
+ls 02_release/tamanegi/index.html</code></pre>
+
+        <h3>5-2. tamanegi用イメージを作る</h3>
+        <pre><code>sudo docker build \
+  -f docker/tamanegi/Dockerfile \
+  -t kptc-tamanegi:latest \
+  .</code></pre>
+        <p>最後の<code>.</code>は「現在のフォルダ一式を構築材料にする」という意味です。省略しないでください。</p>
+        <p class="checkpoint"><code>sudo docker image ls kptc-tamanegi</code>で<code>kptc-tamanegi latest</code>が表示されれば成功です。</p>
+
+        <h3>5-3. 実環境設定を作る</h3>
+        <pre><code>sudo mkdir -p /etc/kptc
+sudo cp docker/tamanegi/tamanegi.env.example /etc/kptc/tamanegi.env
+sudo chmod 600 /etc/kptc/tamanegi.env
+sudo nano /etc/kptc/tamanegi.env</code></pre>
+        <p>内容を次のようにします。値は例のまま使わず、2章で作成した公開JSON連携用の秘密値へ置き換えてください。</p>
+        <pre><code>KPTC_PUBLIC_AVAILABILITY_SECRET=ここにoriginと共通の64文字の秘密値
+KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800</code></pre>
+        <p><code>nano</code>では、保存はCtrl＋O、Enter、終了はCtrl＋Xです。</p>
+
+        <h3>5-4. 保存場所を作り、コンテナを起動</h3>
+        <pre><code>sudo docker volume create kptc-tamanegi-data
+
+sudo docker run -d \
+  --name kptc-tamanegi \
+  --restart unless-stopped \
+  --env-file /etc/kptc/tamanegi.env \
+  -p 127.0.0.1:8081:80 \
+  -v kptc-tamanegi-data:/var/lib/kptc-availability \
+  kptc-tamanegi:latest</code></pre>
+        <p><code>127.0.0.1:8081:80</code>は、サーバー内の8081番をコンテナのWeb画面へつなぎ、外部から8081番へ直接入れない指定です。外部からのHTTPS接続は7章のnginxを通します。</p>
+        <p class="checkpoint"><code>sudo docker ps</code>で<code>kptc-tamanegi</code>の状態が<code>Up</code>、少し待つと<code>healthy</code>になれば成功です。</p>
+
+        <h3>5-5. サーバー内から確認</h3>
+        <pre><code>curl -I http://127.0.0.1:8081/
+sudo docker logs --tail 50 kptc-tamanegi</code></pre>
+        <p>最初は公開JSONがまだ届いていないため、画面に「空き状況を準備しています」と出る場合があります。これは故障ではありません。</p>
+      </section>
+
+      <section id="origin">
+        <h2>6. origin（内部スケジューラ）の構築</h2>
+        <p>以下は<strong>originサーバー</strong>で実行してください。</p>
+
+        <h3>6-1. 正しいフォルダへ移動</h3>
+        <pre><code>cd /opt/kptc-origin-build/260725_GW_WEB
+pwd
+ls docker/origin/Dockerfile
+ls 02_release/origin/index.php</code></pre>
+
+        <h3>6-2. origin用イメージを作る</h3>
+        <pre><code>sudo docker build \
+  -f docker/origin/Dockerfile \
+  -t kptc-origin:latest \
+  .</code></pre>
+        <p>この処理でPHP 8.4、Apache、SQLite、cURL、日本語処理機能とスケジューラのビルド後ファイルが1つのイメージになります。</p>
+        <p class="checkpoint"><code>sudo docker image ls kptc-origin</code>で<code>kptc-origin latest</code>が表示されれば成功です。</p>
+
+        <h3>6-3. 実環境設定を作る</h3>
+        <pre><code>sudo mkdir -p /etc/kptc
+sudo cp docker/origin/origin.env.example /etc/kptc/origin.env
+sudo chmod 600 /etc/kptc/origin.env
+sudo nano /etc/kptc/origin.env</code></pre>
+        <p>例を実際のURLと秘密値へ置き換えます。</p>
+        <pre><code>KPTC_PORTAL_TOKEN_KEY=既存社内システムと共通の秘密値
+KPTC_PUBLIC_AVAILABILITY_ENDPOINT=https://calendar.example.jp/receive-availability.php
+KPTC_PUBLIC_AVAILABILITY_PAGE_URL=https://calendar.example.jp/
+KPTC_PUBLIC_AVAILABILITY_SECRET=tamanegiと共通の64文字の秘密値
+KPTC_SESSION_COOKIE_SECURE=1
+KPTC_AUTH_IDLE_TIMEOUT=1800
+KPTC_AUTH_ABSOLUTE_TIMEOUT=43200</code></pre>
+
+        <div class="callout"><strong>送信先の指定場所：</strong>tamanegiのIPアドレスをDockerfileへ書くのではなく、ここにある<code>KPTC_PUBLIC_AVAILABILITY_ENDPOINT</code>へtamanegiのHTTPS受信URLを指定します。URLが変わった場合はこのファイルだけを直してコンテナを作り直せます。</div>
+        <div class="callout warning"><strong>トークン鍵の日付：</strong><code>KPTC_PORTAL_TOKEN_KEY</code>には固定部分だけを書きます。プログラムが実行時にUTC当日を<code>gmdate('Ymd')</code>で付加します。社内システム側も同じ固定部分と同じ方式を使用してください。</div>
+
+        <h3>6-4. 保存場所を作り、コンテナを起動</h3>
+        <pre><code>sudo docker volume create kptc-origin-data
+
+sudo docker run -d \
+  --name kptc-origin \
+  --restart unless-stopped \
+  --env-file /etc/kptc/origin.env \
+  -p 127.0.0.1:8080:80 \
+  -v kptc-origin-data:/var/lib/kptc-scheduler \
+  kptc-origin:latest</code></pre>
+        <p class="checkpoint"><code>sudo docker ps</code>で<code>kptc-origin</code>が<code>Up</code>、少し待つと<code>healthy</code>になれば成功です。</p>
+
+        <h3>6-5. PHP機能を確認</h3>
+        <pre><code>sudo docker exec kptc-origin php -v
+sudo docker exec kptc-origin php -m | grep -E 'curl|mbstring|openssl|pdo_sqlite|sqlite3'</code></pre>
+        <p>PHP 8.4と、上記5種類の機能名が表示されることを確認します。</p>
+      </section>
+
+      <section id="https">
+        <h2>7. URL・HTTPSの設定</h2>
+        <p>Dockerコンテナはサーバー内部のHTTPポートで待ち受けます。利用者がアクセスするHTTPS URLは、ホスト側のnginxなどからコンテナへ中継します。以下は考え方を示す最小例です。証明書の取得方法は組織の規則に従ってください。</p>
+
+        <h3>7-1. nginxを導入</h3>
+        <pre><code>sudo apt update
+sudo apt install -y nginx</code></pre>
+
+        <h3>7-2. origin側の中継例</h3>
+        <p><code>/etc/nginx/sites-available/kptc-origin</code>を作成します。証明書パスとドメインは実環境へ変更してください。</p>
+        <pre><code>server {
+    listen 443 ssl;
+    server_name scheduler.example.local;
+
+    ssl_certificate     /etc/ssl/certs/origin-fullchain.pem;
+    ssl_certificate_key /etc/ssl/private/origin-key.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}</code></pre>
+
+        <h3>7-3. tamanegi側の中継例</h3>
+        <p><code>/etc/nginx/sites-available/kptc-tamanegi</code>を作成します。</p>
+        <pre><code>server {
+    listen 443 ssl;
+    server_name calendar.example.jp;
+
+    ssl_certificate     /etc/ssl/certs/tamanegi-fullchain.pem;
+    ssl_certificate_key /etc/ssl/private/tamanegi-key.pem;
+
+    client_max_body_size 128k;
+
+    location / {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}</code></pre>
+
+        <h3>7-4. 設定を有効にする</h3>
+        <pre><code># originで実行
+sudo ln -s /etc/nginx/sites-available/kptc-origin /etc/nginx/sites-enabled/kptc-origin
+sudo nginx -t
+sudo systemctl reload nginx
+
+# tamanegiで実行
+sudo ln -s /etc/nginx/sites-available/kptc-tamanegi /etc/nginx/sites-enabled/kptc-tamanegi
+sudo nginx -t
+sudo systemctl reload nginx</code></pre>
+        <div class="callout danger"><strong>公開範囲：</strong>originはファイアウォール、VPN、社内ネットワーク制限などで外部から接続できないようにしてください。tamanegiは443番だけを公開し、8081番は外部へ公開しません。</div>
+      </section>
+
+      <section id="initial">
+        <h2>8. 初期設定と通信確認</h2>
+        <h3>8-1. originの管理者パスワード</h3>
+        <pre><code>sudo docker exec -it kptc-origin \
+  php /var/www/html/manage-auth-user-cli.php set-admin-mode-password</code></pre>
+        <p>8～128文字の新しいパスワードを入力します。入力中は文字が表示されません。パスワードはチャット、GitHub、環境設定例へ書かないでください。</p>
+
+        <h3>8-2. 入口の確認</h3>
+        <ul>
+          <li>originのURLへ直接アクセスすると<code>403 Forbidden</code>になる：正常</li>
+          <li>既存社内システムが正しいCBCトークンを付けるとスケジュール画面が開く：正常</li>
+          <li>tamanegiのトップページが開く：正常</li>
+        </ul>
+
+        <h3>8-3. JSONを手動送信</h3>
+        <p>スケジューラを一度開いて初期DBが作られた後、originで次を実行します。</p>
+        <pre><code>sudo docker exec kptc-origin \
+  php /var/www/html/publish-availability-cli.php</code></pre>
+        <p>次にtamanegiを確認します。</p>
+        <pre><code>curl -i https://calendar.example.jp/health-availability.php
+curl -i https://calendar.example.jp/public-availability.php</code></pre>
+        <p class="checkpoint"><code>health-availability.php</code>がHTTP 200になり、公開カレンダーへ3か月分が表示されればoriginからtamanegiへの連携成功です。</p>
+
+        <h3>8-4. 自動処理</h3>
+        <p>originコンテナは次を自動実行します。</p>
+        <table>
+          <thead><tr><th>処理</th><th>時刻・間隔</th><th>内容</th></tr></thead>
+          <tbody>
+            <tr><td>公開JSON送信</td><td>5分ごと</td><td>送信失敗時の再送</td></tr>
+            <tr><td>送信監視</td><td>5分ごと（送信と2分ずらす）</td><td>長時間送れていない状態をログへ出力</td></tr>
+            <tr><td>バックアップ</td><td>日本時間 毎日22:00</td><td>当日以降の予定を最新JSONへ置換</td></tr>
+          </tbody>
+        </table>
+        <pre><code>sudo docker logs --since 30m kptc-origin
+sudo docker exec kptc-origin ls -l /var/lib/kptc-scheduler/backups/</code></pre>
+      </section>
+
+      <section id="migration">
+        <h2>9. 現在のSQLiteデータをoriginへ移す場合</h2>
+        <p>新規構築だけならこの章は飛ばしてください。既存SQLiteを移す場合は、コピー中に予定が変わらないよう、移行時間を利用者へ案内してから行います。</p>
+
+        <ol>
+          <li>既存システムを編集停止にする</li>
+          <li>既存SQLiteのバックアップを別名で保存する</li>
+          <li>originコンテナを停止する</li>
+          <li>SQLiteをコンテナの永続保存場所へコピーする</li>
+          <li>originコンテナを起動する</li>
+        </ol>
+
+        <pre><code># originサーバーで実行
+sudo docker stop kptc-origin
+sudo docker cp /安全な移行元/group-watcher.sqlite \
+  kptc-origin:/var/lib/kptc-scheduler/group-watcher.sqlite
+sudo docker start kptc-origin
+sudo docker logs --tail 50 kptc-origin</code></pre>
+        <div class="callout warning"><strong>注意：</strong>既存SQLiteの移行前に、新規環境で作られた予定を登録しないでください。どちらを正とするか分からなくなります。元ファイルは動作確認が終わるまで削除しないでください。</div>
+      </section>
+
+      <section id="update">
+        <h2>10. 更新・停止・バックアップ</h2>
+        <h3>10-1. 状態を見る</h3>
+        <pre><code>sudo docker ps
+sudo docker logs --tail 100 kptc-origin
+sudo docker logs --tail 100 kptc-tamanegi</code></pre>
+
+        <h3>10-2. GitHubの最新版へ更新</h3>
+        <p>対象サーバーでリポジトリを更新し、イメージを再構築します。以下はoriginの例です。</p>
+        <pre><code>cd /opt/kptc-origin-build/260725_GW_WEB
+git pull --ff-only origin main
+sudo docker build -f docker/origin/Dockerfile -t kptc-origin:latest .
+sudo docker stop kptc-origin
+sudo docker rm kptc-origin
+
+sudo docker run -d \
+  --name kptc-origin \
+  --restart unless-stopped \
+  --env-file /etc/kptc/origin.env \
+  -p 127.0.0.1:8080:80 \
+  -v kptc-origin-data:/var/lib/kptc-scheduler \
+  kptc-origin:latest</code></pre>
+        <p>tamanegiはDockerfile名、イメージ名、ポート、ボリューム名、環境設定ファイルを5章と同じ値へ読み替えます。</p>
+        <div class="callout success"><strong>データが残る理由：</strong><code>docker rm</code>でコンテナを消しても、名前付きボリュームは残ります。本書の命令では<code>-v</code>を付けて削除しないでください。</div>
+
+        <h3>10-3. 停止と再開</h3>
+        <pre><code>sudo docker stop kptc-origin
+sudo docker start kptc-origin
+
+sudo docker stop kptc-tamanegi
+sudo docker start kptc-tamanegi</code></pre>
+
+        <h3>10-4. originの最新JSONバックアップ確認</h3>
+        <pre><code>sudo docker exec kptc-origin \
+  php /var/www/html/backup-scheduler-cli.php
+sudo docker exec kptc-origin \
+  ls -l /var/lib/kptc-scheduler/backups/scheduler-latest.json</code></pre>
+        <p>名前付きボリュームは同じサーバーの故障には備えられません。運用開始後は、組織のバックアップ製品などでoriginのボリュームまたはバックアップJSONを別の安全な保存先へ複製してください。</p>
+        <p class="small">参照：<a href="https://docs.docker.com/reference/cli/docker/container/run/">Docker公式「docker container run」</a>、<a href="https://docs.docker.com/reference/cli/docker/volume/create/">Docker公式「docker volume create」</a></p>
+      </section>
+
+      <section id="trouble">
+        <h2>11. 困ったときの確認</h2>
+        <table>
+          <thead><tr><th>症状</th><th>最初に確認すること</th></tr></thead>
+          <tbody>
+            <tr><td><code>COPY 02_release/... not found</code></td><td>リポジトリ最上位へ移動し、命令末尾の<code>.</code>を付けているか確認</td></tr>
+            <tr><td>コンテナがすぐ終了する</td><td><code>sudo docker logs コンテナ名</code>を確認。秘密値やURLの未設定がないか確認</td></tr>
+            <tr><td>originへ直接入れない</td><td>直接アクセスの403は正常。既存社内システムから正しいトークン付きURLで開く</td></tr>
+            <tr><td>JSON送信に失敗する</td><td>受信URL、DNS、HTTPS証明書、443番通信、両側の共有秘密値が同じか確認</td></tr>
+            <tr><td>tamanegiが「準備中」</td><td>originで手動送信し、tamanegiの<code>health-availability.php</code>と両コンテナのログを確認</td></tr>
+            <tr><td>再起動後にデータが消えた</td><td><code>-v kptc-origin-data:/var/lib/kptc-scheduler</code>またはtamanegi側ボリュームを付けたか確認</td></tr>
+            <tr><td>HTTPSで開けない</td><td>nginxの<code>server_name</code>、証明書、DNS、ファイアウォールを確認。<code>sudo nginx -t</code>を実行</td></tr>
+            <tr><td>管理者モードへ入れない</td><td>管理者パスワードの初期設定を実行したか確認。5回失敗後は60秒待つ</td></tr>
+          </tbody>
+        </table>
+
+        <h3>管理者へ渡す確認結果</h3>
+        <pre><code>sudo docker ps -a
+sudo docker image ls | grep kptc
+sudo docker logs --tail 100 kptc-origin
+sudo docker logs --tail 100 kptc-tamanegi
+sudo nginx -t</code></pre>
+        <div class="callout danger"><strong>ログ共有時の注意：</strong><code>/etc/kptc/origin.env</code>と<code>/etc/kptc/tamanegi.env</code>の中身は、メール、チャット、画面写真へ載せないでください。</div>
+      </section>
+
+      <section id="glossary">
+        <h2>12. 用語集</h2>
+        <table>
+          <thead><tr><th>用語</th><th>やさしい説明</th></tr></thead>
+          <tbody>
+            <tr><td>Docker</td><td>プログラムと動作に必要な道具を、ひとまとめの箱として動かす仕組みです。</td></tr>
+            <tr><td>Dockerfile</td><td>その箱をどのように作るか、順番を書いた設計図です。</td></tr>
+            <tr><td>イメージ</td><td>Dockerfileから作った、まだ動いていない完成済みの箱の型です。</td></tr>
+            <tr><td>コンテナ</td><td>イメージをもとに実際に動いているプログラムの箱です。</td></tr>
+            <tr><td>ボリューム</td><td>箱を作り直しても消えないよう、データを箱の外側へ保管する場所です。</td></tr>
+            <tr><td>環境変数・envファイル</td><td>送信先URLや秘密値など、設置場所ごとに違う設定をプログラムへ渡す方法です。</td></tr>
+            <tr><td>origin</td><td>予定の元データを持つ社内側サーバーの呼び名です。</td></tr>
+            <tr><td>tamanegi</td><td>公開してよい空き状況だけを外部へ見せるサーバーの呼び名です。</td></tr>
+            <tr><td>SQLite</td><td>予定を1つのファイルへ整理して保存するデータベースです。</td></tr>
+            <tr><td>JSON</td><td>コンピューター同士が項目と値を分かりやすく受け渡すための文章形式です。</td></tr>
+            <tr><td>HTTPS</td><td>通信内容を暗号化して、途中で読まれにくくするWeb通信です。</td></tr>
+            <tr><td>DNS</td><td><code>calendar.example.jp</code>のような名前とIPアドレスを結び付ける案内帳です。</td></tr>
+            <tr><td>IPアドレス</td><td>ネットワーク上でサーバーを見つけるための番号です。</td></tr>
+            <tr><td>ポート</td><td>1台のサーバーにある、通信の受付窓口番号です。HTTPSは通常443番です。</td></tr>
+            <tr><td>nginx</td><td>利用者からのHTTPS通信を受け、サーバー内部のDockerコンテナへ渡す受付係です。</td></tr>
+            <tr><td>リバースプロキシ</td><td>外から来た通信を受け取り、内側の正しいプログラムへ中継する仕組みです。本書ではnginxが担当します。</td></tr>
+            <tr><td>秘密値</td><td>正しい相手か確かめるため、双方だけが知っている長い文字列です。パスワードと同様に公開してはいけません。</td></tr>
+            <tr><td>ハッシュ・署名</td><td>送られた内容が途中で変わっていないか、共有秘密値を使って確かめる印です。</td></tr>
+            <tr><td>ターミナル</td><td>文字でサーバーへ命令を入力する画面です。</td></tr>
+            <tr><td>sudo</td><td>管理者の許可で、その命令だけ強い権限を使うための言葉です。</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </article>
+  </main>
+
+  <footer>
+    <p>文書名：KPTC Scheduler Docker構築手順書（HTML）／対象：Ubuntu 24.04、PHP 8.4、origin・tamanegi分離構成</p>
+    <p>Dockerの導入方法は変更される場合があります。実作業時は<a href="https://docs.docker.com/engine/install/ubuntu/">Docker公式Ubuntu導入手順</a>も確認してください。</p>
+  </footer>
+</body>
+</html>

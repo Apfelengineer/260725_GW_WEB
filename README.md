@@ -23,6 +23,7 @@ Dockerでorigin・tamanegiを別サーバーへ構築する場合は、[Docker�
 - [独立Linuxサーバー構築・移行手順書（PDF）](docs/KPTC_Scheduler_独立Linuxサーバー構築・移行手順書.pdf)
 - [ファイル機能・役割一覧とファイル間関係図（PDF）](docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf)
 - [スケジューラ操作マニュアル（PDF）](docs/KPTC_Scheduler_操作マニュアル.pdf)
+- [専門外の方向けDocker構築手順書（HTML）](docs/KPTC_Scheduler_Docker構築手順書.html)
 
 ## 実装済み
 

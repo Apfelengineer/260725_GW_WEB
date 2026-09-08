@@ -144,6 +144,16 @@ test("システム資料を同梱する", async () => {
   await access(new URL("docs/KPTC_Scheduler_現行アプリケーション仕様書.pdf", repositoryRoot));
   await access(new URL("docs/KPTC_Scheduler_独立Linuxサーバー構築・移行手順書.pdf", repositoryRoot));
   await access(new URL("docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf", repositoryRoot));
+  const dockerGuide = await readFile(new URL("docs/KPTC_Scheduler_Docker構築手順書.html", repositoryRoot), "utf8");
+  assert.match(dockerGuide, /docker\/origin\/Dockerfile/);
+  assert.match(dockerGuide, /docker\/tamanegi\/Dockerfile/);
+  assert.match(dockerGuide, /02_release\/origin/);
+  assert.match(dockerGuide, /02_release\/tamanegi/);
+  assert.match(dockerGuide, /KPTC_PUBLIC_AVAILABILITY_ENDPOINT/);
+  assert.match(dockerGuide, /\/opt\/kptc-origin-build\/260725_GW_WEB/);
+  assert.match(dockerGuide, /\/opt\/kptc-tamanegi-build\/260725_GW_WEB/);
+  assert.doesNotMatch(dockerGuide, /\/opt\/kptc-build\/260725_GW_WEB/);
+  assert.match(dockerGuide, /同じDockerボリュームやネットワークフォルダを共有しません/);
 });
 
 test("試験室の空き状況ページと署名付きJSON連携を提供する", async () => {
