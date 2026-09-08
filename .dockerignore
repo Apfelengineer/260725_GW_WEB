@@ -1,0 +1,11 @@
+*
+!.dockerignore
+!02_release/
+!02_release/origin/
+!02_release/origin/**
+!02_release/tamanegi/
+!02_release/tamanegi/**
+!docker/
+!docker/origin/
+!docker/tamanegi/
+!docker/**

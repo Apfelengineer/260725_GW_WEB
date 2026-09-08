@@ -11,8 +11,11 @@ PHP APIと内部用SQLiteへデータを保存するため、別端末・別ブ�
 - `02_release/tamanegi/`: 外部サーバーtamanegiへ配置するビルド後ファイル
 - `02_release/renkon/`: 社内システムからの接続を試す模擬サイト（開発・確認専用）
 - `docs/`: 仕様書、構築手順書、ファイル関係図
+- `docker/`: PHP 8.4を使用するorigin・tamanegi個別Dockerfile、起動設定、環境変数例
 
 ビルド前とビルド後を明確に分離しています。`02_release`にはデータベース、実環境設定、秘密鍵、公開JSON、ログを含めません。
+
+Dockerでorigin・tamanegiを別サーバーへ構築する場合は、[Docker構築手順](docker/README.md)を参照してください。各イメージは`02_release/origin`または`02_release/tamanegi`のビルド後ファイルを使用し、データと秘密設定はDockerボリューム・起動時環境変数へ分離します。
 
 ## システム資料
 

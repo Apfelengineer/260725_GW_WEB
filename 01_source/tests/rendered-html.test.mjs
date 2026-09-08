@@ -410,3 +410,31 @@ test("分離配置でも公開領域外の実行設定を探索する", async ()
   assert.match(runtimeConfig, /dirname\(__DIR__, 3\)/);
   assert.match(runtimeConfig, /GW\/config/);
 });
+
+test("originとtamanegiをPHP 8.4の個別Docker環境へ構築できる", async () => {
+  const [originDockerfile, originEntrypoint, originCron, tamanegiDockerfile, tamanegiEntrypoint, guide] = await Promise.all([
+    readFile(new URL("docker/origin/Dockerfile", repositoryRoot), "utf8"),
+    readFile(new URL("docker/origin/entrypoint.sh", repositoryRoot), "utf8"),
+    readFile(new URL("docker/origin/kptc-cron", repositoryRoot), "utf8"),
+    readFile(new URL("docker/tamanegi/Dockerfile", repositoryRoot), "utf8"),
+    readFile(new URL("docker/tamanegi/entrypoint.sh", repositoryRoot), "utf8"),
+    readFile(new URL("docker/README.md", repositoryRoot), "utf8"),
+  ]);
+
+  assert.match(originDockerfile, /FROM php:8\.4-apache-bookworm/);
+  assert.match(originDockerfile, /COPY 02_release\/origin\/ \/var\/www\/html\//);
+  assert.match(originDockerfile, /pdo_sqlite sqlite3/);
+  assert.match(originDockerfile, /VOLUME \["\/var\/lib\/kptc-scheduler"\]/);
+  assert.match(originEntrypoint, /KPTC_PORTAL_TOKEN_KEY/);
+  assert.match(originEntrypoint, /KPTC_PUBLIC_AVAILABILITY_SECRET/);
+  assert.match(originCron, /\*\/5 \* \* \* \*/);
+  assert.match(originCron, /0 22 \* \* \*/);
+
+  assert.match(tamanegiDockerfile, /FROM php:8\.4-apache-bookworm/);
+  assert.match(tamanegiDockerfile, /COPY 02_release\/tamanegi\/ \/var\/www\/html\//);
+  assert.match(tamanegiDockerfile, /VOLUME \["\/var\/lib\/kptc-availability"\]/);
+  assert.match(tamanegiEntrypoint, /KPTC_PUBLIC_AVAILABILITY_SECRET/);
+  assert.match(guide, /docker build -f docker\/origin\/Dockerfile/);
+  assert.match(guide, /docker build -f docker\/tamanegi\/Dockerfile/);
+  assert.match(guide, /リバースプロキシ/);
+});

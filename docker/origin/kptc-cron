@@ -1,0 +1,7 @@
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+KPTC_INTERNAL_CONFIG_FILE=/run/kptc/internal-env.php
+
+*/5 * * * * www-data /usr/local/bin/php /var/www/html/publish-availability-cli.php >/proc/1/fd/1 2>/proc/1/fd/2
+2-57/5 * * * * www-data /usr/local/bin/php /var/www/html/monitor-availability-cli.php >/proc/1/fd/1 2>/proc/1/fd/2
+0 22 * * * www-data /usr/local/bin/php /var/www/html/backup-scheduler-cli.php >/proc/1/fd/1 2>/proc/1/fd/2
