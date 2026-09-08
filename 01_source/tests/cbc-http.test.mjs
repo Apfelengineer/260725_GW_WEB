@@ -12,7 +12,7 @@ const base = 'http://127.0.0.1:18903';
 const server = spawn('php', ['-S','127.0.0.1:18903','-t',fileURLToPath(new URL('../../02_release/', import.meta.url))], {
   env: {...process.env, KPTC_INTERNAL_SCHEDULER_DB:join(temporary,'test.sqlite'),
     KPTC_PUBLIC_AVAILABILITY_JSON:join(temporary,'public.json'), KPTC_PUBLIC_AVAILABILITY_MODE:'local',
-    KPTC_SESSION_COOKIE_SECURE:'0', KPTC_RENKON_SCHEDULER_URL:base+'/origin/', KPTC_PORTAL_TOKEN_KEY:'SecretKey999'},
+    KPTC_SESSION_COOKIE_SECURE:'0', KPTC_RENKON_SCHEDULER_URL:base+'/origin/', KPTC_PORTAL_TOKEN_KEY:'SecretKey'},
   stdio:['ignore','ignore','pipe'],
 });
 try {

@@ -6,9 +6,10 @@ declare(strict_types=1);
 const KPTC_PORTAL_TOKEN_METHOD = 'AES-256-CBC';
 
 function kptc_portal_token_key(): string {
-    // 指定された試験用キーを既定値とし、本番では内部設定ファイルの環境変数で差し替えられます。
-    $secret = (string)(getenv('KPTC_PORTAL_TOKEN_KEY') ?: 'SecretKey999');
-    return hash('sha256', $secret, true);
+    // 固定部分の末尾へUTC当日を付け、SecretKeyYYYYmmddを毎日生成します。
+    $configured = trim((string)(getenv('KPTC_PORTAL_TOKEN_KEY') ?: ''));
+    $prefix = $configured === '' || $configured === 'SecretKey999' ? 'SecretKey' : $configured;
+    return hash('sha256', $prefix . gmdate('Ymd'), true);
 }
 
 function kptc_portal_start_session(): void {

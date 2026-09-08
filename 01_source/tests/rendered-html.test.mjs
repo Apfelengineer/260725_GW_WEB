@@ -315,8 +315,9 @@ test("renkonの暗号化トークンがないスケジューラ要求を拒否�
   assert.match(issuer, /rawurlencode\(\$encrypted\)/);
   assert.match(renkonConfig, /KPTC_RENKON_SCHEDULER_URL/);
   assert.match(renkonConfig, /KPTC_PORTAL_TOKEN_KEY/);
-  assert.match(renkonConfig, /'SecretKey999'/);
-  assert.match(renkonConfig, /hash\('sha256', \$secret, true\)/);
+  assert.match(renkonConfig, /'SecretKey'/);
+  assert.match(renkonConfig, /gmdate\('Ymd'\)/);
+  assert.match(renkonConfig, /hash\('sha256', \$prefix \. gmdate\('Ymd'\), true\)/);
   assert.match(gate, /AES-256-CBC/);
   assert.match(gate, /openssl_decrypt/);
   assert.ok(gate.includes('/^user_([0-9]{3})$/D'));

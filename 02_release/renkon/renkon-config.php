@@ -14,8 +14,10 @@ function kptc_renkon_scheduler_url(): string {
 }
 
 function kptc_renkon_token_key(): string {
-    $secret = (string)(getenv('KPTC_PORTAL_TOKEN_KEY') ?: 'SecretKey999');
-    return hash('sha256', $secret, true);
+    // originと同じUTC日付を使い、日付境界をサーバーの地域設定に左右されないようにします。
+    $configured = trim((string)(getenv('KPTC_PORTAL_TOKEN_KEY') ?: ''));
+    $prefix = $configured === '' || $configured === 'SecretKey999' ? 'SecretKey' : $configured;
+    return hash('sha256', $prefix . gmdate('Ymd'), true);
 }
 
 if (isset($_SERVER['SCRIPT_FILENAME']) && realpath((string)$_SERVER['SCRIPT_FILENAME']) === __FILE__) {
