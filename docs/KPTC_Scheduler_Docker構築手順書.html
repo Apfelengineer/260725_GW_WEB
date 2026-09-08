@@ -104,6 +104,7 @@
         <li><a href="#initial">初期設定と通信確認</a></li>
         <li><a href="#migration">既存データの移行</a></li>
         <li><a href="#update">更新・停止・バックアップ</a></li>
+        <li><a href="#browser-ready">ブラウザ利用開始まで</a></li>
         <li><a href="#trouble">困ったときの確認</a></li>
         <li><a href="#glossary">用語集</a></li>
       </ol>
@@ -524,8 +525,128 @@ sudo docker exec kptc-origin \
         <p class="small">参照：<a href="https://docs.docker.com/reference/cli/docker/container/run/">Docker公式「docker container run」</a>、<a href="https://docs.docker.com/reference/cli/docker/volume/create/">Docker公式「docker volume create」</a></p>
       </section>
 
+      <section id="browser-ready">
+        <h2>11. Webブラウザで閲覧・操作できるまで</h2>
+        <p class="lead">この章は、前章までの構築を終えた後、実際に利用者がWebブラウザでスケジューラと空き状況を使える状態へ進める最終手順です。上から順に確認してください。</p>
+
+        <h3>11-1. 先にtamanegiの公開URLを確認</h3>
+        <p>社内または外部のパソコンで、Chrome、Edge、Safariなどを開き、tamanegiの公開URLを入力します。</p>
+        <pre><code>https://calendar.example.jp/</code></pre>
+        <p>ページ自体が表示されれば、Webブラウザからtamanegiまでの経路は完成です。まだJSONが届いていない場合の「空き状況を準備しています」という表示は正常です。</p>
+        <p>ターミナルからは次も確認できます。</p>
+        <pre><code>curl -I https://calendar.example.jp/
+curl -i https://calendar.example.jp/receive-availability.php</code></pre>
+        <table>
+          <thead><tr><th>確認先</th><th>構築直後の正常な結果</th></tr></thead>
+          <tbody>
+            <tr><td>tamanegiトップページ</td><td>HTTP 200、空き状況画面を表示</td></tr>
+            <tr><td><code>receive-availability.php</code>をGETで確認</td><td>HTTP 405。受信口がPOSTだけを受け付けるため正常</td></tr>
+            <tr><td><code>health-availability.php</code></td><td>初回JSON受信前はHTTP 503、受信後はHTTP 200</td></tr>
+          </tbody>
+        </table>
+
+        <h3>11-2. originの直接アクセス拒否を確認</h3>
+        <p>WebブラウザでoriginのURLを直接開きます。</p>
+        <pre><code>https://scheduler.example.local/</code></pre>
+        <p><code>Forbidden</code>またはHTTP 403になれば正常です。この結果は故障ではなく、社内システムを通らないアクセスを拒否できている証拠です。</p>
+
+        <h3>11-3. 既存社内システムへorigin入口を組み込む</h3>
+        <p>この作業は、既存社内システムの開発担当者が<strong>社内システム側</strong>で行います。本番環境へ模擬サイトrenkonを設置する作業ではありません。ログイン済み利用者の3桁IDから暗号化トークンを作り、originへ移動するリンクまたはボタンを追加します。</p>
+        <div class="callout danger"><strong>本人確認に関する条件：</strong>3桁IDをURLや入力欄からそのまま受け取らず、既存社内システムがログイン済み利用者について保持しているIDを使用してください。利用者が別人のIDへ書き換えられる実装は不可です。</div>
+
+        <p>社内システム担当者へ、次の仕様を渡します。</p>
+        <table>
+          <thead><tr><th>項目</th><th>仕様</th></tr></thead>
+          <tbody>
+            <tr><td>利用者情報</td><td><code>user_</code>＋ログイン済み利用者の半角数字3桁ID。例：<code>user_007</code></td></tr>
+            <tr><td>暗号方式</td><td><code>AES-256-CBC</code></td></tr>
+            <tr><td>鍵</td><td><code>hash('sha256', 固定秘密値 . gmdate('Ymd'), true)</code></td></tr>
+            <tr><td>IV</td><td>毎回新しく作る16バイトの安全な乱数</td></tr>
+            <tr><td>トークン</td><td><code>Base64(IV＋暗号文)</code></td></tr>
+            <tr><td>移動先</td><td><code>https://scheduler.example.local/?token=URLエンコードしたトークン</code></td></tr>
+            <tr><td>共有設定</td><td>社内システムとoriginの<code>KPTC_PORTAL_TOKEN_KEY</code>へ同じ固定秘密値</td></tr>
+          </tbody>
+        </table>
+
+        <p>実装の原本はGitHub内の次の2ファイルです。社内システム担当者は暗号処理を参考にし、IDの取得部分だけを既存ログイン情報へ置き換えます。</p>
+        <pre><code>02_release/renkon/open-scheduler.php
+02_release/renkon/renkon-config.php</code></pre>
+        <div class="callout warning"><strong>日付切り替え：</strong>鍵へ付ける日付は必ずPHPの<code>gmdate('Ymd')</code>によるUTC当日です。社内システム側とorigin側で日付や固定秘密値が異なると、正しい利用者でもForbiddenになります。</div>
+
+        <h3>11-4. 管理者パスワードを初期設定</h3>
+        <p>originサーバーで次を実行し、管理者モード用パスワードを設定します。パスワードは8～128文字です。</p>
+        <pre><code>sudo docker exec -it kptc-origin \
+  php /var/www/html/manage-auth-user-cli.php set-admin-mode-password</code></pre>
+        <p>入力中の文字は画面に表示されません。<code>Admin mode password updated.</code>が表示されれば完了です。</p>
+
+        <h3>11-5. 社内システムからスケジューラを開く</h3>
+        <ol>
+          <li>社内ネットワークに接続したパソコンでWebブラウザを開く</li>
+          <li>既存社内システムへ通常のユーザー名とパスワードでログイン</li>
+          <li>追加した「スケジューラ」リンクまたはボタンを選択</li>
+          <li>ログイン画面を挟まず、KPTC Schedulerの今週の予定表が表示されることを確認</li>
+        </ol>
+        <p class="checkpoint">ブラウザのアドレスに一時的な<code>?token=...</code>が付き、スケジュール画面が表示されれば入口連携の成功です。トークンや秘密値を画面写真・メールへ載せないでください。</p>
+
+        <h3>11-6. 一般モードの操作試験</h3>
+        <p>確認用の予定を1件作り、編集後に削除します。実際の予定と区別できる件名を使用してください。</p>
+        <ol>
+          <li>日付の枠をダブルクリック</li>
+          <li>ユーザー、予定種別、開始日・終了日、時間帯を設定</li>
+          <li>件名を「Docker構築確認」として登録</li>
+          <li>予定ブロックを開いて時間を変更</li>
+          <li>ドラッグ＆ドロップし、確認メッセージで移動を承認</li>
+          <li>右クリックまたはDeleteキーで確認用予定を削除</li>
+        </ol>
+        <p>登録、変更、移動、削除がすべて成功すれば、ブラウザからoriginのSQLiteへ保存できています。</p>
+
+        <h3>11-7. 管理者モードの操作試験</h3>
+        <ol>
+          <li>スケジュール画面の「管理者モード」を選択</li>
+          <li>11-4で設定した管理者パスワードを入力</li>
+          <li>ユーザー・試験室・予定種別の管理画面が表示されることを確認</li>
+          <li>操作履歴が表示されることを確認</li>
+          <li>確認後は一般モードへ戻る</li>
+        </ol>
+        <p>本番データを不用意に変えないよう、管理項目は表示確認だけに留めても構いません。</p>
+
+        <h3>11-8. originからtamanegiへの反映試験</h3>
+        <p>試験室ユーザーに、未来の日付で「機器利用」の確認用予定を登録します。その後、すぐ確認する場合はoriginサーバーで手動送信します。</p>
+        <pre><code>sudo docker exec kptc-origin \
+  php /var/www/html/publish-availability-cli.php</code></pre>
+        <p>Webブラウザでtamanegiを再読み込みし、該当する試験室・日付の表示が変わることを確認します。通常は予定保存時にも送信を試み、失敗した場合は5分ごとの処理で再送します。</p>
+        <pre><code>curl -i https://calendar.example.jp/health-availability.php
+sudo docker logs --since 10m kptc-origin
+sudo docker logs --since 10m kptc-tamanegi</code></pre>
+        <p class="checkpoint">tamanegiの<code>health-availability.php</code>がHTTP 200で、公開画面に予定の空き状態が反映されれば、別サーバー間のJSON連携成功です。確認後は確認用予定をoriginで削除し、再送後に公開画面も元へ戻ることを確認します。</p>
+
+        <h3>11-9. 再起動後もデータが残ることを確認</h3>
+        <p>利用開始前の確認時間に、各サーバーで自分のコンテナだけを再起動します。</p>
+        <pre><code># originサーバーで実行
+sudo docker restart kptc-origin
+
+# tamanegiサーバーで実行
+sudo docker restart kptc-tamanegi</code></pre>
+        <p>再度Webブラウザで両画面を開き、予定と公開カレンダーが残っていることを確認します。これは名前付きDockerボリュームが正しく接続されていることの確認です。</p>
+
+        <h3>11-10. 利用開始の合格表</h3>
+        <ul class="checklist">
+          <li>originとtamanegiが別サーバーで稼働</li>
+          <li>両コンテナが<code>healthy</code></li>
+          <li>tamanegiをHTTPSの公開URLで表示可能</li>
+          <li>originへの直接アクセスがHTTP 403</li>
+          <li>既存社内システム経由でoriginを表示可能</li>
+          <li>一般モードで予定の登録・編集・移動・削除が可能</li>
+          <li>管理者モードへ切り替え可能</li>
+          <li>originの試験室予定がtamanegiへ反映</li>
+          <li>コンテナ再起動後もデータを維持</li>
+          <li>毎日22時のバックアップ保存先を確認</li>
+        </ul>
+        <div class="callout success"><strong>利用開始：</strong>上の10項目をすべて確認できた時点で、Webブラウザからの閲覧・操作を開始できる状態です。</div>
+      </section>
+
       <section id="trouble">
-        <h2>11. 困ったときの確認</h2>
+        <h2>12. 困ったときの確認</h2>
         <table>
           <thead><tr><th>症状</th><th>最初に確認すること</th></tr></thead>
           <tbody>
@@ -550,7 +671,7 @@ sudo nginx -t</code></pre>
       </section>
 
       <section id="glossary">
-        <h2>12. 用語集</h2>
+        <h2>13. 用語集</h2>
         <table>
           <thead><tr><th>用語</th><th>やさしい説明</th></tr></thead>
           <tbody>

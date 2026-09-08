@@ -154,6 +154,11 @@ test("システム資料を同梱する", async () => {
   assert.match(dockerGuide, /\/opt\/kptc-tamanegi-build\/260725_GW_WEB/);
   assert.doesNotMatch(dockerGuide, /\/opt\/kptc-build\/260725_GW_WEB/);
   assert.match(dockerGuide, /同じDockerボリュームやネットワークフォルダを共有しません/);
+  assert.match(dockerGuide, /<section id="browser-ready">/);
+  assert.match(dockerGuide, /Webブラウザで閲覧・操作できるまで/);
+  assert.match(dockerGuide, /既存社内システムがログイン済み利用者について保持しているID/);
+  assert.match(dockerGuide, /Base64\(IV＋暗号文\)/);
+  assert.match(dockerGuide, /利用開始の合格表/);
   const glossary = dockerGuide.slice(dockerGuide.indexOf('<section id="glossary">'), dockerGuide.indexOf('</section>', dockerGuide.indexOf('<section id="glossary">')));
   assert.doesNotMatch(glossary, /(?:です|ます|ません)。<\/td>/);
 });
