@@ -159,6 +159,10 @@ test("システム資料を同梱する", async () => {
   assert.match(dockerGuide, /既存社内システムがログイン済み利用者について保持しているID/);
   assert.match(dockerGuide, /Base64\(IV＋暗号文\)/);
   assert.match(dockerGuide, /利用開始の合格表/);
+  assert.match(dockerGuide, /<section id="compose-version">/);
+  assert.match(dockerGuide, /compose\.tamanegi\.yaml/);
+  assert.match(dockerGuide, /compose\.origin\.yaml/);
+  assert.match(dockerGuide, /docker compose down -v/);
   const glossary = dockerGuide.slice(dockerGuide.indexOf('<section id="glossary">'), dockerGuide.indexOf('</section>', dockerGuide.indexOf('<section id="glossary">')));
   assert.doesNotMatch(glossary, /(?:です|ます|ません)。<\/td>/);
 });

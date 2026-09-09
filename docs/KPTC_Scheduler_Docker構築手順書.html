@@ -104,6 +104,7 @@
         <li><a href="#initial">初期設定と通信確認</a></li>
         <li><a href="#migration">既存データの移行</a></li>
         <li><a href="#update">更新・停止・バックアップ</a></li>
+        <li><a href="#compose-version">Docker Compose版で構築する場合</a></li>
         <li><a href="#browser-ready">ブラウザ利用開始まで</a></li>
         <li><a href="#trouble">困ったときの確認</a></li>
         <li><a href="#glossary">用語集</a></li>
@@ -523,6 +524,106 @@ sudo docker exec kptc-origin \
   ls -l /var/lib/kptc-scheduler/backups/scheduler-latest.json</code></pre>
         <p>名前付きボリュームは同じサーバーの故障には備えられません。運用開始後は、組織のバックアップ製品などでoriginのボリュームまたはバックアップJSONを別の安全な保存先へ複製してください。</p>
         <p class="small">参照：<a href="https://docs.docker.com/reference/cli/docker/container/run/">Docker公式「docker container run」</a>、<a href="https://docs.docker.com/reference/cli/docker/volume/create/">Docker公式「docker volume create」</a></p>
+      </section>
+
+      <section id="compose-version">
+        <h2>10.5 Docker Compose版で構築する場合（推奨）</h2>
+        <p>5章・6章の<code>docker run</code>方式に代えて、設定をYAMLファイルへまとめるDocker Compose方式でも運用できます。通常の起動・更新を短い命令で行えるため、新しく構築する場合はこの方式を推奨します。</p>
+        <div class="callout danger"><strong>方式はどちらか一方：</strong><code>docker run</code>方式とDocker Compose方式を同時に起動しないでください。同じコンテナ名とポートを使うため競合します。Compose方式を選ぶ場合も、originとtamanegiは必ず別サーバーへ構築します。</div>
+
+        <h3>10.5-1. tamanegi用Composeファイルを作る</h3>
+        <p><strong>tamanegiサーバー</strong>で、tamanegi用リポジトリの最上位へ移動し、<code>compose.tamanegi.yaml</code>を作ります。</p>
+        <pre><code>cd /opt/kptc-tamanegi-build/260725_GW_WEB
+nano compose.tamanegi.yaml</code></pre>
+        <p>次の内容を貼り付け、Ctrl＋O、Enter、Ctrl＋Xの順で保存します。</p>
+        <pre><code>services:
+  kptc-tamanegi:
+    container_name: kptc-tamanegi
+    build:
+      context: .
+      dockerfile: docker/tamanegi/Dockerfile
+    image: kptc-tamanegi:latest
+    restart: unless-stopped
+    env_file:
+      - /etc/kptc/tamanegi.env
+    ports:
+      - "127.0.0.1:8081:80"
+    volumes:
+      - kptc-tamanegi-data:/var/lib/kptc-availability
+
+volumes:
+  kptc-tamanegi-data:
+    name: kptc-tamanegi-data</code></pre>
+        <p><code>/etc/kptc/tamanegi.env</code>は5-3で作成した実環境設定です。まだ作成していない場合は、先に5-3を実施してください。</p>
+
+        <h3>10.5-2. origin用Composeファイルを作る</h3>
+        <p><strong>originサーバー</strong>で、origin用リポジトリの最上位へ移動し、<code>compose.origin.yaml</code>を作ります。</p>
+        <pre><code>cd /opt/kptc-origin-build/260725_GW_WEB
+nano compose.origin.yaml</code></pre>
+        <p>次の内容を貼り付けて保存します。</p>
+        <pre><code>services:
+  kptc-origin:
+    container_name: kptc-origin
+    build:
+      context: .
+      dockerfile: docker/origin/Dockerfile
+    image: kptc-origin:latest
+    restart: unless-stopped
+    env_file:
+      - /etc/kptc/origin.env
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - kptc-origin-data:/var/lib/kptc-scheduler
+
+volumes:
+  kptc-origin-data:
+    name: kptc-origin-data</code></pre>
+        <p><code>/etc/kptc/origin.env</code>は6-3で作成した実環境設定です。まだ作成していない場合は、先に6-3を実施してください。</p>
+
+        <h3>10.5-3. 既存のdocker run方式から切り替える場合</h3>
+        <p>5-4または6-4ですでにコンテナを起動している場合だけ、対象サーバーで既存コンテナを停止して削除します。名前付きボリュームは削除しないため、同じ名前のボリュームをComposeで接続すれば保存データを引き継げます。</p>
+        <pre><code># tamanegiサーバーで実行
+sudo docker stop kptc-tamanegi
+sudo docker rm kptc-tamanegi
+
+# originサーバーで実行
+sudo docker stop kptc-origin
+sudo docker rm kptc-origin</code></pre>
+        <p>新規構築で、まだコンテナを起動していない場合、この手順は不要です。</p>
+
+        <h3>10.5-4. 構成確認と起動</h3>
+        <p>まずYAMLの書き方と実環境設定を確認し、問題がなければ構築して起動します。それぞれのサーバーで自分用の命令だけを実行してください。</p>
+        <pre><code># tamanegiサーバーで実行
+cd /opt/kptc-tamanegi-build/260725_GW_WEB
+sudo docker compose -f compose.tamanegi.yaml config
+sudo docker compose -f compose.tamanegi.yaml up -d --build
+sudo docker compose -f compose.tamanegi.yaml ps
+
+# originサーバーで実行
+cd /opt/kptc-origin-build/260725_GW_WEB
+sudo docker compose -f compose.origin.yaml config
+sudo docker compose -f compose.origin.yaml up -d --build
+sudo docker compose -f compose.origin.yaml ps</code></pre>
+        <p class="checkpoint">各サーバーの<code>ps</code>で対象コンテナが<code>Up</code>、少し待つと<code>healthy</code>になれば起動成功です。続いて7章のHTTPS設定と11章のブラウザ確認を行います。</p>
+
+        <h3>10.5-5. 更新・再起動・停止</h3>
+        <p>更新時は、対象サーバーでGitHubから最新版を取得し、同じComposeファイルを指定して再構築します。</p>
+        <pre><code># tamanegiサーバーで更新
+cd /opt/kptc-tamanegi-build/260725_GW_WEB
+git pull --ff-only origin main
+sudo docker compose -f compose.tamanegi.yaml up -d --build
+
+# originサーバーで更新
+cd /opt/kptc-origin-build/260725_GW_WEB
+git pull --ff-only origin main
+sudo docker compose -f compose.origin.yaml up -d --build</code></pre>
+        <p>再起動と停止・再開は次の命令です。先頭のファイル名は、作業中のサーバーに合わせます。</p>
+        <pre><code>sudo docker compose -f compose.origin.yaml restart
+sudo docker compose -f compose.origin.yaml stop
+sudo docker compose -f compose.origin.yaml start</code></pre>
+        <div class="callout warning"><strong>保存データを守る：</strong>通常運用では<code>docker compose down -v</code>を実行しないでください。末尾の<code>-v</code>は名前付きボリュームも削除する指定であり、SQLiteまたは公開JSONが失われます。</div>
+        <p class="small">参照：<a href="https://docs.docker.com/compose/">Docker公式「Docker Compose」</a>、<a href="https://docs.docker.com/reference/cli/docker/compose/up/">Docker公式「docker compose up」</a></p>
       </section>
 
       <section id="browser-ready">
