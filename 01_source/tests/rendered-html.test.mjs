@@ -168,6 +168,14 @@ test("システム資料を同梱する", async () => {
   assert.match(dockerGuide, /compose\.tamanegi\.yaml/);
   assert.match(dockerGuide, /compose\.origin\.yaml/);
   assert.match(dockerGuide, /docker compose down -v/);
+  assert.match(dockerGuide, /本番稼働後に修正・機能追加を反映する/);
+  assert.match(dockerGuide, /開発用PCで修正 → 試験 → ビルド → GitHubのmainへ反映 → 対象サーバーで再構築/);
+  assert.match(dockerGuide, /01_source/);
+  assert.match(dockerGuide, /02_release/);
+  assert.match(dockerGuide, /pre-update-YYYYMMDD-HHMM\.sqlite/);
+  assert.match(dockerGuide, /kptc-origin:rollback-YYYYMMDD-HHMM/);
+  assert.match(dockerGuide, /tamanegiを先に更新し、その後origin/);
+  assert.match(dockerGuide, /up -d --no-build --force-recreate/);
   const glossary = dockerGuide.slice(dockerGuide.indexOf('<section id="glossary">'), dockerGuide.indexOf('</section>', dockerGuide.indexOf('<section id="glossary">')));
   assert.doesNotMatch(glossary, /(?:です|ます|ません)。<\/td>/);
 });

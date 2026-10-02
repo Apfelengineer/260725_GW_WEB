@@ -492,10 +492,74 @@ sudo docker logs --tail 50 kptc-origin</code></pre>
 sudo docker logs --tail 100 kptc-origin
 sudo docker logs --tail 100 kptc-tamanegi</code></pre>
 
-        <h3>10-2. GitHubの最新版へ更新</h3>
-        <p>対象サーバーでリポジトリを更新し、イメージを再構築します。以下はoriginの例です。</p>
-        <pre><code>cd /opt/kptc-origin-build/260725_GW_WEB
+        <h3>10-2. 本番稼働後に修正・機能追加を反映する</h3>
+        <p>初期構築後の修正も、サーバー上のPHPやJavaScriptを直接書き換えず、<strong>開発用PCで修正 → 試験 → ビルド → GitHubのmainへ反映 → 対象サーバーで再構築</strong>の順で行います。これにより、どの版を本番へ置いたかを後から確認でき、問題時に前の版へ戻せます。</p>
+
+        <h4>10-2-1. 変更する側を決める</h4>
+        <table>
+          <thead><tr><th>変更内容</th><th>更新するサーバー</th></tr></thead>
+          <tbody>
+            <tr><td>予定表、管理画面、認証、SQLite保存処理</td><td>originだけ</td></tr>
+            <tr><td>外部公開カレンダーの表示、画像、受信処理</td><td>tamanegiだけ</td></tr>
+            <tr><td>originから送る公開JSONの形式</td><td>原則としてtamanegiを先に更新し、その後origin</td></tr>
+            <tr><td>既存社内システムの入口・トークン発行</td><td>社内システム担当者の環境。模擬renkonは本番へ設置しない</td></tr>
+          </tbody>
+        </table>
+        <div class="callout warning"><strong>別サーバーであることを忘れない：</strong>originだけの修正ならtamanegiの再構築は不要です。両方を変更する場合も、それぞれのサーバーへ接続して別々に作業します。</div>
+
+        <h4>10-2-2. 開発用PCで修正・試験・ビルド</h4>
+        <p><code>01_source</code>が人が修正する原本、<code>02_release</code>がサーバーへ入れるビルド後ファイルです。<code>02_release</code>だけを直接修正すると、次回ビルド時に上書きされるため避けてください。</p>
+        <p>開発用PCにはGit、Node.js 22.13以降、pnpmを用意します。最初に<code>node --version</code>と<code>pnpm --version</code>で確認し、命令が見つからない場合はNode.jsとpnpmを導入してから進みます。</p>
+        <pre><code>cd 260725_GW_WEB
+git switch main
 git pull --ff-only origin main
+git switch -c feature/scheduler-change
+
+cd 01_source
+pnpm install --frozen-lockfile
+pnpm test
+pnpm run check
+pnpm run build
+cd ..
+
+git status --short
+git diff --check</code></pre>
+        <p><code>pnpm run build</code>は、origin・tamanegi・模擬renkonの配布ファイルを<code>02_release</code>へ作り直します。試験に失敗した場合は本番へ進まず、原因を直して再実行します。</p>
+        <pre><code>git add 01_source 02_release
+git commit -m "feat: describe the scheduler change"
+git push origin feature/scheduler-change</code></pre>
+        <p>GitHub上で変更内容と試験結果を確認してmainへ統合します。緊急時でも、秘密値、SQLite、実環境のenvファイル、公開中JSONはGitHubへ追加しません。</p>
+
+        <h4>10-2-3. origin更新前のバックアップ</h4>
+        <p>利用者へ短時間の更新作業を案内し、originサーバーで現在の版とデータを控えます。下の<code>YYYYMMDD-HHMM</code>は、実際の更新日時（例：<code>20261003-1900</code>）へ置き換えます。</p>
+        <pre><code>cd /opt/kptc-origin-build/260725_GW_WEB
+git status --short
+git rev-parse --short HEAD
+
+sudo install -d -m 700 /var/backups/kptc
+sudo docker exec kptc-origin \
+  php /var/www/html/backup-scheduler-cli.php
+
+sudo docker exec kptc-origin php -r '
+$source = new SQLite3("/var/lib/kptc-scheduler/group-watcher.sqlite", SQLITE3_OPEN_READONLY);
+$backup = new SQLite3("/var/lib/kptc-scheduler/backups/pre-update-YYYYMMDD-HHMM.sqlite");
+if (!$source-&gt;backup($backup)) { exit(1); }
+'
+sudo docker cp \
+  kptc-origin:/var/lib/kptc-scheduler/backups/pre-update-YYYYMMDD-HHMM.sqlite \
+  /var/backups/kptc/
+sudo chmod 600 /var/backups/kptc/pre-update-YYYYMMDD-HHMM.sqlite
+
+sudo docker image tag \
+  kptc-origin:latest kptc-origin:rollback-YYYYMMDD-HHMM</code></pre>
+        <p class="checkpoint"><code>git status --short</code>が空で、SQLiteバックアップが存在し、戻すためのDockerイメージタグが作られてから更新へ進みます。差分が表示された場合は、サーバー上で誰かがファイルを直接変更しているため、上書きせず管理者へ確認します。</p>
+
+        <h4>10-2-4. originへmainの最新版を反映</h4>
+        <pre><code>cd /opt/kptc-origin-build/260725_GW_WEB
+git switch main
+git pull --ff-only origin main
+git rev-parse --short HEAD
+
 sudo docker build -f docker/origin/Dockerfile -t kptc-origin:latest .
 sudo docker stop kptc-origin
 sudo docker rm kptc-origin
@@ -507,8 +571,57 @@ sudo docker run -d \
   -p 127.0.0.1:8080:80 \
   -v kptc-origin-data:/var/lib/kptc-scheduler \
   kptc-origin:latest</code></pre>
-        <p>tamanegiはDockerfile名、イメージ名、ポート、ボリューム名、環境設定ファイルを5章と同じ値へ読み替えます。</p>
-        <div class="callout success"><strong>データが残る理由：</strong><code>docker rm</code>でコンテナを消しても、名前付きボリュームは残ります。本書の命令では<code>-v</code>を付けて削除しないでください。</div>
+        <p>通常のプログラム更新では、<code>/etc/kptc/origin.env</code>を作り直しません。新しい環境変数が追加された場合だけ、リポジトリ内の<code>docker/origin/origin.env.example</code>と変更説明を確認して追記します。既存の秘密値を新しいランダム値へ勝手に変更すると、社内入口やtamanegiとの通信が止まります。</p>
+
+        <h4>10-2-5. tamanegiを更新する場合</h4>
+        <p>外部カレンダー側も変更した場合だけ、tamanegiサーバーで同じ流れを実施します。公開JSON形式を変更した場合は、旧形式も受信できるtamanegiを先に反映してからoriginを更新します。</p>
+        <pre><code>cd /opt/kptc-tamanegi-build/260725_GW_WEB
+git status --short
+git rev-parse --short HEAD
+sudo docker image tag \
+  kptc-tamanegi:latest kptc-tamanegi:rollback-YYYYMMDD-HHMM
+
+git switch main
+git pull --ff-only origin main
+sudo docker build -f docker/tamanegi/Dockerfile -t kptc-tamanegi:latest .
+sudo docker stop kptc-tamanegi
+sudo docker rm kptc-tamanegi
+
+sudo docker run -d \
+  --name kptc-tamanegi \
+  --restart unless-stopped \
+  --env-file /etc/kptc/tamanegi.env \
+  -p 127.0.0.1:8081:80 \
+  -v kptc-tamanegi-data:/var/lib/kptc-availability \
+  kptc-tamanegi:latest</code></pre>
+
+        <h4>10-2-6. 更新後の確認</h4>
+        <ol>
+          <li><code>sudo docker ps</code>で対象コンテナが<code>Up</code>、その後<code>healthy</code>になることを確認</li>
+          <li><code>sudo docker logs --since 10m コンテナ名</code>で連続エラーがないことを確認</li>
+          <li>既存社内システム経由でoriginを開き、予定の追加・編集・移動・削除を各1回確認</li>
+          <li>確認用予定を削除し、画面上部が共有保存済みになることを確認</li>
+          <li>試験室予定に関係する変更では、tamanegiの表示と<code>health-availability.php</code>のHTTP 200を確認</li>
+          <li>利用者へ更新完了と、問題時の連絡先を案内</li>
+        </ol>
+        <pre><code>sudo docker ps
+sudo docker logs --since 10m kptc-origin
+curl -i https://calendar.example.jp/health-availability.php</code></pre>
+
+        <h4>10-2-7. 問題が起きた場合の切戻し</h4>
+        <p>新しい版で操作不能や保存異常が発生した場合は、無理に本番データを編集せず、更新前イメージへ戻します。次はoriginの例です。</p>
+        <pre><code>sudo docker stop kptc-origin
+sudo docker rm kptc-origin
+sudo docker run -d \
+  --name kptc-origin \
+  --restart unless-stopped \
+  --env-file /etc/kptc/origin.env \
+  -p 127.0.0.1:8080:80 \
+  -v kptc-origin-data:/var/lib/kptc-scheduler \
+  kptc-origin:rollback-YYYYMMDD-HHMM</code></pre>
+        <p>プログラムだけの切戻しでは名前付きボリュームをそのまま使います。更新によってDB形式まで変わり、旧版で読めない場合に限り、利用を停止して更新前SQLiteから復元します。復元方法は、既存の独立Linuxサーバー構築・移行手順書に従い、復元後に公開JSONを再送します。</p>
+        <div class="callout danger"><strong>実行禁止：</strong><code>docker volume rm</code>、<code>docker compose down -v</code>、SQLiteの直接上書きを、バックアップ確認前に実行しないでください。</div>
+        <div class="callout success"><strong>データが残る理由：</strong><code>docker rm</code>でコンテナを消しても、名前付きボリュームは残ります。本書の命令では<code>-v</code>を付けて削除しません。</div>
 
         <h3>10-3. 停止と再開</h3>
         <pre><code>sudo docker stop kptc-origin
@@ -608,16 +721,29 @@ sudo docker compose -f compose.origin.yaml ps</code></pre>
         <p class="checkpoint">各サーバーの<code>ps</code>で対象コンテナが<code>Up</code>、少し待つと<code>healthy</code>になれば起動成功です。続いて7章のHTTPS設定と11章のブラウザ確認を行います。</p>
 
         <h3>10.5-5. 更新・再起動・停止</h3>
-        <p>更新時は、対象サーバーでGitHubから最新版を取得し、同じComposeファイルを指定して再構築します。</p>
+        <p>更新時は、先に10-2の「変更する側の判断」「開発用PCでの試験・ビルド」「更新前バックアップ」を実施します。その後、対象サーバーでGitHubから最新版を取得し、同じComposeファイルを指定して再構築します。</p>
         <pre><code># tamanegiサーバーで更新
 cd /opt/kptc-tamanegi-build/260725_GW_WEB
+sudo docker image tag kptc-tamanegi:latest \
+  kptc-tamanegi:rollback-YYYYMMDD-HHMM
 git pull --ff-only origin main
 sudo docker compose -f compose.tamanegi.yaml up -d --build
 
 # originサーバーで更新
 cd /opt/kptc-origin-build/260725_GW_WEB
+sudo docker image tag kptc-origin:latest \
+  kptc-origin:rollback-YYYYMMDD-HHMM
 git pull --ff-only origin main
-sudo docker compose -f compose.origin.yaml up -d --build</code></pre>
+sudo docker compose -f compose.origin.yaml up -d --build
+
+# 起動状態とログを確認
+sudo docker compose -f compose.origin.yaml ps
+sudo docker compose -f compose.origin.yaml logs --since 10m</code></pre>
+        <p>切戻す場合は、更新前タグを<code>latest</code>へ付け直し、ビルドせずにコンテナを作り直します。次はoriginの例です。</p>
+        <pre><code>sudo docker image tag \
+  kptc-origin:rollback-YYYYMMDD-HHMM kptc-origin:latest
+sudo docker compose -f compose.origin.yaml \
+  up -d --no-build --force-recreate</code></pre>
         <p>再起動と停止・再開は次の命令です。先頭のファイル名は、作業中のサーバーに合わせます。</p>
         <pre><code>sudo docker compose -f compose.origin.yaml restart
 sudo docker compose -f compose.origin.yaml stop
