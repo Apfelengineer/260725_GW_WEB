@@ -542,6 +542,88 @@ if ($action === 'member-account') {
     }
 }
 
+if ($action === 'save-delta') {
+    /*
+     * 予定全件ではなく変更分だけを受け取り、WAFのJSON反復項目制限を回避します。
+     * version確認、監査ログ、公開JSON連携は従来の全件保存と同じ取引境界を維持します。
+     */
+    require_post();
+    $editor = require_schedule_editor();
+    $actorId = (string)$editor['member_id'];
+    $input = body();
+    $delta = $input['delta'] ?? null;
+    if (!is_array($delta)) respond(['error'=>'差分保存データが不正です'], 422);
+    $upserts = $delta['scheduleUpserts'] ?? [];
+    $deleteIds = $delta['scheduleDeleteIds'] ?? [];
+    if (!is_array($upserts) || !is_array($deleteIds) || count($upserts) > 500 || count($deleteIds) > 500) respond(['error'=>'予定の変更件数が不正です'], 422);
+    $expectedVersion = (int)($input['version'] ?? 0);
+    $pdo->beginTransaction();
+    $record = current_record($pdo);
+    if ($record['version'] !== $expectedVersion) {
+        $pdo->rollBack();
+        respond(bootstrap_payload($pdo) + ['error'=>'別の利用者による更新がありました'], 409);
+    }
+    $state = $record['state'];
+    $membersChanged = array_key_exists('members', $delta);
+    $categoriesChanged = array_key_exists('categories', $delta);
+    if (($editor['role'] ?? '') !== 'admin' && ($membersChanged || $categoriesChanged)) {
+        $pdo->rollBack();
+        respond(['error'=>'一般ユーザーはユーザー・予定種別を変更できません'], 403);
+    }
+    if ($membersChanged) {
+        if (!is_array($delta['members'])) { $pdo->rollBack(); respond(['error'=>'ユーザーデータが不正です'], 422); }
+        $state['members'] = array_values($delta['members']);
+    }
+    if ($categoriesChanged) {
+        if (!is_array($delta['categories']) || count($delta['categories']) < 1) { $pdo->rollBack(); respond(['error'=>'予定種別データが不正です'], 422); }
+        $state['categories'] = array_values($delta['categories']);
+    }
+    $memberIds = array_fill_keys(array_map('strval', array_column($state['members'], 'id')), true);
+    $categoryNames = array_fill_keys(array_map('strval', array_column($state['categories'], 'name')), true);
+    $scheduleMap = [];
+    foreach ($state['schedules'] as $schedule) $scheduleMap[(string)($schedule['id'] ?? '')] = $schedule;
+    foreach ($deleteIds as $deleteId) {
+        if (!is_string($deleteId) || $deleteId === '') { $pdo->rollBack(); respond(['error'=>'削除する予定IDが不正です'], 422); }
+        unset($scheduleMap[$deleteId]);
+    }
+    foreach ($upserts as $schedule) {
+        if (!is_array($schedule)) { $pdo->rollBack(); respond(['error'=>'予定データが不正です'], 422); }
+        unset($schedule['repeat'], $schedule['repeatUntil'], $schedule['reminderMinutes']);
+        $id = trim((string)($schedule['id'] ?? ''));
+        $memberId = (string)($schedule['memberId'] ?? '');
+        $category = (string)($schedule['category'] ?? '');
+        $date = (string)($schedule['date'] ?? '');
+        $endDate = (string)($schedule['endDate'] ?? $date);
+        $start = (string)($schedule['start'] ?? '');
+        $end = (string)($schedule['end'] ?? '');
+        if ($id === '' || strlen($id) > 120 || !isset($memberIds[$memberId]) || !isset($categoryNames[$category])
+            || preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) !== 1 || preg_match('/^\d{4}-\d{2}-\d{2}$/D', $endDate) !== 1
+            || $endDate < $date || preg_match('/^\d{2}:\d{2}$/D', $start) !== 1 || preg_match('/^\d{2}:\d{2}$/D', $end) !== 1
+            || trim((string)($schedule['title'] ?? '')) === '') {
+            $pdo->rollBack();
+            respond(['error'=>'予定データの内容が不正です'], 422);
+        }
+        $scheduleMap[$id] = $schedule;
+    }
+    $state['schedules'] = array_values($scheduleMap);
+    $nextMemberIds = array_column($state['members'], 'id');
+    $linkedMemberIds = $pdo->query('SELECT member_id FROM auth_users')->fetchAll(PDO::FETCH_COLUMN);
+    foreach ($linkedMemberIds as $linkedMemberId) {
+        if (!in_array($linkedMemberId, $nextMemberIds, true)) { $pdo->rollBack(); respond(bootstrap_payload($pdo) + ['error'=>'ログインアカウントがあるユーザーは削除できません'], 422); }
+    }
+    $before = json_encode($record['state'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $after = json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $nextVersion = $record['version'] + 1;
+    $now = date(DATE_ATOM);
+    $pdo->prepare('UPDATE app_state SET payload=?,version=?,updated_at=? WHERE id=1')->execute([$after,$nextVersion,$now]);
+    $name = member_name($state, $actorId);
+    $pdo->prepare('INSERT INTO audit_logs(actor_id,actor_name,action,summary,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?)')->execute([$actorId,$name,(string)($input['action'] ?? '更新'),(string)($input['summary'] ?? 'データを更新'),$before,$after,$now]);
+    mark_availability_publish_pending($pdo);
+    $pdo->commit();
+    attempt_availability_publish($pdo, $state, $nextVersion);
+    respond(bootstrap_payload($pdo));
+}
+
 if ($action === 'save') {
     // 受信時のversionが最新値と一致した場合だけ、状態と監査ログを同じ取引で更新します。
     require_post();

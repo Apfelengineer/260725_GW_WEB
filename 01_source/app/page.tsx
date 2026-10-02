@@ -16,6 +16,7 @@ import {
   type ScheduleCategory,
   type ScheduleItem,
   type SharedState,
+  type SharedStateDelta,
   type SessionRole,
 } from "./lib/group-watcher-api";
 
@@ -193,6 +194,7 @@ export default function Home() {
   const [syncStatus, setSyncStatus] = useState<"saved" | "saving" | "offline">("saving");
   const versionRef = useRef(0);
   const lastSyncedRef = useRef("");
+  const lastSyncedStateRef = useRef<SharedState | null>(null);
   const mutationRef = useRef({ action: "更新", summary: "共有データを更新" });
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const pointerDragRef = useRef<{ scheduleId: string; startX: number; startY: number } | null>(null);
@@ -205,6 +207,7 @@ export default function Home() {
 
   function applyServerPayload(payload: AuthenticatedBootstrapResponse) {
     lastSyncedRef.current = JSON.stringify(payload.state);
+    lastSyncedStateRef.current = payload.state;
     versionRef.current = payload.version;
     setCsrfToken(payload.csrfToken);
     setCurrentUserId(payload.currentUserId);
@@ -242,18 +245,28 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    // 変更を短時間まとめ、バージョン番号付きで直列保存して同時編集の競合を検出します。
+    // 変更分だけを送り、予定件数が増えてもWAFへ全予定を再送しないようにします。
     if (!authReady || !serverAvailable || !currentUserId || !csrfToken || !["admin", "user"].includes(currentRole)) return;
     const state: SharedState = { members, schedules, categories };
     const serialized = JSON.stringify(state);
     if (serialized === lastSyncedRef.current) return;
+    const base = lastSyncedStateRef.current;
+    if (!base) return;
     const mutation = { ...mutationRef.current };
     const timer = window.setTimeout(() => {
       saveQueueRef.current = saveQueueRef.current.then(async () => {
         if (serialized === lastSyncedRef.current) return;
+        const currentById = new Map(state.schedules.map((item) => [item.id, item]));
+        const baseById = new Map(base.schedules.map((item) => [item.id, item]));
+        const delta: SharedStateDelta = {
+          scheduleUpserts: state.schedules.filter((item) => JSON.stringify(item) !== JSON.stringify(baseById.get(item.id))),
+          scheduleDeleteIds: base.schedules.filter((item) => !currentById.has(item.id)).map((item) => item.id),
+        };
+        if (JSON.stringify(state.members) !== JSON.stringify(base.members)) delta.members = state.members;
+        if (JSON.stringify(state.categories) !== JSON.stringify(base.categories)) delta.categories = state.categories;
         setSyncStatus("saving");
         try {
-          const payload = await groupWatcherApi.save(state, versionRef.current, csrfToken, mutation.action, mutation.summary);
+          const payload = await groupWatcherApi.saveDelta(delta, versionRef.current, csrfToken, mutation.action, mutation.summary);
           applyServerPayload(payload);
         } catch (error) {
           const conflict = (error as { status?: number; payload?: AuthenticatedBootstrapResponse }).status === 409;
@@ -263,7 +276,7 @@ export default function Home() {
             setToast(conflict ? "他の利用者の更新を反映しました。もう一度操作してください" : error instanceof Error ? error.message : "変更を保存できませんでした");
           } else {
             setSyncStatus("offline");
-            setToast("共有保存に失敗しました。通信を確認してください");
+            setToast(error instanceof Error ? error.message : "共有保存に失敗しました。通信を確認してください");
           }
         }
       });

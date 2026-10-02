@@ -93,6 +93,9 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(styles, /schedule-event \{[^}]*min-height: 40\.5px;/);
   assert.doesNotMatch(styles, /schedule-event \{[^}]*min-height: 54px;/);
   assert.match(api, /groupWatcherApi/);
+  assert.match(api, /saveDelta/);
+  assert.match(page, /scheduleUpserts/);
+  assert.match(page, /scheduleDeleteIds/);
   assert.doesNotMatch(api, /demoCategories|demoMembers|demoSchedules/);
   assert.match(api, /\["すべてのグループ", "電気通信係", "試験室"\]/);
   for (const category of ["休暇", "機器点検", "機器利用", "キャンセル待ち", "所内会議", "出張・外出", "その他"]) {
@@ -118,6 +121,8 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(phpApi, /migrate_organization_categories/);
   assert.match(phpApi, /remove_repeat_reminder_v1/);
   assert.match(phpApi, /strip_schedule_automation_fields/);
+  assert.match(phpApi, /if \(\$action === 'save-delta'\)/);
+  assert.match(phpApi, /予定全件ではなく変更分だけを受け取り/);
   assert.match(html, /KPTC Scheduler/);
   assert.doesNotMatch(page, /SkeletonPreview|codex-preview/);
 });

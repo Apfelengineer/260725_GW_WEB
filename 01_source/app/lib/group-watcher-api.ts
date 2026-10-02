@@ -40,6 +40,13 @@ export type SharedState = {
   categories: ScheduleCategory[];
 };
 
+export type SharedStateDelta = {
+  scheduleUpserts: ScheduleItem[];
+  scheduleDeleteIds: string[];
+  members?: Member[];
+  categories?: ScheduleCategory[];
+};
+
 export type AuditEntry = {
   id: number;
   actorId: string;
@@ -124,8 +131,23 @@ export const groupWatcherApi = {
       ...options,
       headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
     });
-    const payload = await response.json();
-    if (!response.ok) throw Object.assign(new Error(payload.error || "通信に失敗しました"), { status: response.status, payload });
+    const responseText = await response.text();
+    let payload: Record<string, unknown> = {};
+    try {
+      payload = responseText ? JSON.parse(responseText) as Record<string, unknown> : {};
+    } catch {
+      // WAFなどがHTMLで拒否した場合も、HTTP状態を失わず画面へ理由を返します。
+      payload = {};
+    }
+    if (!response.ok) {
+      const message = typeof payload.error === "string"
+        ? payload.error
+        : response.status === 403
+          ? "サーバーのセキュリティ機能が保存要求を拒否しました"
+          : `通信に失敗しました（HTTP ${response.status}）`;
+      throw Object.assign(new Error(message), { status: response.status, payload });
+    }
+    if (!responseText || Object.keys(payload).length === 0) throw Object.assign(new Error("サーバー応答を確認できません"), { status: response.status, payload });
     return payload as T;
   },
   bootstrap() {
@@ -142,6 +164,9 @@ export const groupWatcherApi = {
   },
   save(state: SharedState, version: number, csrfToken: string, action: string, summary: string) {
     return this.request<AuthenticatedBootstrapResponse>("save", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ state, version, action, summary }) });
+  },
+  saveDelta(delta: SharedStateDelta, version: number, csrfToken: string, action: string, summary: string) {
+    return this.request<AuthenticatedBootstrapResponse>("save-delta", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ delta, version, action, summary }) });
   },
   undo(auditId: number, version: number, csrfToken: string) {
     return this.request<AuthenticatedBootstrapResponse>("undo", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ auditId, version }) });
