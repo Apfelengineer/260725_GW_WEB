@@ -55,8 +55,11 @@ function MonthCalendar({ month, availability }: { month: Date; availability: Rec
           const holiday = japaneseHolidays.find((item) => item.date === key);
           const status = availability[key];
           const reserved = status === "reserved";
-          const marker = status === "maintenance" ? "ー" : status === "morning_available" ? "▲" : status === "afternoon_available" ? "▼" : "";
-          const hideDate = status === "maintenance" || Boolean(marker);
+          const statusMarker = status === "maintenance" ? "ー" : status === "morning_available" ? "▲" : status === "afternoon_available" ? "▼" : "";
+          // 平日は記号を表示し、土日祝は予約状態にかかわらず日付だけを残します。
+          const nonBusinessDay = date.getDay() === 0 || date.getDay() === 6 || Boolean(holiday);
+          const marker = nonBusinessDay ? "" : statusMarker;
+          const hideDate = !nonBusinessDay && (status === "maintenance" || Boolean(marker));
           return (
             <span className={`reservation-day ${date.getDay() === 6 ? "saturday" : ""} ${date.getDay() === 0 || holiday ? "sunday holiday" : ""} ${reserved ? "reserved" : ""} ${status === "maintenance" ? "maintenance" : ""} ${hideDate ? "marker-only" : ""}`} key={key} title={holiday?.name ?? ""}>
               {!hideDate && <b>{date.getDate()}</b>}

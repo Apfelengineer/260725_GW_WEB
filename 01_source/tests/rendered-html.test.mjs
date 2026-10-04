@@ -220,6 +220,9 @@ test("試験室の空き状況ページと署名付きJSON連携を提供する"
   assert.match(page, /status === "morning_available" \? "▲"/);
   assert.match(page, /status === "afternoon_available" \? "▼"/);
   assert.match(page, /status === "reserved"/);
+  assert.match(page, /const nonBusinessDay = date\.getDay\(\) === 0 \|\| date\.getDay\(\) === 6 \|\| Boolean\(holiday\)/);
+  assert.match(page, /const marker = nonBusinessDay \? "" : statusMarker/);
+  assert.match(page, /const hideDate = !nonBusinessDay && \(status === "maintenance" \|\| Boolean\(marker\)\)/);
   assert.match(page, /public-availability\.php/);
   assert.doesNotMatch(page, /groupWatcherApi|bootstrap\(|ScheduleItem|Member/);
   assert.match(page, /length: 3/);
