@@ -14,7 +14,7 @@ function kptc_load_runtime_config(string $role): void {
     $configuredPath = trim((string)(getenv($environmentKey) ?: ''));
     $configPath = $configuredPath;
     if ($configPath === '') {
-        // /GW直下への旧配置と、/GW/schedule・/GW/calendarへの分離配置を両方扱います。
+        // /GW直下への旧配置と、/GW/Scheduler・/GW/Calenderへの分離配置を両方扱います。
         $defaultPaths = [
             dirname(__DIR__, 2) . '/GW/config/' . $role . '-env.php',
             dirname(__DIR__, 3) . '/GW/config/' . $role . '-env.php',

@@ -5,7 +5,7 @@ declare(strict_types=1);
 
 function kptc_renkon_scheduler_url(): string {
     $configured = trim((string)(getenv('KPTC_RENKON_SCHEDULER_URL') ?: ''));
-    $url = $configured !== '' ? $configured : 'https://apfelrunner.sakura.ne.jp/GW/schedule/';
+    $url = $configured !== '' ? $configured : 'https://apfelrunner.sakura.ne.jp/GW/Scheduler/';
     $scheme = strtolower((string)(parse_url($url, PHP_URL_SCHEME) ?: ''));
     if (filter_var($url, FILTER_VALIDATE_URL) === false || !in_array($scheme, ['https', 'http'], true)) {
         throw new RuntimeException('スケジューラURLの設定が不正です');

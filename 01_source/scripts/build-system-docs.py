@@ -630,10 +630,10 @@ code('''*/5 * * * * /home/apfelrunner/GW/bin/publish-availability \\
   >/home/apfelrunner/GW/publish-availability.log 2>&1
 */10 * * * * /home/apfelrunner/GW/bin/monitor-availability \\
   >/home/apfelrunner/GW/monitor-availability.log 2>&1
-0 22 * * * /usr/local/bin/php /home/apfelrunner/www/GW/schedule/backup-scheduler-cli.php \\
+0 22 * * * /usr/local/bin/php /home/apfelrunner/www/GW/Scheduler/backup-scheduler-cli.php \\
   >/home/apfelrunner/GW/scheduler-backup.log 2>&1'''),
 p('上の枠は読みやすく折り返しています。crontabでは各ジョブを改行せず1行で登録します。既に登録済みなので重複追加は不要です。初回手動実行は23件・8,036バイト、保存・復元検証成功。翌日以降はログと更新日時を確認します。'),
-table(['用途','実パス'],[('実DB','/home/apfelrunner/GW/group-watcher.sqlite'),('バックアップ','/home/apfelrunner/GW/backups/scheduler-latest.json'),('内部設定','/home/apfelrunner/GW/config/internal-env.php'),('復元CLI','/home/apfelrunner/www/GW/schedule/restore-scheduler-cli.php'),('PHP','/usr/local/bin/php')],[90,WIDTH-90]),
+table(['用途','実パス'],[('実DB','/home/apfelrunner/GW/group-watcher.sqlite'),('バックアップ','/home/apfelrunner/GW/backups/scheduler-latest.json'),('内部設定','/home/apfelrunner/GW/config/internal-env.php'),('復元CLI','/home/apfelrunner/www/GW/Scheduler/restore-scheduler-cli.php'),('PHP','/usr/local/bin/php')],[90,WIDTH-90]),
 p('さくらではsystemctlを使いません。利用停止・対象cronの一時コメント化・進行中処理の終了確認を行い、上記CLIへJSONと未使用の非公開SQLiteパスを指定します。内容検証・世代調整・DB設定切替は17～21章と同じ考え方です。共有PHP全体は停止せず、対象サイトだけの停止方法を管理者と確認してください。')),
 page('23  更新・試験室追加・画像差替',
 p('更新は新しいreleases/版名へ完成物一式を転送し、照合・PHP検査後にcurrentを切り替えます。旧版と設定・DBはそのまま残し、公開フォルダーと非公開データ領域をまとめて削除しないでください。'),

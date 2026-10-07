@@ -4,5 +4,5 @@
  * スケジューラURLはrenkon-config.phpで管理します。
  */
 window.KPTC_RENKON_CONFIG = Object.freeze({
-  calendarUrl: "https://apfelrunner.sakura.ne.jp/GW/calendar/",
+  calendarUrl: "https://apfelrunner.sakura.ne.jp/GW/Calender/",
 });

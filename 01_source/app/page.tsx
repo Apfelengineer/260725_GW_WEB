@@ -90,7 +90,7 @@ function weekDates(value: Date) {
   return Array.from({ length: 7 }, (_, index) => addDays(monday, index));
 }
 
-const defaultPublicAvailabilityUrl = import.meta.env.VITE_KPTC_PUBLIC_AVAILABILITY_URL || "../calendar";
+const defaultPublicAvailabilityUrl = import.meta.env.VITE_KPTC_PUBLIC_AVAILABILITY_URL || "../Calender";
 
 function openRoomAvailability(publicUrl: string) {
   // スケジューラーを保持したまま、公開用の空き状況を独立したタブで開きます。

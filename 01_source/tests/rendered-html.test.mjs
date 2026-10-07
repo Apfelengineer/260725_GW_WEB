@@ -399,11 +399,12 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
 });
 
 test("renkon模擬サイトでユーザーIDから暗号化入口へのリンクを作る", async () => {
-  const [html, script, config, issuer, styles, copier] = await Promise.all([
+  const [html, script, config, issuer, renkonConfig, styles, copier] = await Promise.all([
     readFile(new URL("renkon/index.html", root), "utf8"),
     readFile(new URL("renkon/app.js", root), "utf8"),
     readFile(new URL("renkon/config.js", root), "utf8"),
     readFile(new URL("renkon/open-scheduler.php", root), "utf8"),
+    readFile(new URL("renkon/renkon-config.php", root), "utf8"),
     readFile(new URL("renkon/styles.css", root), "utf8"),
     readFile(new URL("scripts/copy-distribution-files.mjs", root), "utf8"),
   ]);
@@ -420,8 +421,10 @@ test("renkon模擬サイトでユーザーIDから暗号化入口へのリンク
   assert.doesNotMatch(script, /window\.location\.assign/);
   assert.doesNotMatch(config, /schedulerUrl/);
   assert.match(config, /calendarUrl/);
+  assert.match(config, /\/GW\/Calender\//);
   assert.match(issuer, /openssl_encrypt/);
   assert.match(issuer, /Location:/);
+  assert.match(renkonConfig, /\/GW\/Scheduler\//);
   assert.match(styles, /@media \(max-width: 620px\)/);
   assert.match(styles, /system-link\.is-disabled/);
   assert.match(copier, /renkon\/index\.html/);

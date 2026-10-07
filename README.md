@@ -80,7 +80,7 @@ pnpm test
 
 `renkon`は連携確認用であり、本番のorigin・tamanegi構築には不要です。実運用では既存の社内システムが同じ役割を担うため、`02_release/renkon`を社内サーバーへ配置しません。
 
-外部用には `api.php`、`auth.php`、管理コマンド、SQLite接続処理を含めません。内部画面の「試験室予約」リンク先は、内部サーバー設定の `KPTC_PUBLIC_AVAILABILITY_PAGE_URL=https://availability.example.jp/calendar` で指定します。本番URLが変わっても再ビルドは不要です。値がない開発環境では、ビルド時の `VITE_KPTC_PUBLIC_AVAILABILITY_URL`、続いて相対URL `../calendar` を使用します。開発中の2画面は `pnpm run dev` で確認できます。
+外部用には `api.php`、`auth.php`、管理コマンド、SQLite接続処理を含めません。内部画面の「試験室予約」リンク先は、内部サーバー設定の `KPTC_PUBLIC_AVAILABILITY_PAGE_URL=https://origin.example.jp/Calender/` で指定します。本番URLが変わっても再ビルドは不要です。値がない開発環境では、ビルド時の `VITE_KPTC_PUBLIC_AVAILABILITY_URL`、続いて相対URL `../Calender` を使用します。開発中の2画面は `pnpm run dev` で確認できます。
 
 ## 一般モードと管理者モード
 
@@ -127,7 +127,7 @@ php restore-scheduler-cli.php /非公開保存先/scheduler-latest.json /非公�
 さくらでは既存の送信・監視cronを維持して次を追加します（サーバー時刻が日本時間であることを確認）。
 
 ```cron
-0 22 * * * /usr/local/bin/php /home/apfelrunner/www/GW/schedule/backup-scheduler-cli.php >/home/apfelrunner/GW/scheduler-backup.log 2>&1
+0 22 * * * /usr/local/bin/php /home/apfelrunner/www/GW/Scheduler/backup-scheduler-cli.php >/home/apfelrunner/GW/scheduler-backup.log 2>&1
 ```
 
 Ubuntu 24.04では`01_source/deploy/kptc-scheduler-backup.service`と`.timer`を`/etc/systemd/system/`へ置き、配置パス・実行ユーザー・環境設定パスを確認後、`systemctl enable --now kptc-scheduler-backup.timer`で有効化します。実行時刻は明示的に`Asia/Tokyo`の22時、停止中の取り逃しは起動後に実行します。ログは`journalctl -u kptc-scheduler-backup.service`で確認できます。
@@ -162,20 +162,20 @@ Ubuntu 24.04では`01_source/deploy/kptc-scheduler-backup.service`と`.timer`を
 
 ## さくらインターネットへの配置
 
-現行のさくら環境では、内部用を `/home/apfelrunner/www/GW/schedule/`、外部用を `/home/apfelrunner/www/GW/calendar/` へ分けて配置します。公開URLはそれぞれ次のとおりです。
+現行のさくら環境では、本番のOrigin単一サーバー構成を模し、内部用を `/home/apfelrunner/www/GW/Scheduler/`、外部用を `/home/apfelrunner/www/GW/Calender/` へ分けて配置します。公開URLはそれぞれ次のとおりです。
 
-- 内部スケジューラー: `https://apfelrunner.sakura.ne.jp/GW/schedule`
-- 外部向け試験室空き状況: `https://apfelrunner.sakura.ne.jp/GW/calendar`
+- 内部スケジューラー: `https://apfelrunner.sakura.ne.jp/GW/Scheduler/`
+- 外部向け試験室空き状況: `https://apfelrunner.sakura.ne.jp/GW/Calender/`
 
 画面の公開フォルダを同じ `GW` 配下に置いても、内部用SQLiteは `/home/apfelrunner/GW/`、外部用JSONは `/home/apfelrunner/GW-public/` に分離し、外部画面から内部DBを直接参照しません。
 
 再送は、内部サーバーの定期実行へ次の1行を登録します。
 
 ```cron
-*/5 * * * * /usr/local/bin/php /home/apfelrunner/www/GW/schedule/publish-availability-cli.php
+*/5 * * * * /usr/local/bin/php /home/apfelrunner/www/GW/Scheduler/publish-availability-cli.php
 ```
 
-試験室空き状況ページは `/GW/calendar/?room=m6`（電波暗室）、`room=m7`（電磁波妨害評価装置(G-TEM)）、`room=m8`（パルスサージシステム）で切り替えます。`02_release/tamanegi/index.html` を生成するため、ファイル名なしのディレクトリURLで表示できます。
+試験室空き状況ページは `/GW/Calender/?room=m6`（電波暗室）、`room=m7`（電磁波妨害評価装置(G-TEM)）、`room=m8`（パルスサージシステム）で切り替えます。`02_release/tamanegi/index.html` を生成するため、ファイル名なしのディレクトリURLで表示できます。
 
 ### 試験室を追加する場合
 
