@@ -1,0 +1,46 @@
+services:
+  kptc-calendar:
+    container_name: kptc-calendar
+    build:
+      context: .
+      dockerfile: docker/tamanegi/Dockerfile
+    image: kptc-calendar:latest
+    restart: unless-stopped
+    env_file:
+      - /etc/kptc/calendar.env
+    ports:
+      - "127.0.0.1:8081:80"
+    volumes:
+      - kptc-calendar-data:/var/lib/kptc-availability
+    networks:
+      - kptc-internal
+
+  kptc-scheduler:
+    container_name: kptc-scheduler
+    build:
+      context: .
+      dockerfile: docker/origin/Dockerfile
+    image: kptc-scheduler:latest
+    restart: unless-stopped
+    depends_on:
+      kptc-calendar:
+        condition: service_healthy
+    env_file:
+      - /etc/kptc/scheduler.env
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - kptc-scheduler-data:/var/lib/kptc-scheduler
+    networks:
+      - kptc-internal
+
+networks:
+  kptc-internal:
+    name: kptc-internal
+    driver: bridge
+
+volumes:
+  kptc-scheduler-data:
+    name: kptc-scheduler-data
+  kptc-calendar-data:
+    name: kptc-calendar-data

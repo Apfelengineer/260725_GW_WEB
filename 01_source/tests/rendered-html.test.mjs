@@ -155,27 +155,29 @@ test("システム資料を同梱する", async () => {
   assert.match(dockerGuide, /02_release\/origin/);
   assert.match(dockerGuide, /02_release\/tamanegi/);
   assert.match(dockerGuide, /KPTC_PUBLIC_AVAILABILITY_ENDPOINT/);
-  assert.match(dockerGuide, /\/opt\/kptc-origin-build\/260725_GW_WEB/);
-  assert.match(dockerGuide, /\/opt\/kptc-tamanegi-build\/260725_GW_WEB/);
-  assert.doesNotMatch(dockerGuide, /\/opt\/kptc-build\/260725_GW_WEB/);
-  assert.match(dockerGuide, /同じDockerボリュームやネットワークフォルダを共有しません/);
+  assert.match(dockerGuide, /\/opt\/kptc\/260725_GW_WEB/);
+  assert.match(dockerGuide, /Originサーバー1台/);
+  assert.match(dockerGuide, /\/Scheduler\//);
+  assert.match(dockerGuide, /\/Calender\//);
+  assert.match(dockerGuide, /KPTC_SESSION_COOKIE_PATH=\/Scheduler\//);
+  assert.match(dockerGuide, /http:\/\/kptc-calendar\/receive-availability\.php/);
   assert.match(dockerGuide, /<section id="browser-ready">/);
   assert.match(dockerGuide, /Webブラウザで閲覧・操作できるまで/);
   assert.match(dockerGuide, /既存社内システムがログイン済み利用者について保持しているID/);
   assert.match(dockerGuide, /Base64\(IV＋暗号文\)/);
   assert.match(dockerGuide, /利用開始の合格表/);
-  assert.match(dockerGuide, /<section id="compose-version">/);
-  assert.match(dockerGuide, /compose\.tamanegi\.yaml/);
-  assert.match(dockerGuide, /compose\.origin\.yaml/);
+  assert.match(dockerGuide, /compose\.origin-single\.yaml/);
   assert.match(dockerGuide, /docker compose down -v/);
-  assert.match(dockerGuide, /本番稼働後に修正・機能追加を反映する/);
-  assert.match(dockerGuide, /開発用PCで修正 → 試験 → ビルド → GitHubのmainへ反映 → 対象サーバーで再構築/);
+  assert.match(dockerGuide, /更新・復旧・バックアップ/);
+  assert.match(dockerGuide, /開発用PCで修正 → 試験 → ビルド → GitHubのmainへ反映 → Originサーバーで再構築/);
   assert.match(dockerGuide, /01_source/);
   assert.match(dockerGuide, /02_release/);
   assert.match(dockerGuide, /pre-update-YYYYMMDD-HHMM\.sqlite/);
-  assert.match(dockerGuide, /kptc-origin:rollback-YYYYMMDD-HHMM/);
-  assert.match(dockerGuide, /tamanegiを先に更新し、その後origin/);
+  assert.match(dockerGuide, /kptc-scheduler:rollback-YYYYMMDD-HHMM/);
+  assert.match(dockerGuide, /同じGitコミットから2コンテナを一括再構築/);
   assert.match(dockerGuide, /up -d --no-build --force-recreate/);
+  assert.match(dockerGuide, /<section id="changes">/);
+  assert.match(dockerGuide, /リバースプロキシの導入・設定変更はサーバー管理者が別途実施/);
   const glossary = dockerGuide.slice(dockerGuide.indexOf('<section id="glossary">'), dockerGuide.indexOf('</section>', dockerGuide.indexOf('<section id="glossary">')));
   assert.doesNotMatch(glossary, /(?:です|ます|ません)。<\/td>/);
 });
@@ -448,14 +450,15 @@ test("分離配置でも公開領域外の実行設定を探索する", async ()
   assert.match(runtimeConfig, /GW\/config/);
 });
 
-test("originとtamanegiをPHP 8.4の個別Docker環境へ構築できる", async () => {
-  const [originDockerfile, originEntrypoint, originCron, tamanegiDockerfile, tamanegiEntrypoint, guide] = await Promise.all([
+test("Origin単一サーバー上へPHP 8.4の2コンテナを構築できる", async () => {
+  const [originDockerfile, originEntrypoint, originCron, tamanegiDockerfile, tamanegiEntrypoint, guide, compose] = await Promise.all([
     readFile(new URL("docker/origin/Dockerfile", repositoryRoot), "utf8"),
     readFile(new URL("docker/origin/entrypoint.sh", repositoryRoot), "utf8"),
     readFile(new URL("docker/origin/kptc-cron", repositoryRoot), "utf8"),
     readFile(new URL("docker/tamanegi/Dockerfile", repositoryRoot), "utf8"),
     readFile(new URL("docker/tamanegi/entrypoint.sh", repositoryRoot), "utf8"),
     readFile(new URL("docker/README.md", repositoryRoot), "utf8"),
+    readFile(new URL("compose.origin-single.yaml", repositoryRoot), "utf8"),
   ]);
 
   assert.match(originDockerfile, /FROM php:8\.4-apache-bookworm/);
@@ -471,7 +474,11 @@ test("originとtamanegiをPHP 8.4の個別Docker環境へ構築できる", async
   assert.match(tamanegiDockerfile, /COPY 02_release\/tamanegi\/ \/var\/www\/html\//);
   assert.match(tamanegiDockerfile, /VOLUME \["\/var\/lib\/kptc-availability"\]/);
   assert.match(tamanegiEntrypoint, /KPTC_PUBLIC_AVAILABILITY_SECRET/);
-  assert.match(guide, /docker build -f docker\/origin\/Dockerfile/);
-  assert.match(guide, /docker build -f docker\/tamanegi\/Dockerfile/);
+  assert.match(guide, /compose\.origin-single\.yaml/);
   assert.match(guide, /リバースプロキシ/);
+  assert.match(compose, /dockerfile: docker\/origin\/Dockerfile/);
+  assert.match(compose, /dockerfile: docker\/tamanegi\/Dockerfile/);
+  assert.match(compose, /127\.0\.0\.1:8080:80/);
+  assert.match(compose, /127\.0\.0\.1:8081:80/);
+  assert.match(compose, /kptc-internal/);
 });

@@ -1,70 +1,53 @@
-# origin・tamanegi Docker構築
+# Origin単一サーバー Docker構築
 
-このフォルダのDockerfileは、`02_release`にあるビルド後ファイルをPHP 8.4＋Apacheの実行環境へ組み込みます。originとtamanegiは別々のサーバーで構築できます。SQLite、公開JSON、バックアップ、秘密鍵はイメージやGitHubへ含めません。
+このフォルダのDockerfileは、`02_release`のビルド後ファイルをPHP 8.4＋Apacheの実行環境へ組み込みます。1台のOriginサーバー上で、スケジューラと公開カレンダーを別コンテナ・別保存領域として動かします。
 
-## 1. origin（内部スケジューラ）
+## 配置と公開URL
 
-リポジトリの最上位フォルダでイメージを作ります。
+| 用途 | コンテナ | 公開URLパス | ホスト待受 |
+|---|---|---|---|
+| 内部スケジューラ | `kptc-scheduler` | `/Scheduler/` | `127.0.0.1:8080` |
+| 公開カレンダー | `kptc-calendar` | `/Calender/` | `127.0.0.1:8081` |
 
-```bash
-docker build -f docker/origin/Dockerfile -t kptc-origin:latest .
-```
+`Calender`は指定された綴りです。LinuxとURLでは大文字・小文字を区別するため、表記を変更しないでください。
 
-設定例をWeb公開外の安全な場所へコピーし、`REPLACE...`とURLを実環境の値へ変更します。`KPTC_PORTAL_TOKEN_KEY`は既存社内システムと同じ固定部分、`KPTC_PUBLIC_AVAILABILITY_SECRET`はtamanegiと同じ32文字以上の秘密値にします。
-
-```bash
-sudo mkdir -p /etc/kptc
-sudo cp docker/origin/origin.env.example /etc/kptc/origin.env
-sudo chmod 600 /etc/kptc/origin.env
-sudo nano /etc/kptc/origin.env
-docker volume create kptc-origin-data
-docker run -d --name kptc-origin --restart unless-stopped \
-  --env-file /etc/kptc/origin.env \
-  -p 127.0.0.1:8080:80 \
-  -v kptc-origin-data:/var/lib/kptc-scheduler \
-  kptc-origin:latest
-```
-
-初回起動後、管理者モードのパスワードを設定します。
+## 環境設定
 
 ```bash
-docker exec -it kptc-origin php /var/www/html/manage-auth-user-cli.php set-admin-mode-password
+sudo install -d -m 700 /etc/kptc
+sudo cp docker/origin/origin.env.example /etc/kptc/scheduler.env
+sudo cp docker/tamanegi/tamanegi.env.example /etc/kptc/calendar.env
+sudo chmod 600 /etc/kptc/scheduler.env /etc/kptc/calendar.env
+sudo nano /etc/kptc/scheduler.env
+sudo nano /etc/kptc/calendar.env
 ```
 
-originコンテナ内では、公開JSON送信を5分ごと、送信監視を5分ごと、最新JSONバックアップを日本時間の毎日22:00に実行します。バックアップは`kptc-origin-data`ボリューム内の`backups/scheduler-latest.json`へ保存されます。
+両ファイルの`KPTC_PUBLIC_AVAILABILITY_SECRET`には同じ32文字以上のランダム値を設定します。スケジューラからカレンダーへの送信先はDocker内部名の`http://kptc-calendar/receive-availability.php`です。外部インターネットへHTTP送信する設定ではありません。
 
-## 2. tamanegi（外部カレンダー）
+## 起動
+
+リポジトリ最上位で実行します。
 
 ```bash
-docker build -f docker/tamanegi/Dockerfile -t kptc-tamanegi:latest .
-sudo mkdir -p /etc/kptc
-sudo cp docker/tamanegi/tamanegi.env.example /etc/kptc/tamanegi.env
-sudo chmod 600 /etc/kptc/tamanegi.env
-sudo nano /etc/kptc/tamanegi.env
-docker volume create kptc-tamanegi-data
-docker run -d --name kptc-tamanegi --restart unless-stopped \
-  --env-file /etc/kptc/tamanegi.env \
-  -p 127.0.0.1:8081:80 \
-  -v kptc-tamanegi-data:/var/lib/kptc-availability \
-  kptc-tamanegi:latest
+sudo docker compose -f compose.origin-single.yaml config
+sudo docker compose -f compose.origin-single.yaml up -d --build
+sudo docker compose -f compose.origin-single.yaml ps
 ```
 
-originの`KPTC_PUBLIC_AVAILABILITY_ENDPOINT`には、外部から到達できるtamanegiのHTTPS URL（例：`https://tamanegi.example.jp/receive-availability.php`）を指定します。公開ページはtamanegiのルートURLです。
+## リバースプロキシ管理者への要件
 
-## 3. HTTPSとデータの維持
+- `/Scheduler/`を`http://127.0.0.1:8080/`へ、`/Calender/`を`http://127.0.0.1:8081/`へ中継し、公開側の接頭辞をコンテナへ渡す前に取り除きます。
+- `/Scheduler`から`/Scheduler/`、`/Calender`から`/Calender/`への転送では、クエリ文字列を保持します。
+- `Host`、`X-Forwarded-For`、`X-Forwarded-Proto`を渡し、HTTPSを使用します。
+- `/Scheduler/`は特定IPだけ、`/Calender/`は全IPからアクセス可能とします。
+- PHPとJSON応答はキャッシュせず、名前にハッシュを含む静的ファイルだけ長期キャッシュできます。
+- 8080番と8081番は外部へ直接公開しません。
 
-上記の`127.0.0.1:8080`と`127.0.0.1:8081`は、同じサーバー上のリバースプロキシからだけ接続する指定です。実運用ではnginxなどでHTTPSを終端し、originは社内ネットワークだけ、tamanegiは外部公開するよう制限してください。コンテナへ秘密鍵を直接書き込んだり、HTTPでインターネットへ公開したりしないでください。
+リバースプロキシそのものの導入・設定は、このリポジトリの作業範囲外です。
 
-コンテナを作り直してもデータを残すには、必ず上記のDockerボリュームを付けます。現在のSQLiteを移行する場合は、停止中のoriginの`/var/lib/kptc-scheduler/group-watcher.sqlite`へコピーし、所有者をコンテナ内の`www-data`へ合わせます。tamanegiの公開JSONはoriginから再送できるため、過去ファイルの移行は必須ではありません。
+## 保存領域
 
-状態確認には次を使用します。
+- SQLiteとJSONバックアップ：`kptc-scheduler-data`
+- 公開用3か月JSON：`kptc-calendar-data`
 
-```bash
-docker ps
-docker logs kptc-origin
-docker logs kptc-tamanegi
-docker exec kptc-origin php -m
-curl -I http://127.0.0.1:8081/
-```
-
-originのルートURLがHTTP 403になるのは、renkonまたは既存社内システムの正しいトークンが必要なため正常です。
+公開カレンダーはスケジューラのSQLiteを直接読みません。予定保存時と5分ごとの再送処理で、公開してよい3か月分だけを署名付きJSONとして内部Dockerネットワーク経由で送信します。
