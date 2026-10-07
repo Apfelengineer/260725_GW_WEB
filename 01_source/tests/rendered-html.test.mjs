@@ -177,6 +177,9 @@ test("システム資料を同梱する", async () => {
   assert.match(dockerGuide, /aria-labelledby="logic-title logic-desc"/);
   assert.match(dockerGuide, /Scheduler SQLite/);
   assert.match(dockerGuide, /公開用3か月JSON（単一ファイル）/);
+  assert.match(dockerGuide, /Scheduler専用の非公開Volume/);
+  assert.match(dockerGuide, /Calender専用Volume（実ファイルは直接配信しない）/);
+  assert.match(dockerGuide, /CalenderからScheduler専用Volumeへの接続経路はなく/);
   assert.match(dockerGuide, /\.\.\/docker\/README\.md/);
   assert.match(dockerGuide, /pre-update-YYYYMMDD-HHMM\.sqlite/);
   assert.match(dockerGuide, /kptc-scheduler:rollback-YYYYMMDD-HHMM/);

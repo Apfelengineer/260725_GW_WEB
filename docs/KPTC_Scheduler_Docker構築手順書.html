@@ -179,14 +179,17 @@
             <rect x="610" y="570" width="435" height="34" rx="6" class="component"/>
             <text x="827" y="592" text-anchor="middle" class="small-label">SchedulerのSQLite・利用者名・予定件名にはアクセスしない</text>
 
-            <rect x="50" y="650" width="1020" height="75" rx="10" class="secure-zone"/>
-            <text x="70" y="676" class="title">非公開の永続保存領域（Web公開フォルダ外／Docker Volume）</text>
-            <ellipse cx="235" cy="700" rx="120" ry="20" class="data-store"/>
-            <text x="235" y="705" text-anchor="middle" class="small-label">Scheduler SQLite</text>
-            <ellipse cx="500" cy="700" rx="120" ry="20" class="data-store"/>
-            <text x="500" y="705" text-anchor="middle" class="small-label">最新バックアップJSON</text>
-            <ellipse cx="850" cy="700" rx="145" ry="20" class="data-store"/>
-            <text x="850" y="705" text-anchor="middle" class="small-label">公開用3か月JSON（単一ファイル）</text>
+            <rect x="50" y="650" width="500" height="75" rx="10" class="secure-zone"/>
+            <text x="70" y="675" class="title">Scheduler専用の非公開Volume</text>
+            <ellipse cx="185" cy="700" rx="105" ry="20" class="data-store"/>
+            <text x="185" y="705" text-anchor="middle" class="small-label">Scheduler SQLite</text>
+            <ellipse cx="415" cy="700" rx="105" ry="20" class="data-store"/>
+            <text x="415" y="705" text-anchor="middle" class="small-label">最新バックアップJSON</text>
+
+            <rect x="585" y="650" width="485" height="75" rx="10" class="secure-zone"/>
+            <text x="605" y="675" class="title">Calender専用Volume（実ファイルは直接配信しない）</text>
+            <ellipse cx="827" cy="700" rx="145" ry="20" class="data-store"/>
+            <text x="827" y="705" text-anchor="middle" class="small-label">公開用3か月JSON（単一ファイル）</text>
 
             <rect x="25" y="790" width="250" height="66" rx="9" class="component"/>
             <text x="150" y="814" text-anchor="middle" class="label"><tspan font-weight="700">GitHub main</tspan><tspan x="150" dy="20" class="small-label">01_source／Docker設定／手順書</tspan></text>
@@ -204,12 +207,12 @@
             <path d="M420 458 V475 H180 V485" class="access-line"/>
             <path d="M945 458 V475 H710 V485" class="access-line"/>
 
-            <path d="M180 553 V630 H235 V680" class="data-line"/>
-            <path d="M300 604 V635 H500 V680" class="data-line"/>
+            <path d="M180 553 V630 H185 V680" class="data-line"/>
+            <path d="M300 604 V635 H415 V680" class="data-line"/>
             <path d="M285 519 H315" class="data-line"/>
             <path d="M525 519 H570 V424 H610" class="data-line"/>
-            <path d="M710 458 V640 H850 V680" class="data-line"/>
-            <path d="M850 680 V630 H710 V553" class="data-line"/>
+            <path d="M710 458 V640 H827 V680" class="data-line"/>
+            <path d="M827 680 V630 H710 V553" class="data-line"/>
 
             <path d="M275 823 H390" class="manage-line"/>
             <path d="M690 823 H805" class="manage-line"/>
@@ -233,6 +236,7 @@
           <li><strong>一般公開：</strong>閲覧者は<code>/Calender/</code>へアクセスし、公開用JSONだけを参照します。内部SQLiteを直接読むことはありません。</li>
           <li><strong>更新・保守：</strong>GitHubの同じコミットに含まれるビルド後ファイルから両コンテナを再構築し、SQLiteと公開JSONはDocker Volumeに保持します。</li>
         </ol>
+        <div class="callout success"><strong>保存領域の分離：</strong>SchedulerのSQLiteとバックアップJSONはScheduler専用Volume、公開用3か月JSONはCalender専用Volumeに保存します。CalenderからScheduler専用Volumeへの接続経路はなく、公開画面は<code>public-availability.php</code>を通してCalender側のJSONだけを読みます。</div>
         <div class="callout"><strong>簡易参照資料：</strong>Docker構成と主要コマンドだけを短く確認したい場合は、リポジトリ内の<a href="../docker/README.md"><code>docker/README.md</code></a>を参照してください。構築作業では本HTML手順書を正式な手順とし、内容に差がある場合は本書を優先します。</div>
         <div class="callout warning"><strong>表記：</strong><code>Calender</code>はご指定の綴りです。LinuxのパスとURLは大文字・小文字を区別するため、<code>Calendar</code>や<code>calender</code>へ変えないでください。</div>
       </section>
