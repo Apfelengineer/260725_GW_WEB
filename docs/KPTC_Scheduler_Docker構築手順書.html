@@ -101,6 +101,7 @@
         </table>
         <div class="callout"><strong>データ連携：</strong>Schedulerは予定を保存すると、公開可能な試験室情報だけを署名付きJSONに変換し、Docker内部ネットワークの<code>http://kptc-calendar/receive-availability.php</code>へ送ります。CalenderがSQLiteを直接読む構成ではありません。</div>
         <p><code>Scheduler</code>と<code>Calender</code>は、利用者から見える<strong>URL上のディレクトリ</strong>です。実体は同じOriginサーバー内の2コンテナで、管理者のリバースプロキシが各URLを対応するコンテナへ中継します。OS上へ同名の公開フォルダを作る必要はありません。</p>
+        <div class="callout"><strong>簡易参照資料：</strong>Docker構成と主要コマンドだけを短く確認したい場合は、リポジトリ内の<a href="../docker/README.md"><code>docker/README.md</code></a>を参照してください。構築作業では本HTML手順書を正式な手順とし、内容に差がある場合は本書を優先します。</div>
         <div class="callout warning"><strong>表記：</strong><code>Calender</code>はご指定の綴りです。LinuxのパスとURLは大文字・小文字を区別するため、<code>Calendar</code>や<code>calender</code>へ変えないでください。</div>
       </section>
 
@@ -142,6 +143,7 @@ git switch main</code></pre>
 └── compose.origin-single.yaml 2つを一括管理する定義</code></pre>
         <p>コンテナへ組み込む実行用ファイルは、Schedulerが<code>02_release/origin/Scheduler</code>、Calenderが<code>02_release/origin/Calender</code>です。</p>
         <p>Dockerfileは<code>docker/origin/Scheduler/Dockerfile</code>と<code>docker/origin/Calender/Dockerfile</code>です。</p>
+        <p>各ファイルの位置、環境設定、起動コマンドを一覧で確認するときは、簡易参照資料の<a href="../docker/README.md"><code>docker/README.md</code></a>も利用できます。</p>
       </section>
 
       <section id="install">
