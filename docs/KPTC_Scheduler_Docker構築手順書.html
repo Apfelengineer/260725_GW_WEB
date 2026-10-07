@@ -44,13 +44,34 @@
     .flow-box { padding:18px; border:2px solid #76a9c8; border-radius:10px; background:#f8fcff; text-align:center; }
     .flow-box b { display:block; color:var(--navy); font-size:1.08rem; }
     .arrow { display:grid; place-items:center; color:var(--blue); font-size:1.8rem; font-weight:700; }
+    .logic-diagram { margin:20px 0; overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:#fbfdfe; }
+    .logic-diagram svg { display:block; width:100%; min-width:920px; height:auto; }
+    .logic-diagram .zone { fill:#f7fafc; stroke:#7f9caf; stroke-width:2; }
+    .logic-diagram .public-zone { fill:#fffaf0; stroke:#bf913e; stroke-width:2; }
+    .logic-diagram .private-zone { fill:#eef7fc; stroke:#3279a8; stroke-width:2; }
+    .logic-diagram .secure-zone { fill:#fff4f4; stroke:#b55a5a; stroke-width:2; stroke-dasharray:7 5; }
+    .logic-diagram .component { fill:#fff; stroke:#7892a3; stroke-width:1.5; }
+    .logic-diagram .data-store { fill:#eef8f3; stroke:#3c876e; stroke-width:1.7; }
+    .logic-diagram .actor { fill:#f8f5ff; stroke:#7968a8; stroke-width:1.5; }
+    .logic-diagram .label { fill:var(--ink); font-size:14px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif; }
+    .logic-diagram .title { fill:var(--navy); font-size:17px; font-weight:700; }
+    .logic-diagram .small-label { fill:#4e5e68; font-size:12px; }
+    .logic-diagram .access-line { fill:none; stroke:#1f67a5; stroke-width:3; marker-end:url(#arrow-blue); }
+    .logic-diagram .data-line { fill:none; stroke:#16745a; stroke-width:3; marker-end:url(#arrow-green); }
+    .logic-diagram .manage-line { fill:none; stroke:#c07c12; stroke-width:2.5; stroke-dasharray:8 5; marker-end:url(#arrow-orange); }
+    .diagram-legend { display:flex; flex-wrap:wrap; gap:10px 20px; margin:12px 0 20px; padding:0; list-style:none; font-size:.9rem; }
+    .diagram-legend li { display:flex; align-items:center; gap:7px; margin:0; }
+    .legend-line { width:32px; height:0; border-top:3px solid var(--blue); }
+    .legend-line.data { border-color:var(--green); }
+    .legend-line.manage { border-color:#c07c12; border-top-style:dashed; }
+    .legend-box { width:26px; height:16px; border:2px dashed #b55a5a; background:#fff4f4; }
     .tree { white-space:pre; line-height:1.45; }
     .small { color:var(--muted); font-size:.9rem; }
     .checklist { list-style:none; padding-left:0; }
     .checklist li::before { content:"□"; margin-right:.5rem; color:var(--blue); font-weight:700; }
     footer { max-width:1120px; margin:-45px auto 40px; padding:0 20px; color:var(--muted); font-size:.9rem; }
     @media(max-width:860px){ main{display:block} nav{position:static;max-height:none;margin-bottom:24px} section{padding:23px 20px}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg)} }
-    @media print { body{background:#fff;font-size:10.5pt} header{padding:22mm 16mm} main{display:block;max-width:none;padding:10mm 12mm} nav{display:none} section{border:0;box-shadow:none;padding:0;break-before:page} section:first-child{break-before:auto} pre{white-space:pre-wrap;word-break:break-all} a{color:inherit;text-decoration:none} footer{margin:0} }
+    @media print { body{background:#fff;font-size:10.5pt} header{padding:22mm 16mm} main{display:block;max-width:none;padding:10mm 12mm} nav{display:none} section{border:0;box-shadow:none;padding:0;break-before:page} section:first-child{break-before:auto} pre{white-space:pre-wrap;word-break:break-all} a{color:inherit;text-decoration:none} footer{margin:0}.logic-diagram{overflow:visible}.logic-diagram svg{min-width:0}.diagram-legend{font-size:8.5pt} }
   </style>
 </head>
 <body>
@@ -101,6 +122,117 @@
         </table>
         <div class="callout"><strong>データ連携：</strong>Schedulerは予定を保存すると、公開可能な試験室情報だけを署名付きJSONに変換し、Docker内部ネットワークの<code>http://kptc-calendar/receive-availability.php</code>へ送ります。CalenderがSQLiteを直接読む構成ではありません。</div>
         <p><code>Scheduler</code>と<code>Calender</code>は、利用者から見える<strong>URL上のディレクトリ</strong>です。実体は同じOriginサーバー内の2コンテナで、管理者のリバースプロキシが各URLを対応するコンテナへ中継します。OS上へ同名の公開フォルダを作る必要はありません。</p>
+        <h3>1-1. 詳細論理構成図</h3>
+        <p>青線は利用者のアクセス、緑線は予定・公開情報の流れ、オレンジ色の点線はGitHubから実行環境を更新する流れです。赤い点線内はWebから直接公開しない保存領域です。</p>
+        <div class="logic-diagram">
+          <svg viewBox="0 0 1120 900" role="img" aria-labelledby="logic-title logic-desc">
+            <title id="logic-title">KPTC Schedulerの詳細論理構成図</title>
+            <desc id="logic-desc">社内利用者は社内システムで生成された暗号化トークンを使い、リバースプロキシ経由でSchedulerへ接続します。一般閲覧者はCalenderへ接続します。SchedulerのSQLiteから公開可能な3か月分だけが署名付きJSONとしてCalenderへ送信されます。</desc>
+            <defs>
+              <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#1f67a5"/></marker>
+              <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#16745a"/></marker>
+              <marker id="arrow-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#c07c12"/></marker>
+            </defs>
+
+            <text x="25" y="28" class="title">利用者・入口</text>
+            <rect x="25" y="45" width="180" height="72" rx="9" class="actor"/>
+            <text x="115" y="74" text-anchor="middle" class="label"><tspan font-weight="700">社内利用者・管理者</tspan><tspan x="115" dy="22" class="small-label">予定の閲覧・編集・管理</tspan></text>
+            <rect x="245" y="45" width="245" height="72" rx="9" class="component"/>
+            <text x="367" y="69" text-anchor="middle" class="label"><tspan font-weight="700">既存社内システム</tspan><tspan x="367" dy="20" class="small-label">検証時のみ renkon</tspan><tspan x="367" dy="17" class="small-label">CBC暗号化tokenを発行</tspan></text>
+            <rect x="875" y="45" width="220" height="72" rx="9" class="actor"/>
+            <text x="985" y="74" text-anchor="middle" class="label"><tspan font-weight="700">一般公開の閲覧者</tspan><tspan x="985" dy="22" class="small-label">試験室の空き状況を閲覧</tspan></text>
+
+            <rect x="25" y="150" width="1070" height="100" rx="12" class="zone"/>
+            <text x="45" y="178" class="title">サーバー管理者のリバースプロキシ</text>
+            <rect x="55" y="192" width="450" height="42" rx="7" class="private-zone"/>
+            <text x="280" y="218" text-anchor="middle" class="label">/Scheduler/ → 127.0.0.1:8080　特定IPのみ許可</text>
+            <rect x="615" y="192" width="450" height="42" rx="7" class="public-zone"/>
+            <text x="840" y="218" text-anchor="middle" class="label">/Calender/ → 127.0.0.1:8081　すべてのIPから閲覧可</text>
+            <text x="560" y="243" text-anchor="middle" class="small-label">HTTPS・Host・X-Forwarded-For・X-Forwarded-Proto・クエリ文字列を保持</text>
+
+            <rect x="25" y="285" width="1070" height="465" rx="14" class="zone"/>
+            <text x="45" y="315" class="title">Originサーバー（Ubuntu 24.04／Docker内部ネットワーク kptc-internal）</text>
+
+            <rect x="50" y="335" width="500" height="285" rx="12" class="private-zone"/>
+            <text x="70" y="365" class="title">Schedulerコンテナ（PHP 8.4＋Apache）</text>
+            <rect x="75" y="390" width="210" height="68" rx="7" class="component"/>
+            <text x="180" y="414" text-anchor="middle" class="label"><tspan font-weight="700">index.php／portal-access.php</tspan><tspan x="180" dy="20" class="small-label">token復号・形式・UTC日付を検証</tspan></text>
+            <rect x="315" y="390" width="210" height="68" rx="7" class="component"/>
+            <text x="420" y="414" text-anchor="middle" class="label"><tspan font-weight="700">Reactスケジュール画面</tspan><tspan x="420" dy="20" class="small-label">一般モード／管理者モード</tspan></text>
+            <rect x="75" y="485" width="210" height="68" rx="7" class="component"/>
+            <text x="180" y="509" text-anchor="middle" class="label"><tspan font-weight="700">api.php／auth.php</tspan><tspan x="180" dy="20" class="small-label">予定・利用者・CSRF・セッション</tspan></text>
+            <rect x="315" y="485" width="210" height="68" rx="7" class="component"/>
+            <text x="420" y="505" text-anchor="middle" class="label"><tspan font-weight="700">公開JSON生成・送信</tspan><tspan x="420" dy="18" class="small-label">保存時＋5分ごと再送</tspan><tspan x="420" dy="17" class="small-label">HMAC-SHA256署名</tspan></text>
+            <rect x="75" y="570" width="450" height="34" rx="6" class="component"/>
+            <text x="300" y="592" text-anchor="middle" class="small-label">毎日22時バックアップ／監視／再送の定期処理</text>
+
+            <rect x="585" y="335" width="485" height="285" rx="12" class="public-zone"/>
+            <text x="605" y="365" class="title">Calenderコンテナ（PHP 8.4＋Apache）</text>
+            <rect x="610" y="390" width="200" height="68" rx="7" class="component"/>
+            <text x="710" y="410" text-anchor="middle" class="label"><tspan font-weight="700">receive-availability.php</tspan><tspan x="710" dy="18" class="small-label">署名・時刻・世代・形式を検証</tspan><tspan x="710" dy="17" class="small-label">正常時だけJSONを置換</tspan></text>
+            <rect x="845" y="390" width="200" height="68" rx="7" class="component"/>
+            <text x="945" y="414" text-anchor="middle" class="label"><tspan font-weight="700">React空き状況画面</tspan><tspan x="945" dy="20" class="small-label">直近3か月・部屋別表示</tspan></text>
+            <rect x="610" y="485" width="200" height="68" rx="7" class="component"/>
+            <text x="710" y="509" text-anchor="middle" class="label"><tspan font-weight="700">public-availability.php</tspan><tspan x="710" dy="20" class="small-label">公開可能な項目だけを返却</tspan></text>
+            <rect x="845" y="485" width="200" height="68" rx="7" class="component"/>
+            <text x="945" y="509" text-anchor="middle" class="label"><tspan font-weight="700">health-availability.php</tspan><tspan x="945" dy="20" class="small-label">更新状態をHTTPで監視</tspan></text>
+            <rect x="610" y="570" width="435" height="34" rx="6" class="component"/>
+            <text x="827" y="592" text-anchor="middle" class="small-label">SchedulerのSQLite・利用者名・予定件名にはアクセスしない</text>
+
+            <rect x="50" y="650" width="1020" height="75" rx="10" class="secure-zone"/>
+            <text x="70" y="676" class="title">非公開の永続保存領域（Web公開フォルダ外／Docker Volume）</text>
+            <ellipse cx="235" cy="700" rx="120" ry="20" class="data-store"/>
+            <text x="235" y="705" text-anchor="middle" class="small-label">Scheduler SQLite</text>
+            <ellipse cx="500" cy="700" rx="120" ry="20" class="data-store"/>
+            <text x="500" y="705" text-anchor="middle" class="small-label">最新バックアップJSON</text>
+            <ellipse cx="850" cy="700" rx="145" ry="20" class="data-store"/>
+            <text x="850" y="705" text-anchor="middle" class="small-label">公開用3か月JSON（単一ファイル）</text>
+
+            <rect x="25" y="790" width="250" height="66" rx="9" class="component"/>
+            <text x="150" y="814" text-anchor="middle" class="label"><tspan font-weight="700">GitHub main</tspan><tspan x="150" dy="20" class="small-label">01_source／Docker設定／手順書</tspan></text>
+            <rect x="390" y="790" width="300" height="66" rx="9" class="component"/>
+            <text x="540" y="814" text-anchor="middle" class="label"><tspan font-weight="700">02_release/origin</tspan><tspan x="540" dy="20" class="small-label">Scheduler／Calenderのビルド後ファイル</tspan></text>
+            <rect x="805" y="790" width="290" height="66" rx="9" class="component"/>
+            <text x="950" y="814" text-anchor="middle" class="label"><tspan font-weight="700">Docker Composeで再構築</tspan><tspan x="950" dy="20" class="small-label">同じコミットから2コンテナを更新</tspan></text>
+
+            <path d="M205 81 H245" class="access-line"/>
+            <path d="M367 117 V150" class="access-line"/>
+            <path d="M985 117 V150" class="access-line"/>
+            <path d="M280 250 V335" class="access-line"/>
+            <path d="M840 250 V335" class="access-line"/>
+            <path d="M285 424 H315" class="access-line"/>
+            <path d="M420 458 V475 H180 V485" class="access-line"/>
+            <path d="M945 458 V475 H710 V485" class="access-line"/>
+
+            <path d="M180 553 V630 H235 V680" class="data-line"/>
+            <path d="M300 604 V635 H500 V680" class="data-line"/>
+            <path d="M285 519 H315" class="data-line"/>
+            <path d="M525 519 H570 V424 H610" class="data-line"/>
+            <path d="M710 458 V640 H850 V680" class="data-line"/>
+            <path d="M850 680 V630 H710 V553" class="data-line"/>
+
+            <path d="M275 823 H390" class="manage-line"/>
+            <path d="M690 823 H805" class="manage-line"/>
+            <path d="M950 790 V755 H300 V620" class="manage-line"/>
+            <path d="M950 755 H827 V620" class="manage-line"/>
+
+            <text x="550" y="408" class="small-label" fill="#16745a">署名付きJSON</text>
+            <text x="550" y="427" class="small-label" fill="#16745a">直近3か月のみ</text>
+          </svg>
+        </div>
+        <ul class="diagram-legend" aria-label="論理構成図の凡例">
+          <li><span class="legend-line"></span>ブラウザからのアクセス</li>
+          <li><span class="legend-line data"></span>予定・公開情報の流れ</li>
+          <li><span class="legend-line manage"></span>配布・更新の流れ</li>
+          <li><span class="legend-box"></span>Webから直接公開しない領域</li>
+        </ul>
+        <ol>
+          <li><strong>社内から利用：</strong>既存社内システムが利用者IDを暗号化したtokenを付け、IP制限された<code>/Scheduler/</code>へ移動します。</li>
+          <li><strong>予定を保存：</strong>SchedulerのAPIが権限とCSRFを確認し、予定をSQLiteへ保存します。管理者モードだけが利用者・部屋・管理者パスワードを変更できます。</li>
+          <li><strong>公開情報を連携：</strong>試験室予定から公開可能な直近3か月分だけを生成し、HMAC署名を付けてDocker内部ネットワークからCalenderへ送ります。</li>
+          <li><strong>一般公開：</strong>閲覧者は<code>/Calender/</code>へアクセスし、公開用JSONだけを参照します。内部SQLiteを直接読むことはありません。</li>
+          <li><strong>更新・保守：</strong>GitHubの同じコミットに含まれるビルド後ファイルから両コンテナを再構築し、SQLiteと公開JSONはDocker Volumeに保持します。</li>
+        </ol>
         <div class="callout"><strong>簡易参照資料：</strong>Docker構成と主要コマンドだけを短く確認したい場合は、リポジトリ内の<a href="../docker/README.md"><code>docker/README.md</code></a>を参照してください。構築作業では本HTML手順書を正式な手順とし、内容に差がある場合は本書を優先します。</div>
         <div class="callout warning"><strong>表記：</strong><code>Calender</code>はご指定の綴りです。LinuxのパスとURLは大文字・小文字を区別するため、<code>Calendar</code>や<code>calender</code>へ変えないでください。</div>
       </section>

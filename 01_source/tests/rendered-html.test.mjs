@@ -173,6 +173,11 @@ test("システム資料を同梱する", async () => {
   assert.match(dockerGuide, /開発用PCで修正 → 試験 → ビルド → GitHubのmainへ反映 → Originサーバーで再構築/);
   assert.match(dockerGuide, /01_source/);
   assert.match(dockerGuide, /02_release/);
+  assert.match(dockerGuide, /詳細論理構成図/);
+  assert.match(dockerGuide, /aria-labelledby="logic-title logic-desc"/);
+  assert.match(dockerGuide, /Scheduler SQLite/);
+  assert.match(dockerGuide, /公開用3か月JSON（単一ファイル）/);
+  assert.match(dockerGuide, /\.\.\/docker\/README\.md/);
   assert.match(dockerGuide, /pre-update-YYYYMMDD-HHMM\.sqlite/);
   assert.match(dockerGuide, /kptc-scheduler:rollback-YYYYMMDD-HHMM/);
   assert.match(dockerGuide, /同じGitコミットから2コンテナを一括再構築/);
