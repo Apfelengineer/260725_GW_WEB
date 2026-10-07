@@ -18,6 +18,6 @@
     "origin/**/*.tsx",
     "vite.dev.config.ts",
     "vite.scheduler.config.ts",
-    "vite.calender.config.ts"
+    "vite.calendar.config.ts"
   ]
 }

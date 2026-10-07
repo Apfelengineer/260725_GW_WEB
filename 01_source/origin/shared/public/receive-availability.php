@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-/* Origin内のCalender専用。Schedulerから届く署名付き3か月JSONだけを検証して保存します。 */
+/* Origin内のCalendar専用。Schedulerから届く署名付き3か月JSONだけを検証して保存します。 */
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 require_once __DIR__ . '/runtime-config.php';

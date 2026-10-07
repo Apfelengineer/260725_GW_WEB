@@ -161,7 +161,7 @@ function strip_schedule_automation_fields(array $state): array {
 }
 
 function mark_availability_publish_pending(PDO $pdo): void {
-    // 内部DBの更新と同じ取引で未送信印を付け、Calenderへの連携失敗を再試行できるようにします。
+    // 内部DBの更新と同じ取引で未送信印を付け、Calendarへの連携失敗を再試行できるようにします。
     $pdo->prepare("INSERT OR REPLACE INTO app_meta(key,value) VALUES('public_availability_pending','1')")->execute();
 }
 

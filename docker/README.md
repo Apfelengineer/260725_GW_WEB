@@ -7,16 +7,16 @@
 | 用途 | コンテナ | 公開URLパス | ホスト待受 |
 |---|---|---|---|
 | 内部スケジューラ | `kptc-scheduler` | `/Scheduler/` | `127.0.0.1:8080` |
-| 公開カレンダー | `kptc-calendar` | `/Calender/` | `127.0.0.1:8081` |
+| 公開カレンダー | `kptc-calendar` | `/Calendar/` | `127.0.0.1:8081` |
 
-`Calender`は指定された綴りです。LinuxとURLでは大文字・小文字を区別するため、表記を変更しないでください。
+カレンダーの英語表記は`Calendar`に統一しています。LinuxのパスとURLでは大文字・小文字を区別するため、公開パスは`/Calendar/`を使用してください。
 
 ## 環境設定
 
 ```bash
 sudo install -d -m 700 /etc/kptc
 sudo cp docker/origin/Scheduler/scheduler.env.example /etc/kptc/scheduler.env
-sudo cp docker/origin/Calender/calendar.env.example /etc/kptc/calendar.env
+sudo cp docker/origin/Calendar/calendar.env.example /etc/kptc/calendar.env
 sudo chmod 600 /etc/kptc/scheduler.env /etc/kptc/calendar.env
 sudo nano /etc/kptc/scheduler.env
 sudo nano /etc/kptc/calendar.env
@@ -36,10 +36,10 @@ sudo docker compose -f compose.origin-single.yaml ps
 
 ## リバースプロキシ管理者への要件
 
-- `/Scheduler/`を`http://127.0.0.1:8080/`へ、`/Calender/`を`http://127.0.0.1:8081/`へ中継し、公開側の接頭辞をコンテナへ渡す前に取り除きます。
-- `/Scheduler`から`/Scheduler/`、`/Calender`から`/Calender/`への転送では、クエリ文字列を保持します。
+- `/Scheduler/`を`http://127.0.0.1:8080/`へ、`/Calendar/`を`http://127.0.0.1:8081/`へ中継し、公開側の接頭辞をコンテナへ渡す前に取り除きます。
+- `/Scheduler`から`/Scheduler/`、`/Calendar`から`/Calendar/`への転送では、クエリ文字列を保持します。
 - `Host`、`X-Forwarded-For`、`X-Forwarded-Proto`を渡し、HTTPSを使用します。
-- `/Scheduler/`は特定IPだけ、`/Calender/`は全IPからアクセス可能とします。
+- `/Scheduler/`は特定IPだけ、`/Calendar/`は全IPからアクセス可能とします。
 - PHPとJSON応答はキャッシュせず、名前にハッシュを含む静的ファイルだけ長期キャッシュできます。
 - 8080番と8081番は外部へ直接公開しません。
 

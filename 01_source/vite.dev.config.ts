@@ -19,7 +19,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         scheduler: resolve(projectRoot, "origin/Scheduler/index.html"),
-        calender: resolve(projectRoot, "origin/Calender/index.html"),
+        calendar: resolve(projectRoot, "origin/Calendar/index.html"),
       },
     },
   },

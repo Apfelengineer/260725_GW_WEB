@@ -1,4 +1,4 @@
-/** OriginサーバーのCalender配下へ置く試験室空き状況画面だけを生成します。 */
+/** OriginサーバーのCalendar配下へ置く試験室空き状況画面だけを生成します。 */
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,13 +7,13 @@ import { defineConfig } from "vite";
 const projectRoot = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
-  root: "origin/Calender",
+  root: "origin/Calendar",
   base: "./",
   publicDir: false,
   plugins: [react()],
   build: {
-    outDir: "../../../02_release/origin/Calender",
+    outDir: "../../../02_release/origin/Calendar",
     emptyOutDir: true,
-    rollupOptions: { input: { main: resolve(projectRoot, "origin/Calender/index.html") } },
+    rollupOptions: { input: { main: resolve(projectRoot, "origin/Calendar/index.html") } },
   },
 });

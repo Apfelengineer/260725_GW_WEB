@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const sourceRoot = fileURLToPath(new URL("../", import.meta.url));
 const releaseRoot = resolve(sourceRoot, "../02_release");
-const targets = ["origin/Scheduler", "origin/Calender", "renkon"];
+const targets = ["origin/Scheduler", "origin/Calendar", "renkon"];
 
 async function listFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

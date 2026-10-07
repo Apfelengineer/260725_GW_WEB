@@ -5,11 +5,11 @@
 ## 配布先
 
 - `origin/Scheduler/`：Originサーバーの内部スケジューラ公開フォルダ
-- `origin/Calender/`：Originサーバーの公開カレンダー公開フォルダ
+- `origin/Calendar/`：Originサーバーの公開カレンダー公開フォルダ
 - `renkon/`：既存社内システムとの接続を試す模擬サイト
 - `SHA256SUMS`：配布ファイルの破損・差替え確認用一覧
 
-`origin/Scheduler/index.php`は暗号化トークンを検証してから画面を返す入口です。`origin/Calender/index.html`は認証を必要としない公開カレンダーの入口です。SQLite、公開JSON、環境設定、秘密値、ログは含めません。
+`origin/Scheduler/index.php`は暗号化トークンを検証してから画面を返す入口です。`origin/Calendar/index.html`は認証を必要としない公開カレンダーの入口です。SQLite、公開JSON、環境設定、秘密値、ログは含めません。
 
 `renkon/`は開発・確認専用です。本番では既存社内システムへ`open-scheduler.php`相当の処理を組み込むため、Originサーバーへ配置する必要はありません。
 
@@ -23,7 +23,7 @@ pnpm run check
 pnpm test
 ```
 
-ビルドは`origin/Scheduler/`、`origin/Calender/`、`renkon/`を作り直し、最後に`SHA256SUMS`を更新します。古いハッシュ名付きJavaScript・CSSは残りません。
+ビルドは`origin/Scheduler/`、`origin/Calendar/`、`renkon/`を作り直し、最後に`SHA256SUMS`を更新します。古いハッシュ名付きJavaScript・CSSは残りません。
 
 ## 配置時の注意
 

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-/* Scheduler専用。公開用JSONをローカル保存または署名付きHTTPSでCalenderへ送ります。 */
+/* Scheduler専用。公開用JSONをローカル保存または署名付きHTTPSでCalendarへ送ります。 */
 require_once __DIR__ . '/availability-json.php';
 
 function kptc_publish_mode(): string {
@@ -18,10 +18,10 @@ function kptc_publish_secret(): string {
 
 function kptc_send_public_availability(array $payload): array {
     $endpoint = trim((string)(getenv('KPTC_PUBLIC_AVAILABILITY_ENDPOINT') ?: ''));
-    if ($endpoint === '') throw new RuntimeException('Calenderの受信URLが設定されていません');
+    if ($endpoint === '') throw new RuntimeException('Calendarの受信URLが設定されていません');
     $scheme = strtolower((string)parse_url($endpoint, PHP_URL_SCHEME));
     $allowHttp = getenv('KPTC_PUBLIC_AVAILABILITY_ALLOW_HTTP') === '1';
-    if ($scheme !== 'https' && !($allowHttp && $scheme === 'http')) throw new RuntimeException('Calenderの受信URLにはHTTPSを使用してください');
+    if ($scheme !== 'https' && !($allowHttp && $scheme === 'http')) throw new RuntimeException('Calendarの受信URLにはHTTPSを使用してください');
     if (!function_exists('curl_init')) throw new RuntimeException('PHP cURL拡張が必要です');
 
     $body = json_encode(kptc_validate_public_availability($payload), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -52,7 +52,7 @@ function kptc_send_public_availability(array $payload): array {
     $curlError = curl_error($curl);
     curl_close($curl);
     if ($responseBody === false || $curlError !== '') throw new RuntimeException('外部送信に失敗しました: ' . $curlError);
-    if (!in_array($status, [200, 202], true)) throw new RuntimeException('Calenderが送信を拒否しました (HTTP ' . $status . ')');
+    if (!in_array($status, [200, 202], true)) throw new RuntimeException('Calendarが送信を拒否しました (HTTP ' . $status . ')');
     return $payload;
 }
 

@@ -8,7 +8,7 @@ const schedulerLink = document.querySelector("#scheduler-link");
 const calendarLink = document.querySelector("#calendar-link");
 const schedulerDescription = schedulerLink.querySelector("small");
 
-calendarLink.href = config.calendarUrl || "../origin/Calender/";
+calendarLink.href = config.calendarUrl || "../origin/Calendar/";
 
 function disableSchedulerLink() {
   schedulerLink.href = "#";

@@ -27,8 +27,8 @@ const distributions = {
       "origin/shared/public/og.png",
     ],
   },
-  calender: {
-    directory: "origin/Calender",
+  calendar: {
+    directory: "origin/Calendar",
     files: [
       "origin/shared/public/runtime-config.php",
       "origin/shared/public/availability-contract.php",
@@ -55,7 +55,7 @@ const distributions = {
   },
 };
 
-if (!(target in distributions)) throw new Error("scheduler、calender または renkon を指定してください");
+if (!(target in distributions)) throw new Error("scheduler、calendar または renkon を指定してください");
 const distribution = distributions[target];
 const destination = resolve(root, "../02_release", distribution.directory);
 if (distribution.clean) await rm(destination, { recursive: true, force: true });

@@ -3,7 +3,7 @@ services:
     container_name: kptc-calendar
     build:
       context: .
-      dockerfile: docker/origin/Calender/Dockerfile
+      dockerfile: docker/origin/Calendar/Dockerfile
     image: kptc-calendar:latest
     restart: unless-stopped
     env_file:

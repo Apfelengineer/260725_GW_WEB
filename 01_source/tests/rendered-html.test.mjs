@@ -134,9 +134,9 @@ test("実運用に必要なVite・React・PHP構成だけを保持する", async
   assert.match(packageJson.scripts.build, /build:origin/);
   assert.match(packageJson.scripts.build, /build:renkon/);
   assert.match(packageJson.scripts["build:origin"], /build:scheduler/);
-  assert.match(packageJson.scripts["build:origin"], /build:calender/);
+  assert.match(packageJson.scripts["build:origin"], /build:calendar/);
   assert.match(packageJson.scripts["build:scheduler"], /vite\.scheduler\.config\.ts/);
-  assert.match(packageJson.scripts["build:calender"], /vite\.calender\.config\.ts/);
+  assert.match(packageJson.scripts["build:calendar"], /vite\.calendar\.config\.ts/);
   for (const unused of ["app", "public", "sakura", "vite.origin.config.ts", "vite.tamanegi.config.ts", "next.config.ts", "worker", "db", "examples"]) {
     await assert.rejects(access(new URL(unused, root)));
   }
@@ -152,14 +152,14 @@ test("システム資料を同梱する", async () => {
   await access(new URL("docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf", repositoryRoot));
   const dockerGuide = await readFile(new URL("docs/KPTC_Scheduler_Docker構築手順書.html", repositoryRoot), "utf8");
   assert.match(dockerGuide, /docker\/origin\/Scheduler\/Dockerfile/);
-  assert.match(dockerGuide, /docker\/origin\/Calender\/Dockerfile/);
+  assert.match(dockerGuide, /docker\/origin\/Calendar\/Dockerfile/);
   assert.match(dockerGuide, /02_release\/origin\/Scheduler/);
-  assert.match(dockerGuide, /02_release\/origin\/Calender/);
+  assert.match(dockerGuide, /02_release\/origin\/Calendar/);
   assert.match(dockerGuide, /KPTC_PUBLIC_AVAILABILITY_ENDPOINT/);
   assert.match(dockerGuide, /\/opt\/kptc\/260725_GW_WEB/);
   assert.match(dockerGuide, /Originサーバー1台/);
   assert.match(dockerGuide, /\/Scheduler\//);
-  assert.match(dockerGuide, /\/Calender\//);
+  assert.match(dockerGuide, /\/Calendar\//);
   assert.match(dockerGuide, /KPTC_SESSION_COOKIE_PATH=\/Scheduler\//);
   assert.match(dockerGuide, /http:\/\/kptc-calendar\/receive-availability\.php/);
   assert.match(dockerGuide, /<section id="browser-ready">/);
@@ -178,8 +178,8 @@ test("システム資料を同梱する", async () => {
   assert.match(dockerGuide, /Scheduler SQLite/);
   assert.match(dockerGuide, /公開用3か月JSON（単一ファイル）/);
   assert.match(dockerGuide, /Scheduler専用の非公開Volume/);
-  assert.match(dockerGuide, /Calender専用Volume（実ファイルは直接配信しない）/);
-  assert.match(dockerGuide, /CalenderからScheduler専用Volumeへの接続経路はなく/);
+  assert.match(dockerGuide, /Calendar専用Volume（実ファイルは直接配信しない）/);
+  assert.match(dockerGuide, /CalendarからScheduler専用Volumeへの接続経路はなく/);
   assert.match(dockerGuide, /\.\.\/docker\/README\.md/);
   assert.match(dockerGuide, /pre-update-YYYYMMDD-HHMM\.sqlite/);
   assert.match(dockerGuide, /kptc-scheduler:rollback-YYYYMMDD-HHMM/);
@@ -197,7 +197,7 @@ test("試験室の空き状況ページと署名付きJSON連携を提供する"
     readFile(new URL("origin/shared/app/reservations-page.tsx", root), "utf8"),
     readFile(new URL("origin/shared/app/reservations.css", root), "utf8"),
     readFile(new URL("vite.scheduler.config.ts", root), "utf8"),
-    readFile(new URL("vite.calender.config.ts", root), "utf8"),
+    readFile(new URL("vite.calendar.config.ts", root), "utf8"),
     readFile(new URL("origin/shared/public/api.php", root), "utf8"),
     readFile(new URL("origin/shared/public/public-availability.php", root), "utf8"),
     readFile(new URL("origin/shared/public/availability-json.php", root), "utf8"),
@@ -245,7 +245,7 @@ test("試験室の空き状況ページと署名付きJSON連携を提供する"
   assert.match(styles, /object-fit: contain/);
   assert.match(styles, /width: min\(340px,46%\)/);
   assert.doesNotMatch(internalVite, /reservations\.html/);
-  assert.match(publicVite, /origin\/Calender\/index\.html/);
+  assert.match(publicVite, /origin\/Calendar\/index\.html/);
   assert.doesNotMatch(publicVite, /origin\/Scheduler\/index\.html/);
   assert.match(phpApi, /room_demo_v1/);
   assert.match(phpApi, /public_availability_pending/);
@@ -381,8 +381,8 @@ test("renkonの暗号化トークンがないスケジューラ要求を拒否�
 
 test("内部用と外部用の配布ファイルを許可リストで分離する", async () => {
   const copier = await readFile(new URL("scripts/copy-distribution-files.mjs", root), "utf8");
-  const internalSection = copier.slice(copier.indexOf("scheduler:"), copier.indexOf("calender:"));
-  const publicSection = copier.slice(copier.indexOf("calender:"), copier.indexOf("renkon:"));
+  const internalSection = copier.slice(copier.indexOf("scheduler:"), copier.indexOf("calendar:"));
+  const publicSection = copier.slice(copier.indexOf("calendar:"), copier.indexOf("renkon:"));
   assert.match(internalSection, /public\/api\.php/);
   assert.match(internalSection, /runtime-config\.php/);
   assert.match(internalSection, /public\/auth\.php/);
@@ -398,7 +398,7 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   assert.match(publicSection, /health-availability\.php/);
   assert.match(publicSection, /availability-contract\.php/);
   assert.match(publicSection, /runtime-config\.php/);
-  assert.match(copier, /directory: "origin\/Calender"/);
+  assert.match(copier, /directory: "origin\/Calendar"/);
   assert.doesNotMatch(publicSection, /availability-json\.php/);
   assert.doesNotMatch(publicSection, /availability-room-config\.php/);
   assert.doesNotMatch(publicSection, /api\.php|auth\.php|manage-auth-user|publish-availability-cli|group-watcher\.sqlite/);
@@ -429,7 +429,7 @@ test("renkon模擬サイトでユーザーIDから暗号化入口へのリンク
   assert.doesNotMatch(script, /window\.location\.assign/);
   assert.doesNotMatch(config, /schedulerUrl/);
   assert.match(config, /calendarUrl/);
-  assert.match(config, /\/GW\/Calender\//);
+  assert.match(config, /\/GW\/Calendar\//);
   assert.match(issuer, /openssl_encrypt/);
   assert.match(issuer, /Location:/);
   assert.match(renkonConfig, /\/GW\/Scheduler\//);
@@ -444,8 +444,8 @@ test("ビルド前とビルド後のフォルダを分離する", async () => {
   await access(new URL("01_source/package.json", repositoryRoot));
   await access(new URL("02_release/origin/Scheduler/index.php", repositoryRoot));
   await assert.rejects(access(new URL("02_release/origin/Scheduler/index.html", repositoryRoot)));
-  await access(new URL("02_release/origin/Calender/index.html", repositoryRoot));
-  await assert.rejects(access(new URL("02_release/origin/Calender/reservations.html", repositoryRoot)));
+  await access(new URL("02_release/origin/Calendar/index.html", repositoryRoot));
+  await assert.rejects(access(new URL("02_release/origin/Calendar/reservations.html", repositoryRoot)));
   await assert.rejects(access(new URL("02_release/origin/Scheduler/scheduler-entry.php", repositoryRoot)));
   await assert.rejects(access(new URL("02_release/tamanegi", repositoryRoot)));
   await access(new URL("02_release/renkon/index.html", repositoryRoot));
@@ -463,12 +463,12 @@ test("分離配置でも公開領域外の実行設定を探索する", async ()
 });
 
 test("Origin単一サーバー上へPHP 8.4の2コンテナを構築できる", async () => {
-  const [schedulerDockerfile, schedulerEntrypoint, schedulerCron, calenderDockerfile, calenderEntrypoint, guide, compose] = await Promise.all([
+  const [schedulerDockerfile, schedulerEntrypoint, schedulerCron, calendarDockerfile, calendarEntrypoint, guide, compose] = await Promise.all([
     readFile(new URL("docker/origin/Scheduler/Dockerfile", repositoryRoot), "utf8"),
     readFile(new URL("docker/origin/Scheduler/entrypoint.sh", repositoryRoot), "utf8"),
     readFile(new URL("docker/origin/Scheduler/kptc-cron", repositoryRoot), "utf8"),
-    readFile(new URL("docker/origin/Calender/Dockerfile", repositoryRoot), "utf8"),
-    readFile(new URL("docker/origin/Calender/entrypoint.sh", repositoryRoot), "utf8"),
+    readFile(new URL("docker/origin/Calendar/Dockerfile", repositoryRoot), "utf8"),
+    readFile(new URL("docker/origin/Calendar/entrypoint.sh", repositoryRoot), "utf8"),
     readFile(new URL("docker/README.md", repositoryRoot), "utf8"),
     readFile(new URL("compose.origin-single.yaml", repositoryRoot), "utf8"),
   ]);
@@ -482,14 +482,14 @@ test("Origin単一サーバー上へPHP 8.4の2コンテナを構築できる", 
   assert.match(schedulerCron, /\*\/5 \* \* \* \*/);
   assert.match(schedulerCron, /0 22 \* \* \*/);
 
-  assert.match(calenderDockerfile, /FROM php:8\.4-apache-bookworm/);
-  assert.match(calenderDockerfile, /COPY 02_release\/origin\/Calender\/ \/var\/www\/html\//);
-  assert.match(calenderDockerfile, /VOLUME \["\/var\/lib\/kptc-availability"\]/);
-  assert.match(calenderEntrypoint, /KPTC_PUBLIC_AVAILABILITY_SECRET/);
+  assert.match(calendarDockerfile, /FROM php:8\.4-apache-bookworm/);
+  assert.match(calendarDockerfile, /COPY 02_release\/origin\/Calendar\/ \/var\/www\/html\//);
+  assert.match(calendarDockerfile, /VOLUME \["\/var\/lib\/kptc-availability"\]/);
+  assert.match(calendarEntrypoint, /KPTC_PUBLIC_AVAILABILITY_SECRET/);
   assert.match(guide, /compose\.origin-single\.yaml/);
   assert.match(guide, /リバースプロキシ/);
   assert.match(compose, /dockerfile: docker\/origin\/Scheduler\/Dockerfile/);
-  assert.match(compose, /dockerfile: docker\/origin\/Calender\/Dockerfile/);
+  assert.match(compose, /dockerfile: docker\/origin\/Calendar\/Dockerfile/);
   assert.match(compose, /127\.0\.0\.1:8080:80/);
   assert.match(compose, /127\.0\.0\.1:8081:80/);
   assert.match(compose, /kptc-internal/);
