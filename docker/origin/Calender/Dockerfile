@@ -14,12 +14,12 @@ RUN apt-get update \
     && a2enmod headers \
     && rm -rf /var/lib/apt/lists/*
 
-COPY 02_release/tamanegi/ /var/www/html/
-COPY docker/tamanegi/apache-security.conf /etc/apache2/conf-available/kptc-security.conf
-COPY docker/tamanegi/entrypoint.sh /usr/local/bin/kptc-tamanegi-entrypoint
+COPY 02_release/origin/Calender/ /var/www/html/
+COPY docker/origin/Calender/apache-security.conf /etc/apache2/conf-available/kptc-security.conf
+COPY docker/origin/Calender/entrypoint.sh /usr/local/bin/kptc-calender-entrypoint
 
 RUN a2enconf kptc-security \
-    && chmod 0755 /usr/local/bin/kptc-tamanegi-entrypoint \
+    && chmod 0755 /usr/local/bin/kptc-calender-entrypoint \
     && chown -R root:root /var/www/html \
     && find /var/www/html -type d -exec chmod 0755 {} + \
     && find /var/www/html -type f -exec chmod 0644 {} + \
@@ -32,5 +32,5 @@ EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1/receive-availability.php)" = "405" || exit 1
 
-ENTRYPOINT ["/usr/local/bin/kptc-tamanegi-entrypoint"]
+ENTRYPOINT ["/usr/local/bin/kptc-calender-entrypoint"]
 CMD ["apache2-foreground"]

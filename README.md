@@ -2,20 +2,22 @@
 
 Group Watcher 3.65 の主要機能を、PC・タブレット・スマートフォンから利用できるよう「KPTC Scheduler」として再設計したWEBブラウザ版です。
 
-PHP APIと内部用SQLiteへデータを保存するため、別端末・別ブラウザ間でも編集内容が共有されます。試験室の空き状況は個人情報を含まない3か月分の公開用JSONへ変換し、署名付きHTTPSで外部公開サーバーへ送信します。スケジューラーはrenkon（社内ポータル）が発行するCBC暗号化トークンを検証して一般モードで開き、パスワード確認後だけ管理者モードへ切り替わります。セッションとCSRF対策はサーバー側で管理します。
+PHP APIと内部用SQLiteへデータを保存するため、別端末・別ブラウザ間でも編集内容が共有されます。試験室の空き状況は個人情報を含まない3か月分の公開用JSONへ変換し、同じOriginサーバー内のCalenderへ署名付きで送信します。スケジューラーはrenkon（社内ポータル）が発行するCBC暗号化トークンを検証して一般モードで開き、パスワード確認後だけ管理者モードへ切り替わります。セッションとCSRF対策はサーバー側で管理します。
 
 ## GitHubのフォルダ構成
 
-- `01_source/`: ビルド前のソース、PHP原本、テスト、ビルド設定、サーバー設定例
-- `02_release/origin/`: 内部サーバーoriginへ配置するビルド後ファイル
-- `02_release/tamanegi/`: 外部サーバーtamanegiへ配置するビルド後ファイル
+- `01_source/origin/Scheduler/`: SchedulerのHTML・React起動点
+- `01_source/origin/Calender/`: CalenderのHTML・React起動点
+- `01_source/origin/shared/`: 両画面のReact・PHP原本
+- `02_release/origin/Scheduler/`: OriginサーバーのScheduler配下へ配置する完成物
+- `02_release/origin/Calender/`: OriginサーバーのCalender配下へ配置する完成物
 - `02_release/renkon/`: 社内システムからの接続を試す模擬サイト（開発・確認専用）
 - `docs/`: 仕様書、構築手順書、ファイル関係図
-- `docker/`: PHP 8.4を使用するorigin・tamanegi個別Dockerfile、起動設定、環境変数例
+- `docker/origin/Scheduler/`・`docker/origin/Calender/`: Origin上の2コンテナ用Dockerfileと設定例
 
 ビルド前とビルド後を明確に分離しています。`02_release`にはデータベース、実環境設定、秘密鍵、公開JSON、ログを含めません。
 
-Dockerでorigin・tamanegiを別サーバーへ構築する場合は、[Docker構築手順](docker/README.md)を参照してください。各イメージは`02_release/origin`または`02_release/tamanegi`のビルド後ファイルを使用し、データと秘密設定はDockerボリューム・起動時環境変数へ分離します。
+DockerでOrigin単一サーバーへ構築する場合は、[Docker構築手順](docker/README.md)を参照してください。各イメージは`02_release/origin/Scheduler`または`02_release/origin/Calender`の完成物を使用し、データと秘密設定はDockerボリューム・起動時環境変数へ分離します。
 
 ## システム資料
 
@@ -49,7 +51,7 @@ Dockerでorigin・tamanegiを別サーバーへ構築する場合は、[Docker�
 - 内部スケジュールDBと3か月分の公開空き状況JSONの分離、およびHMAC署名付きHTTPS連携
 - 外部受信時の署名・時刻・JSONスキーマ・世代検証と原子的なファイル置換
 - 5分間隔の自動再送、送信状態記録、監視用終了コード
-- 内部サーバー用／外部サーバー用の配布ファイル完全分離
+- Scheduler用／Calender用の配布ファイル完全分離
 - PC／スマートフォン対応のレスポンシブ表示
 - Open Graph共有画像と日本語メタ情報
 
@@ -74,11 +76,11 @@ pnpm test
 
 `pnpm run build` は次の3つを生成します。
 
-- `02_release/origin`: スケジューラー画面、内部API、認証、送信・再送・監視コマンド
-- `02_release/tamanegi`: 空き状況画面、署名付きJSON受信API、公開JSON読取API
+- `02_release/origin/Scheduler`: スケジューラー画面、内部API、認証、送信・再送・監視コマンド
+- `02_release/origin/Calender`: 空き状況画面、署名付きJSON受信API、公開JSON読取API
 - `02_release/renkon`: 3桁のユーザーID入力欄、暗号化トークン発行入口、カレンダーリンクを備える社内ポータル模擬画面
 
-`renkon`は連携確認用であり、本番のorigin・tamanegi構築には不要です。実運用では既存の社内システムが同じ役割を担うため、`02_release/renkon`を社内サーバーへ配置しません。
+`renkon`は連携確認用であり、本番のOrigin構築には不要です。実運用では既存の社内システムが同じ役割を担うため、`02_release/renkon`を配置しません。
 
 外部用には `api.php`、`auth.php`、管理コマンド、SQLite接続処理を含めません。内部画面の「試験室予約」リンク先は、内部サーバー設定の `KPTC_PUBLIC_AVAILABILITY_PAGE_URL=https://origin.example.jp/Calender/` で指定します。本番URLが変わっても再ビルドは不要です。値がない開発環境では、ビルド時の `VITE_KPTC_PUBLIC_AVAILABILITY_URL`、続いて相対URL `../Calender` を使用します。開発中の2画面は `pnpm run dev` で確認できます。
 
@@ -138,16 +140,16 @@ Ubuntu 24.04では`01_source/deploy/kptc-scheduler-backup.service`と`.timer`を
 
 ## 共有APIの処理
 
-`01_source/public/api.php` が内部の共有データ、一般／管理者モード、操作履歴、変更取り消しを提供します。予定を保存・削除・取り消した後、試験室3室の当月を含む3か月分を公開可能な空き状態へ変換し、`01_source/public/availability-publisher.php` が外部サーバーへ送ります。連携に失敗しても予定の保存は取り消さず、内部DBへ再送待ち、連続失敗回数、最終試行・成功日時、エラー概要を記録します。
+`01_source/origin/shared/public/api.php` が内部の共有データ、一般／管理者モード、操作履歴、変更取り消しを提供します。予定を保存・削除・取り消した後、試験室3室の当月を含む3か月分を公開可能な空き状態へ変換し、`01_source/origin/shared/public/availability-publisher.php` が同じOriginサーバー内のCalenderへ送ります。連携に失敗しても予定の保存は取り消さず、内部DBへ再送待ち、連続失敗回数、最終試行・成功日時、エラー概要を記録します。
 
-`01_source/public/public-availability.php` は公開ページ専用です。公開用JSONに保存された室ID・日付・状態（午前空き、午後空き、予約済み、メンテナンス）だけを返し、利用者名、予定件名、メモ、操作履歴は返しません。空き状況ページは内部APIや内部DBを直接参照しません。
+`01_source/origin/shared/public/public-availability.php` は公開ページ専用です。公開用JSONに保存された室ID・日付・状態（午前空き、午後空き、予約済み、メンテナンス）だけを返し、利用者名、予定件名、メモ、操作履歴は返しません。空き状況ページは内部APIや内部DBを直接参照しません。
 
 外部の `receive-availability.php` は、共有秘密鍵によるHMAC-SHA256署名、送信時刻、最大128KiB、3室だけの固定スキーマ、許可した4状態、3か月以内の期間、更新世代を検証します。検証後は一時ファイルから同じJSONへ置き換えるため、月別ファイルや過去データの履歴は作成しません。
 
 - 内部スケジュールDB: `/home/apfelrunner/GW/group-watcher.sqlite`
-- 公開空き状況JSON（外部サーバー）: `/var/lib/kptc-availability/public-availability.json`
+- 公開空き状況JSON（Origin内のCalender用）: `/var/lib/kptc-availability/public-availability.json`
 
-設定例は `01_source/deploy/internal-server.env.example` と `01_source/deploy/external-server.env.example` にあります。共有秘密鍵は `openssl rand -hex 32` などで個別に生成し、両サーバーのWeb用PHP環境と内部側の定期実行環境へ同じ値を設定します。リポジトリやWeb公開フォルダへ秘密鍵を保存しないでください。
+設定例は `01_source/deploy/Scheduler.env.example` と `01_source/deploy/Calender.env.example` にあります。共有秘密鍵は `openssl rand -hex 32` などで生成し、両方のPHP環境へ同じ値を設定します。リポジトリやWeb公開フォルダへ秘密鍵を保存しないでください。
 
 共有レンタルサーバーなどでWeb用PHPへ環境変数を設定できない場合は、内部側・外部側それぞれのホームディレクトリに `GW/config/internal-env.php` または `GW/config/public-env.php` を置けます。`runtime-config.php` が公開領域外のこのファイルを自動的に読み込みます。別の場所を使う場合は `KPTC_INTERNAL_CONFIG_FILE` または `KPTC_PUBLIC_CONFIG_FILE` で絶対パスを指定します。
 
@@ -175,10 +177,10 @@ Ubuntu 24.04では`01_source/deploy/kptc-scheduler-backup.service`と`.timer`を
 */5 * * * * /usr/local/bin/php /home/apfelrunner/www/GW/Scheduler/publish-availability-cli.php
 ```
 
-試験室空き状況ページは `/GW/Calender/?room=m6`（電波暗室）、`room=m7`（電磁波妨害評価装置(G-TEM)）、`room=m8`（パルスサージシステム）で切り替えます。`02_release/tamanegi/index.html` を生成するため、ファイル名なしのディレクトリURLで表示できます。
+試験室空き状況ページは `/GW/Calender/?room=m6`（電波暗室）、`room=m7`（電磁波妨害評価装置(G-TEM)）、`room=m8`（パルスサージシステム）で切り替えます。`02_release/origin/Calender/index.html` を生成するため、ファイル名なしのディレクトリURLで表示できます。
 
 ### 試験室を追加する場合
 
-公開画面の試験室一覧は、`01_source/public/availability-room-config.php`の許可リストに登録した「試験室」ユーザーから生成し、署名付き公開JSONへ名称・画像ファイル名・表示順を含めます。新しい試験室は、管理画面で試験室ユーザーを追加し、同ファイルの`kptc_public_room_ids()`へユーザーIDを追記して、外部サーバーの公開フォルダへ`<ユーザーID>.png`を配置すると、次回のJSON送信後に画面へ追加されます。画面のTypeScript修正や再ビルドは不要です。許可リストにない試験室ユーザーは外部公開されません。
+公開画面の試験室一覧は、`01_source/origin/shared/public/availability-room-config.php`の許可リストに登録した「試験室」ユーザーから生成し、署名付き公開JSONへ名称・画像ファイル名・表示順を含めます。新しい試験室は、管理画面で試験室ユーザーを追加し、同ファイルの`kptc_public_room_ids()`へユーザーIDを追記して、Calenderの公開フォルダへ`<ユーザーID>.png`を配置すると、次回のJSON送信後に画面へ追加されます。画面のTypeScript修正や再ビルドは不要です。許可リストにない試験室ユーザーは外部公開されません。
 
-既存3室の公開名称・説明は`01_source/public/availability-room-config.php`で上書きしています。スケジューラー上の名称と公開名称を変える場合だけ、この設定を変更してください。画像が未配置の場合は、試験室名の先頭2文字を代替表示します。
+既存3室の公開名称・説明は`01_source/origin/shared/public/availability-room-config.php`で上書きしています。スケジューラー上の名称と公開名称を変える場合だけ、この設定を変更してください。画像が未配置の場合は、試験室名の先頭2文字を代替表示します。

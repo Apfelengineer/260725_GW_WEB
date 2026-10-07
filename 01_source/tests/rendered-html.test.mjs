@@ -10,11 +10,11 @@ const repositoryRoot = new URL("../../", import.meta.url);
 test("KPTC Scheduler の主要機能を提供する", async () => {
   // 主要画面・通信層・サーバーAPIをまとめて読み、必須機能の手掛かりを検査します。
   const [page, styles, html, api, phpApi] = await Promise.all([
-    readFile(new URL("app/page.tsx", root), "utf8"),
-    readFile(new URL("app/globals.css", root), "utf8"),
-    readFile(new URL("sakura/index.html", root), "utf8"),
-    readFile(new URL("app/lib/group-watcher-api.ts", root), "utf8"),
-    readFile(new URL("public/api.php", root), "utf8"),
+    readFile(new URL("origin/shared/app/page.tsx", root), "utf8"),
+    readFile(new URL("origin/shared/app/globals.css", root), "utf8"),
+    readFile(new URL("origin/Scheduler/index.html", root), "utf8"),
+    readFile(new URL("origin/shared/app/lib/group-watcher-api.ts", root), "utf8"),
+    readFile(new URL("origin/shared/public/api.php", root), "utf8"),
   ]);
 
   assert.match(page, /スケジュール/);
@@ -132,17 +132,18 @@ test("実運用に必要なVite・React・PHP構成だけを保持する", async
   assert.deepEqual(Object.keys(packageJson.dependencies).sort(), ["react", "react-dom"]);
   assert.deepEqual(Object.keys(packageJson.devDependencies).sort(), ["@types/node", "@types/react", "@types/react-dom", "@vitejs/plugin-react", "typescript", "vite"]);
   assert.match(packageJson.scripts.build, /build:origin/);
-  assert.match(packageJson.scripts.build, /build:tamanegi/);
   assert.match(packageJson.scripts.build, /build:renkon/);
-  assert.match(packageJson.scripts["build:origin"], /vite\.origin\.config\.ts/);
-  assert.match(packageJson.scripts["build:tamanegi"], /vite\.tamanegi\.config\.ts/);
-  for (const unused of ["app/layout.tsx", "app/chatgpt-auth.ts", "vite.config.ts", "next.config.ts", "drizzle.config.ts", "postcss.config.mjs", "worker/index.ts", "db/index.ts", "examples/d1/db/schema.ts"]) {
+  assert.match(packageJson.scripts["build:origin"], /build:scheduler/);
+  assert.match(packageJson.scripts["build:origin"], /build:calender/);
+  assert.match(packageJson.scripts["build:scheduler"], /vite\.scheduler\.config\.ts/);
+  assert.match(packageJson.scripts["build:calender"], /vite\.calender\.config\.ts/);
+  for (const unused of ["app", "public", "sakura", "vite.origin.config.ts", "vite.tamanegi.config.ts", "next.config.ts", "worker", "db", "examples"]) {
     await assert.rejects(access(new URL(unused, root)));
   }
 });
 
 test("共有用画像を同梱する", async () => {
-  await access(new URL("public/og.png", root));
+  await access(new URL("origin/shared/public/og.png", root));
 });
 
 test("システム資料を同梱する", async () => {
@@ -150,10 +151,10 @@ test("システム資料を同梱する", async () => {
   await access(new URL("docs/KPTC_Scheduler_独立Linuxサーバー構築・移行手順書.pdf", repositoryRoot));
   await access(new URL("docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf", repositoryRoot));
   const dockerGuide = await readFile(new URL("docs/KPTC_Scheduler_Docker構築手順書.html", repositoryRoot), "utf8");
-  assert.match(dockerGuide, /docker\/origin\/Dockerfile/);
-  assert.match(dockerGuide, /docker\/tamanegi\/Dockerfile/);
-  assert.match(dockerGuide, /02_release\/origin/);
-  assert.match(dockerGuide, /02_release\/tamanegi/);
+  assert.match(dockerGuide, /docker\/origin\/Scheduler\/Dockerfile/);
+  assert.match(dockerGuide, /docker\/origin\/Calender\/Dockerfile/);
+  assert.match(dockerGuide, /02_release\/origin\/Scheduler/);
+  assert.match(dockerGuide, /02_release\/origin\/Calender/);
   assert.match(dockerGuide, /KPTC_PUBLIC_AVAILABILITY_ENDPOINT/);
   assert.match(dockerGuide, /\/opt\/kptc\/260725_GW_WEB/);
   assert.match(dockerGuide, /Originサーバー1台/);
@@ -185,20 +186,20 @@ test("システム資料を同梱する", async () => {
 test("試験室の空き状況ページと署名付きJSON連携を提供する", async () => {
   // 表示記号、配色、用途別画面、署名付き3か月JSON連携を確認します。
   const [page, styles, internalVite, publicVite, phpApi, publicApi, jsonPublisher, jsonContract, roomConfig, publisher, receiver, retryPublisher, monitor, publicHealth] = await Promise.all([
-    readFile(new URL("app/reservations-page.tsx", root), "utf8"),
-    readFile(new URL("app/reservations.css", root), "utf8"),
-    readFile(new URL("vite.origin.config.ts", root), "utf8"),
-    readFile(new URL("vite.tamanegi.config.ts", root), "utf8"),
-    readFile(new URL("public/api.php", root), "utf8"),
-    readFile(new URL("public/public-availability.php", root), "utf8"),
-    readFile(new URL("public/availability-json.php", root), "utf8"),
-    readFile(new URL("public/availability-contract.php", root), "utf8"),
-    readFile(new URL("public/availability-room-config.php", root), "utf8"),
-    readFile(new URL("public/availability-publisher.php", root), "utf8"),
-    readFile(new URL("public/receive-availability.php", root), "utf8"),
-    readFile(new URL("public/publish-availability-cli.php", root), "utf8"),
-    readFile(new URL("public/monitor-availability-cli.php", root), "utf8"),
-    readFile(new URL("public/health-availability.php", root), "utf8"),
+    readFile(new URL("origin/shared/app/reservations-page.tsx", root), "utf8"),
+    readFile(new URL("origin/shared/app/reservations.css", root), "utf8"),
+    readFile(new URL("vite.scheduler.config.ts", root), "utf8"),
+    readFile(new URL("vite.calender.config.ts", root), "utf8"),
+    readFile(new URL("origin/shared/public/api.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/public-availability.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/availability-json.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/availability-contract.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/availability-room-config.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/availability-publisher.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/receive-availability.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/publish-availability-cli.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/monitor-availability-cli.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/health-availability.php", root), "utf8"),
   ]);
   assert.match(page, /電波暗室/);
   assert.match(page, /電磁波妨害評価装置\(G-TEM\)/);
@@ -236,8 +237,8 @@ test("試験室の空き状況ページと署名付きJSON連携を提供する"
   assert.match(styles, /object-fit: contain/);
   assert.match(styles, /width: min\(340px,46%\)/);
   assert.doesNotMatch(internalVite, /reservations\.html/);
-  assert.match(publicVite, /reservations\.html/);
-  assert.doesNotMatch(publicVite, /sakura\/index\.html/);
+  assert.match(publicVite, /origin\/Calender\/index\.html/);
+  assert.doesNotMatch(publicVite, /origin\/Scheduler\/index\.html/);
   assert.match(phpApi, /room_demo_v1/);
   assert.match(phpApi, /public_availability_pending/);
   assert.match(phpApi, /kptc_publish_availability/);
@@ -282,21 +283,21 @@ test("試験室の空き状況ページと署名付きJSON連携を提供する"
   assert.match(monitor, /exit\(\$healthy \? 0 : 1\)/);
   assert.match(publicHealth, /http_response_code\(\$healthy \? 200 : 503\)/);
   assert.match(publicHealth, /KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS/);
-  await assert.rejects(access(new URL("public/availability-store.php", root)));
-  await access(new URL("public/technology-center-logo-white.png", root));
-  await access(new URL("public/m6.png", root));
-  await access(new URL("public/m7.png", root));
-  await access(new URL("public/m8.png", root));
-  await access(new URL("public/availability-room-config.php", root));
+  await assert.rejects(access(new URL("origin/shared/public/availability-store.php", root)));
+  await access(new URL("origin/shared/public/technology-center-logo-white.png", root));
+  await access(new URL("origin/shared/public/m6.png", root));
+  await access(new URL("origin/shared/public/m7.png", root));
+  await access(new URL("origin/shared/public/m8.png", root));
+  await access(new URL("origin/shared/public/availability-room-config.php", root));
 });
 
 test("ログイン画面なしの一般モードとパスワード付き管理者モードを提供する", async () => {
   const [api, auth, client, manager, page] = await Promise.all([
-    readFile(new URL("public/api.php", root), "utf8"),
-    readFile(new URL("public/auth.php", root), "utf8"),
-    readFile(new URL("app/lib/group-watcher-api.ts", root), "utf8"),
-    readFile(new URL("public/manage-auth-user-cli.php", root), "utf8"),
-    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("origin/shared/public/api.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/auth.php", root), "utf8"),
+    readFile(new URL("origin/shared/app/lib/group-watcher-api.ts", root), "utf8"),
+    readFile(new URL("origin/shared/public/manage-auth-user-cli.php", root), "utf8"),
+    readFile(new URL("origin/shared/app/page.tsx", root), "utf8"),
   ]);
   const accountListSection = auth.slice(auth.indexOf("function kptc_auth_account_list"), auth.indexOf("function kptc_auth_enabled_admin_count"));
   assert.doesNotMatch(api, /authenticated'=>false|if \(\$action === 'login'\)|guest-login|if \(\$action === 'logout'\)/);
@@ -339,10 +340,10 @@ test("ログイン画面なしの一般モードとパスワード付き管理�
 
 test("renkonの暗号化トークンがないスケジューラ要求を拒否する", async () => {
   const [entry, gate, api, auth, issuer, renkonConfig] = await Promise.all([
-    readFile(new URL("public/scheduler-entry.php", root), "utf8"),
-    readFile(new URL("public/portal-access.php", root), "utf8"),
-    readFile(new URL("public/api.php", root), "utf8"),
-    readFile(new URL("public/auth.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/scheduler-entry.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/portal-access.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/api.php", root), "utf8"),
+    readFile(new URL("origin/shared/public/auth.php", root), "utf8"),
     readFile(new URL("renkon/open-scheduler.php", root), "utf8"),
     readFile(new URL("renkon/renkon-config.php", root), "utf8"),
   ]);
@@ -372,8 +373,8 @@ test("renkonの暗号化トークンがないスケジューラ要求を拒否�
 
 test("内部用と外部用の配布ファイルを許可リストで分離する", async () => {
   const copier = await readFile(new URL("scripts/copy-distribution-files.mjs", root), "utf8");
-  const internalSection = copier.slice(copier.indexOf("origin:"), copier.indexOf("tamanegi:"));
-  const publicSection = copier.slice(copier.indexOf("tamanegi:"));
+  const internalSection = copier.slice(copier.indexOf("scheduler:"), copier.indexOf("calender:"));
+  const publicSection = copier.slice(copier.indexOf("calender:"), copier.indexOf("renkon:"));
   assert.match(internalSection, /public\/api\.php/);
   assert.match(internalSection, /runtime-config\.php/);
   assert.match(internalSection, /public\/auth\.php/);
@@ -389,8 +390,7 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   assert.match(publicSection, /health-availability\.php/);
   assert.match(publicSection, /availability-contract\.php/);
   assert.match(publicSection, /runtime-config\.php/);
-  assert.match(publicSection, /reservations\.html/);
-  assert.match(publicSection, /index\.html/);
+  assert.match(copier, /directory: "origin\/Calender"/);
   assert.doesNotMatch(publicSection, /availability-json\.php/);
   assert.doesNotMatch(publicSection, /availability-room-config\.php/);
   assert.doesNotMatch(publicSection, /api\.php|auth\.php|manage-auth-user|publish-availability-cli|group-watcher\.sqlite/);
@@ -434,11 +434,12 @@ test("renkon模擬サイトでユーザーIDから暗号化入口へのリンク
 
 test("ビルド前とビルド後のフォルダを分離する", async () => {
   await access(new URL("01_source/package.json", repositoryRoot));
-  await access(new URL("02_release/origin/index.php", repositoryRoot));
-  await assert.rejects(access(new URL("02_release/origin/index.html", repositoryRoot)));
-  await access(new URL("02_release/tamanegi/index.html", repositoryRoot));
-  await assert.rejects(access(new URL("02_release/tamanegi/reservations.html", repositoryRoot)));
-  await assert.rejects(access(new URL("02_release/origin/scheduler-entry.php", repositoryRoot)));
+  await access(new URL("02_release/origin/Scheduler/index.php", repositoryRoot));
+  await assert.rejects(access(new URL("02_release/origin/Scheduler/index.html", repositoryRoot)));
+  await access(new URL("02_release/origin/Calender/index.html", repositoryRoot));
+  await assert.rejects(access(new URL("02_release/origin/Calender/reservations.html", repositoryRoot)));
+  await assert.rejects(access(new URL("02_release/origin/Scheduler/scheduler-entry.php", repositoryRoot)));
+  await assert.rejects(access(new URL("02_release/tamanegi", repositoryRoot)));
   await access(new URL("02_release/renkon/index.html", repositoryRoot));
   await access(new URL("02_release/SHA256SUMS", repositoryRoot));
   for (const oldPath of ["app", "public", "sakura", "server-runtime-snapshot", "dist-internal", "dist-public"]) {
@@ -447,40 +448,40 @@ test("ビルド前とビルド後のフォルダを分離する", async () => {
 });
 
 test("分離配置でも公開領域外の実行設定を探索する", async () => {
-  const runtimeConfig = await readFile(new URL("public/runtime-config.php", root), "utf8");
+  const runtimeConfig = await readFile(new URL("origin/shared/public/runtime-config.php", root), "utf8");
   assert.match(runtimeConfig, /dirname\(__DIR__, 2\)/);
   assert.match(runtimeConfig, /dirname\(__DIR__, 3\)/);
   assert.match(runtimeConfig, /GW\/config/);
 });
 
 test("Origin単一サーバー上へPHP 8.4の2コンテナを構築できる", async () => {
-  const [originDockerfile, originEntrypoint, originCron, tamanegiDockerfile, tamanegiEntrypoint, guide, compose] = await Promise.all([
-    readFile(new URL("docker/origin/Dockerfile", repositoryRoot), "utf8"),
-    readFile(new URL("docker/origin/entrypoint.sh", repositoryRoot), "utf8"),
-    readFile(new URL("docker/origin/kptc-cron", repositoryRoot), "utf8"),
-    readFile(new URL("docker/tamanegi/Dockerfile", repositoryRoot), "utf8"),
-    readFile(new URL("docker/tamanegi/entrypoint.sh", repositoryRoot), "utf8"),
+  const [schedulerDockerfile, schedulerEntrypoint, schedulerCron, calenderDockerfile, calenderEntrypoint, guide, compose] = await Promise.all([
+    readFile(new URL("docker/origin/Scheduler/Dockerfile", repositoryRoot), "utf8"),
+    readFile(new URL("docker/origin/Scheduler/entrypoint.sh", repositoryRoot), "utf8"),
+    readFile(new URL("docker/origin/Scheduler/kptc-cron", repositoryRoot), "utf8"),
+    readFile(new URL("docker/origin/Calender/Dockerfile", repositoryRoot), "utf8"),
+    readFile(new URL("docker/origin/Calender/entrypoint.sh", repositoryRoot), "utf8"),
     readFile(new URL("docker/README.md", repositoryRoot), "utf8"),
     readFile(new URL("compose.origin-single.yaml", repositoryRoot), "utf8"),
   ]);
 
-  assert.match(originDockerfile, /FROM php:8\.4-apache-bookworm/);
-  assert.match(originDockerfile, /COPY 02_release\/origin\/ \/var\/www\/html\//);
-  assert.match(originDockerfile, /pdo_sqlite sqlite3/);
-  assert.match(originDockerfile, /VOLUME \["\/var\/lib\/kptc-scheduler"\]/);
-  assert.match(originEntrypoint, /KPTC_PORTAL_TOKEN_KEY/);
-  assert.match(originEntrypoint, /KPTC_PUBLIC_AVAILABILITY_SECRET/);
-  assert.match(originCron, /\*\/5 \* \* \* \*/);
-  assert.match(originCron, /0 22 \* \* \*/);
+  assert.match(schedulerDockerfile, /FROM php:8\.4-apache-bookworm/);
+  assert.match(schedulerDockerfile, /COPY 02_release\/origin\/Scheduler\/ \/var\/www\/html\//);
+  assert.match(schedulerDockerfile, /pdo_sqlite sqlite3/);
+  assert.match(schedulerDockerfile, /VOLUME \["\/var\/lib\/kptc-scheduler"\]/);
+  assert.match(schedulerEntrypoint, /KPTC_PORTAL_TOKEN_KEY/);
+  assert.match(schedulerEntrypoint, /KPTC_PUBLIC_AVAILABILITY_SECRET/);
+  assert.match(schedulerCron, /\*\/5 \* \* \* \*/);
+  assert.match(schedulerCron, /0 22 \* \* \*/);
 
-  assert.match(tamanegiDockerfile, /FROM php:8\.4-apache-bookworm/);
-  assert.match(tamanegiDockerfile, /COPY 02_release\/tamanegi\/ \/var\/www\/html\//);
-  assert.match(tamanegiDockerfile, /VOLUME \["\/var\/lib\/kptc-availability"\]/);
-  assert.match(tamanegiEntrypoint, /KPTC_PUBLIC_AVAILABILITY_SECRET/);
+  assert.match(calenderDockerfile, /FROM php:8\.4-apache-bookworm/);
+  assert.match(calenderDockerfile, /COPY 02_release\/origin\/Calender\/ \/var\/www\/html\//);
+  assert.match(calenderDockerfile, /VOLUME \["\/var\/lib\/kptc-availability"\]/);
+  assert.match(calenderEntrypoint, /KPTC_PUBLIC_AVAILABILITY_SECRET/);
   assert.match(guide, /compose\.origin-single\.yaml/);
   assert.match(guide, /リバースプロキシ/);
-  assert.match(compose, /dockerfile: docker\/origin\/Dockerfile/);
-  assert.match(compose, /dockerfile: docker\/tamanegi\/Dockerfile/);
+  assert.match(compose, /dockerfile: docker\/origin\/Scheduler\/Dockerfile/);
+  assert.match(compose, /dockerfile: docker\/origin\/Calender\/Dockerfile/);
   assert.match(compose, /127\.0\.0\.1:8080:80/);
   assert.match(compose, /127\.0\.0\.1:8081:80/);
   assert.match(compose, /kptc-internal/);

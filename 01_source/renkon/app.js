@@ -8,7 +8,7 @@ const schedulerLink = document.querySelector("#scheduler-link");
 const calendarLink = document.querySelector("#calendar-link");
 const schedulerDescription = schedulerLink.querySelector("small");
 
-calendarLink.href = config.calendarUrl || "../tamanegi/";
+calendarLink.href = config.calendarUrl || "../origin/Calender/";
 
 function disableSchedulerLink() {
   schedulerLink.href = "#";

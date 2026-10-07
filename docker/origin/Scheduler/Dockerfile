@@ -21,14 +21,14 @@ RUN apt-get update \
     && a2enmod headers \
     && rm -rf /var/lib/apt/lists/*
 
-COPY 02_release/origin/ /var/www/html/
-COPY docker/origin/apache-security.conf /etc/apache2/conf-available/kptc-security.conf
-COPY docker/origin/kptc-cron /etc/cron.d/kptc-origin
-COPY docker/origin/entrypoint.sh /usr/local/bin/kptc-origin-entrypoint
+COPY 02_release/origin/Scheduler/ /var/www/html/
+COPY docker/origin/Scheduler/apache-security.conf /etc/apache2/conf-available/kptc-security.conf
+COPY docker/origin/Scheduler/kptc-cron /etc/cron.d/kptc-scheduler
+COPY docker/origin/Scheduler/entrypoint.sh /usr/local/bin/kptc-scheduler-entrypoint
 
 RUN a2enconf kptc-security \
-    && chmod 0644 /etc/cron.d/kptc-origin \
-    && chmod 0755 /usr/local/bin/kptc-origin-entrypoint \
+    && chmod 0644 /etc/cron.d/kptc-scheduler \
+    && chmod 0755 /usr/local/bin/kptc-scheduler-entrypoint \
     && chown -R root:root /var/www/html \
     && find /var/www/html -type d -exec chmod 0755 {} + \
     && find /var/www/html -type f -exec chmod 0644 {} + \
@@ -41,5 +41,5 @@ EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1/)" = "403" || exit 1
 
-ENTRYPOINT ["/usr/local/bin/kptc-origin-entrypoint"]
+ENTRYPOINT ["/usr/local/bin/kptc-scheduler-entrypoint"]
 CMD ["apache2-foreground"]

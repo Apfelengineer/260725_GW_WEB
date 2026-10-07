@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require __DIR__ . '/../public/scheduler-backup.php';
+require __DIR__ . '/../origin/shared/public/scheduler-backup.php';
 
 function check(bool $ok, string $message): void { if (!$ok) throw new RuntimeException($message); }
 function mustFail(callable $action): void {

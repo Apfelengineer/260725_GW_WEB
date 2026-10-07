@@ -8,9 +8,9 @@ import { defineConfig } from "vite";
 const projectRoot = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig({
-  root: "sakura",
+  root: "origin",
   base: "./",
-  publicDir: "../public",
+  publicDir: "shared/public",
   plugins: [react()],
   build: {
     // メイン画面と試験室空き状況画面を、それぞれ独立したHTML入口として出力します。
@@ -18,8 +18,8 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        main: resolve(projectRoot, "sakura/index.html"),
-        reservations: resolve(projectRoot, "sakura/reservations.html"),
+        scheduler: resolve(projectRoot, "origin/Scheduler/index.html"),
+        calender: resolve(projectRoot, "origin/Calender/index.html"),
       },
     },
   },

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-require __DIR__ . '/../public/portal-access.php';
+require __DIR__ . '/../origin/shared/public/portal-access.php';
 require __DIR__ . '/../renkon/renkon-config.php';
 
 function check(bool $condition, string $message): void {

@@ -131,16 +131,17 @@ git switch main</code></pre>
         <pre class="tree"><code>/opt/kptc/260725_GW_WEB/
 ├── 01_source/                 開発用ソース
 ├── 02_release/
-│   ├── origin/               Schedulerのビルド後ファイル
-│   └── tamanegi/             Calenderのビルド後ファイル
+│   ├── origin/
+│   │   ├── Scheduler/        Schedulerのビルド後ファイル
+│   │   └── Calender/         Calenderのビルド後ファイル
+│   └── renkon/               模擬社内入口（検証時のみ）
 ├── docker/
 │   ├── origin/
-│   │   └── Dockerfile        Scheduler用（docker/origin/Dockerfile）
-│   └── tamanegi/
-│       └── Dockerfile        Calender用（docker/tamanegi/Dockerfile）
+│   │   ├── Scheduler/        Scheduler用Dockerfileと設定例
+│   │   └── Calender/         Calender用Dockerfileと設定例
 └── compose.origin-single.yaml 2つを一括管理する定義</code></pre>
-        <p><code>tamanegi</code>というリポジトリ内の名前は、従来資産との互換性のため残しています。稼働時の呼び名と公開パスは<code>Calender</code>です。</p>
-        <p>コンテナへ組み込む実行用ファイルは、Schedulerが<code>02_release/origin</code>、Calenderが<code>02_release/tamanegi</code>です。</p>
+        <p>コンテナへ組み込む実行用ファイルは、Schedulerが<code>02_release/origin/Scheduler</code>、Calenderが<code>02_release/origin/Calender</code>です。</p>
+        <p>Dockerfileは<code>docker/origin/Scheduler/Dockerfile</code>と<code>docker/origin/Calender/Dockerfile</code>です。</p>
       </section>
 
       <section id="install">
@@ -169,8 +170,8 @@ sudo docker compose version</code></pre>
         <h2>5. 実環境設定</h2>
         <h3>5-1. 設定ファイルを作る</h3>
         <pre><code>sudo install -d -m 700 /etc/kptc
-sudo cp docker/origin/origin.env.example /etc/kptc/scheduler.env
-sudo cp docker/tamanegi/tamanegi.env.example /etc/kptc/calendar.env
+sudo cp docker/origin/Scheduler/scheduler.env.example /etc/kptc/scheduler.env
+sudo cp docker/origin/Calender/calendar.env.example /etc/kptc/calendar.env
 sudo chmod 600 /etc/kptc/scheduler.env /etc/kptc/calendar.env
 sudo nano /etc/kptc/scheduler.env</code></pre>
         <h3>5-2. Scheduler側の値</h3>
@@ -360,7 +361,7 @@ sudo docker volume ls | grep kptc</code></pre>
         <table>
           <thead><tr><th>項目</th><th>旧構成</th><th>新構成</th></tr></thead>
           <tbody>
-            <tr><td>サーバー</td><td>originとtamanegiの2台</td><td>Originサーバー1台</td></tr>
+            <tr><td>サーバー</td><td>内部用・公開用の2台</td><td>Originサーバー1台</td></tr>
             <tr><td>公開パス</td><td>別ホストのルートURL</td><td><code>/Scheduler/</code>と<code>/Calender/</code></td></tr>
             <tr><td>ソース配置</td><td>各サーバーへ別々に取得</td><td><code>/opt/kptc/260725_GW_WEB</code>へ1回だけ取得</td></tr>
             <tr><td>起動方法</td><td>個別Dockerまたは別Compose</td><td><code>compose.origin-single.yaml</code>で一括管理</td></tr>
@@ -368,7 +369,7 @@ sudo docker volume ls | grep kptc</code></pre>
             <tr><td>保存領域</td><td>別サーバーの各ボリューム</td><td>同一ホスト上の別ボリューム</td></tr>
             <tr><td>アクセス制御</td><td>サーバー単位</td><td>管理者のリバースプロキシでパス単位</td></tr>
             <tr><td>リバースプロキシ</td><td>設定例を手順内で作成</td><td>本作業では作成せず、必要条件だけを記載</td></tr>
-            <tr><td>更新</td><td>tamanegiを先に更新し、その後origin</td><td>同じGitコミットから2コンテナを一括再構築</td></tr>
+            <tr><td>更新</td><td>別サーバーを順番に更新</td><td>同じGitコミットから2コンテナを一括再構築</td></tr>
           </tbody>
         </table>
       </section>

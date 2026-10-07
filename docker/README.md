@@ -15,8 +15,8 @@
 
 ```bash
 sudo install -d -m 700 /etc/kptc
-sudo cp docker/origin/origin.env.example /etc/kptc/scheduler.env
-sudo cp docker/tamanegi/tamanegi.env.example /etc/kptc/calendar.env
+sudo cp docker/origin/Scheduler/scheduler.env.example /etc/kptc/scheduler.env
+sudo cp docker/origin/Calender/calendar.env.example /etc/kptc/calendar.env
 sudo chmod 600 /etc/kptc/scheduler.env /etc/kptc/calendar.env
 sudo nano /etc/kptc/scheduler.env
 sudo nano /etc/kptc/calendar.env

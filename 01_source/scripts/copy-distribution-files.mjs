@@ -6,39 +6,39 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const target = process.argv[2];
 const distributions = {
-  origin: {
-    directory: "origin",
+  scheduler: {
+    directory: "origin/Scheduler",
     files: [
-      "public/api.php",
-      "public/runtime-config.php",
-      "public/auth.php",
-      "public/portal-access.php",
-      "public/scheduler-entry.php",
-      "public/availability-contract.php",
-      "public/availability-room-config.php",
-      "public/availability-json.php",
-      "public/availability-publisher.php",
-      "public/publish-availability-cli.php",
-      "public/monitor-availability-cli.php",
-      "public/manage-auth-user-cli.php",
-      "public/scheduler-backup.php",
-      "public/backup-scheduler-cli.php",
-      "public/restore-scheduler-cli.php",
-      "public/og.png",
+      "origin/shared/public/api.php",
+      "origin/shared/public/runtime-config.php",
+      "origin/shared/public/auth.php",
+      "origin/shared/public/portal-access.php",
+      "origin/shared/public/scheduler-entry.php",
+      "origin/shared/public/availability-contract.php",
+      "origin/shared/public/availability-room-config.php",
+      "origin/shared/public/availability-json.php",
+      "origin/shared/public/availability-publisher.php",
+      "origin/shared/public/publish-availability-cli.php",
+      "origin/shared/public/monitor-availability-cli.php",
+      "origin/shared/public/manage-auth-user-cli.php",
+      "origin/shared/public/scheduler-backup.php",
+      "origin/shared/public/backup-scheduler-cli.php",
+      "origin/shared/public/restore-scheduler-cli.php",
+      "origin/shared/public/og.png",
     ],
   },
-  tamanegi: {
-    directory: "tamanegi",
+  calender: {
+    directory: "origin/Calender",
     files: [
-      "public/runtime-config.php",
-      "public/availability-contract.php",
-      "public/receive-availability.php",
-      "public/public-availability.php",
-      "public/health-availability.php",
-      "public/technology-center-logo-white.png",
-      "public/m6.png",
-      "public/m7.png",
-      "public/m8.png",
+      "origin/shared/public/runtime-config.php",
+      "origin/shared/public/availability-contract.php",
+      "origin/shared/public/receive-availability.php",
+      "origin/shared/public/public-availability.php",
+      "origin/shared/public/health-availability.php",
+      "origin/shared/public/technology-center-logo-white.png",
+      "origin/shared/public/m6.png",
+      "origin/shared/public/m7.png",
+      "origin/shared/public/m8.png",
     ],
   },
   renkon: {
@@ -55,26 +55,19 @@ const distributions = {
   },
 };
 
-if (!(target in distributions)) throw new Error("origin、tamanegi または renkon を指定してください");
+if (!(target in distributions)) throw new Error("scheduler、calender または renkon を指定してください");
 const distribution = distributions[target];
 const destination = resolve(root, "../02_release", distribution.directory);
 if (distribution.clean) await rm(destination, { recursive: true, force: true });
 await mkdir(destination, { recursive: true });
 for (const source of distribution.files) await copyFile(resolve(root, source), resolve(destination, source.split("/").at(-1)));
 
-// originはPHP入口でトークンを検証してから画面を返すため、生成HTMLをindex.phpへ連結します。
-if (target === "origin") {
+// SchedulerはPHP入口でトークンを検証してから画面を返すため、生成HTMLをindex.phpへ連結します。
+if (target === "scheduler") {
   const generatedHtml = resolve(destination, "index.html");
   const entryTemplate = resolve(destination, "scheduler-entry.php");
   const [php, html] = await Promise.all([readFile(entryTemplate, "utf8"), readFile(generatedHtml, "utf8")]);
   await writeFile(resolve(destination, "index.php"), `${php}${html}`, "utf8");
   await unlink(generatedHtml);
   await unlink(entryTemplate);
-}
-
-// tamanegi側はディレクトリURLだけで表示できるようindex.htmlへ統一します。
-if (target === "tamanegi") {
-  const generatedHtml = resolve(destination, "reservations.html");
-  await copyFile(generatedHtml, resolve(destination, "index.html"));
-  await unlink(generatedHtml);
 }

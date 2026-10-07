@@ -4,41 +4,27 @@
 
 ## 配布先
 
-- `origin/`: 内部サーバーoriginのスケジューラー公開フォルダへ配置します。
-- originの`backup-scheduler-cli.php`と`restore-scheduler-cli.php`はCLI専用です。バックアップJSON本体はWeb公開領域外へ保存します。
-- `tamanegi/`: 外部サーバーtamanegiの空き状況公開フォルダへ配置します。
-- `renkon/`: 既存社内システムとの接続を試すための模擬サイトです。
-- `SHA256SUMS`: 配布ファイルが壊れたり、別の内容へ変わったりしていないか確認する一覧です。
+- `origin/Scheduler/`：Originサーバーの内部スケジューラ公開フォルダ
+- `origin/Calender/`：Originサーバーの公開カレンダー公開フォルダ
+- `renkon/`：既存社内システムとの接続を試す模擬サイト
+- `SHA256SUMS`：配布ファイルの破損・差替え確認用一覧
 
-`renkon/`は確認専用です。本番環境では社内システムがすでに存在するため、originや社内サーバーへ配置する必要はありません。既存社内システムには`open-scheduler.php`相当のトークン発行処理を組み込みます。検証先のスケジューラーURLは`renkon/renkon-config.php`または環境変数`KPTC_RENKON_SCHEDULER_URL`、カレンダーURLは`renkon/config.js`で設定します。
+`origin/Scheduler/index.php`は暗号化トークンを検証してから画面を返す入口です。`origin/Calender/index.html`は認証を必要としない公開カレンダーの入口です。SQLite、公開JSON、環境設定、秘密値、ログは含めません。
 
-originの入口はトークンを検証する`index.php`です。旧`index.html`は配置しません。tamanegiの入口は`index.html`に統一しており、旧`reservations.html`は不要です。
+`renkon/`は開発・確認専用です。本番では既存社内システムへ`open-scheduler.php`相当の処理を組み込むため、Originサーバーへ配置する必要はありません。
 
-## 再生成方法
-
-リポジトリの`01_source`へ移動し、次を実行します。
+## 再生成
 
 ```bash
+cd 01_source
 pnpm install
 pnpm run build
 pnpm run check
 pnpm test
 ```
 
-`pnpm run build`は`origin/`、`tamanegi/`、`renkon/`を作り直し、最後に`SHA256SUMS`を更新します。古いハッシュ名付きJavaScript・CSSは残りません。
-
-## 意図的に含めていないもの
-
-次のデータは機密情報またはサーバー固有データのため、GitHubへ保存しません。
-
-- SQLiteデータベースと利用者の予定
-- 実環境の`internal-env.php`と`public-env.php`
-- JSON連携用の共有秘密鍵
-- 最新の公開JSON
-- セッション、ログ、バックアップ
-
-さくらインターネット用`.user.ini`の例は`01_source/deploy/`に分離しています。Ubuntu 24.04のorigin・tamanegiでは、WebサーバーまたはPHP-FPMの設定で環境変数を指定してください。
+ビルドは`origin/Scheduler/`、`origin/Calender/`、`renkon/`を作り直し、最後に`SHA256SUMS`を更新します。古いハッシュ名付きJavaScript・CSSは残りません。
 
 ## 配置時の注意
 
-このフォルダだけでは完全には動作しません。PHP実行環境、Webサーバー、HTTPS、保存フォルダ、実環境設定が必要です。現在のデータを引き継ぐ場合は、内部サーバーへSQLiteデータベースも別途移行します。詳しくは`docs/KPTC_Scheduler_独立Linuxサーバー構築・移行手順書.pdf`を参照してください。
+このフォルダだけでは動作しません。PHP実行環境、Webサーバー、HTTPS、非公開の保存領域、実環境設定が必要です。さくら用`.user.ini`の例は`01_source/deploy/`、Docker用設定例は`docker/origin/`にあります。

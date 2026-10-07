@@ -7,12 +7,15 @@
   },
   "scripts": {
     "dev": "vite --config vite.dev.config.ts",
-    "build": "pnpm run build:origin && pnpm run build:tamanegi && pnpm run build:renkon && node scripts/write-release-manifest.mjs",
-    "build:origin": "vite build --config vite.origin.config.ts && node scripts/copy-distribution-files.mjs origin",
-    "build:tamanegi": "vite build --config vite.tamanegi.config.ts && node scripts/copy-distribution-files.mjs tamanegi",
+    "build": "pnpm run build:origin && pnpm run build:renkon && node scripts/write-release-manifest.mjs",
+    "build:origin": "pnpm run build:scheduler && pnpm run build:calender",
+    "build:scheduler": "vite build --config vite.scheduler.config.ts && node scripts/copy-distribution-files.mjs scheduler",
+    "build:calender": "vite build --config vite.calender.config.ts && node scripts/copy-distribution-files.mjs calender",
     "build:renkon": "node scripts/copy-distribution-files.mjs renkon",
     "test": "node --test tests/rendered-html.test.mjs",
     "test:backup": "php tests/scheduler-backup.test.php",
+    "test:token": "php tests/cbc-token.test.php",
+    "test:http": "node tests/cbc-http.test.mjs",
     "check": "tsc --noEmit"
   },
   "dependencies": {

@@ -3,7 +3,7 @@ services:
     container_name: kptc-calendar
     build:
       context: .
-      dockerfile: docker/tamanegi/Dockerfile
+      dockerfile: docker/origin/Calender/Dockerfile
     image: kptc-calendar:latest
     restart: unless-stopped
     env_file:
@@ -19,7 +19,7 @@ services:
     container_name: kptc-scheduler
     build:
       context: .
-      dockerfile: docker/origin/Dockerfile
+      dockerfile: docker/origin/Scheduler/Dockerfile
     image: kptc-scheduler:latest
     restart: unless-stopped
     depends_on:

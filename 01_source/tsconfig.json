@@ -14,11 +14,10 @@
     "types": ["node", "vite/client"]
   },
   "include": [
-    "app/**/*.ts",
-    "app/**/*.tsx",
-    "sakura/**/*.tsx",
+    "origin/**/*.ts",
+    "origin/**/*.tsx",
     "vite.dev.config.ts",
-    "vite.origin.config.ts",
-    "vite.tamanegi.config.ts"
+    "vite.scheduler.config.ts",
+    "vite.calender.config.ts"
   ]
 }
