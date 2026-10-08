@@ -648,23 +648,18 @@ sudo docker volume ls | grep kptc</code></pre>
       </section>
 
       <section id="changes">
-        <h2>14. 変更履歴（旧手順からの変更点一覧）</h2>
+        <h2>14. 変更履歴</h2>
+        <p>主要な変更を古い順に記載します。</p>
         <table>
-          <thead><tr><th>項目</th><th>旧構成・旧記載</th><th>現在の構成・記載</th></tr></thead>
+          <thead><tr><th>日付</th><th>変更内容</th></tr></thead>
           <tbody>
-            <tr><td>サーバー</td><td>内部用・公開用の2台</td><td>Originサーバー1台</td></tr>
-            <tr><td>公開パス</td><td>別ホストのルートURL</td><td><code>/Scheduler/</code>と<code>/Calendar/</code></td></tr>
-            <tr><td>ソース配置</td><td>各サーバーへ別々に取得</td><td><code>/opt/kptc/260725_GW_WEB</code>へ1回だけ取得</td></tr>
-            <tr><td>起動方法</td><td>個別Dockerまたは別Compose</td><td><code>compose.origin-single.yaml</code>で一括管理</td></tr>
-            <tr><td>JSON通信</td><td>サーバー間HTTPS</td><td>Docker内部ネットワークのHTTP＋署名検証</td></tr>
-            <tr><td>保存領域</td><td>別サーバーの各ボリューム</td><td>同一ホスト上の別ボリューム</td></tr>
-            <tr><td>アクセス制御</td><td>サーバー単位</td><td>管理者のリバースプロキシでパス単位</td></tr>
-            <tr><td>リバースプロキシ</td><td>設定例を手順内で作成</td><td>本作業では作成せず、必要条件だけを記載</td></tr>
-            <tr><td>更新</td><td>別サーバーを順番に更新</td><td>同じGitコミットから2コンテナを一括再構築</td></tr>
-            <tr><td>env設定</td><td>設定例だけを掲載</td><td>独自設定する変数の機能・生成方法・必須／任意を一覧化</td></tr>
-            <tr><td>HTTP／HTTPS切替</td><td>リバースプロキシ要件のみ</td><td>envの変更前後、コンテナ再作成、証明書・ポート・確認方法を追記</td></tr>
-            <tr><td>表の表示</td><td>長い変数名やURLが本文幅を超える場合あり</td><td>列幅固定とセル内折り返しで白い本文領域内に収容</td></tr>
-            <tr><td>用語集</td><td>基本用語15語</td><td>Dockerイメージ、暗号・通信、Gitなどの専門用語を追加</td></tr>
+            <tr><td>2026-09-08</td><td>内部用・外部用の別サーバー構成を前提としたDocker構築手順を作成。</td></tr>
+            <tr><td>2026-09-09</td><td>Docker Composeによる構築と、ブラウザで利用開始するまでの確認手順を追加。</td></tr>
+            <tr><td>2026-10-03</td><td>本番環境の更新、動作確認、問題発生時の復旧手順を追加。</td></tr>
+            <tr><td>2026-10-08</td><td>SchedulerとCalendarをOriginサーバー1台の別コンテナで動かす構成へ変更。</td></tr>
+            <tr><td>2026-10-08</td><td>詳細論理構成図、保存領域の分離、公開パスとCalendar表記を更新。</td></tr>
+            <tr><td>2026-10-08</td><td>env変数の設定一覧と、HTTP／HTTPSの切替手順を追加。</td></tr>
+            <tr><td>2026-10-08</td><td>表の幅と折り返しを調整し、用語集を拡充。変更履歴を時系列表示へ変更。</td></tr>
           </tbody>
         </table>
       </section>
