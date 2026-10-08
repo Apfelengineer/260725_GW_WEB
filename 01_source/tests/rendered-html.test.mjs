@@ -199,7 +199,18 @@ test("システム資料を同梱する", async () => {
   assert.match(dockerGuide, /up -d --no-build --force-recreate/);
   assert.match(dockerGuide, /<section id="changes">/);
   assert.match(dockerGuide, /リバースプロキシの導入・設定変更はサーバー管理者が別途実施/);
+  assert.ok(dockerGuide.indexOf('<section id="glossary">') < dockerGuide.indexOf('<section id="changes">'));
+  assert.ok(dockerGuide.indexOf('<section id="changes">') > dockerGuide.indexOf('<section id="trouble">'));
+  assert.match(dockerGuide, /14\. 変更履歴/);
   const glossary = dockerGuide.slice(dockerGuide.indexOf('<section id="glossary">'), dockerGuide.indexOf('</section>', dockerGuide.indexOf('<section id="glossary">')));
+  assert.match(glossary, /イメージ（Dockerイメージ）/);
+  assert.match(glossary, /Dockerfile/);
+  assert.match(glossary, /HMAC-SHA256署名/);
+  assert.match(glossary, /ヘルスチェック/);
+  assert.match(glossary, /127\.0\.0\.1/);
+  assert.match(glossary, /HTTPヘッダー/);
+  assert.match(glossary, /チェックサム/);
+  assert.match(glossary, /コミット/);
   assert.doesNotMatch(glossary, /(?:です|ます|ません)。<\/td>/);
 });
 

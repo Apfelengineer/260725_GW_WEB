@@ -104,8 +104,8 @@
         <li><a href="#update">更新・復旧・バックアップ</a></li>
         <li><a href="#browser-ready">ブラウザ利用開始まで</a></li>
         <li><a href="#trouble">困ったとき</a></li>
-        <li><a href="#changes">旧手順からの変更点</a></li>
         <li><a href="#glossary">用語集</a></li>
+        <li><a href="#changes">変更履歴</a></li>
       </ol>
     </nav>
 
@@ -576,10 +576,81 @@ sudo docker network inspect kptc-internal
 sudo docker volume ls | grep kptc</code></pre>
       </section>
 
-      <section id="changes">
-        <h2>13. 旧手順からの変更点一覧</h2>
+      <section id="glossary">
+        <h2>13. 用語集</h2>
         <table>
-          <thead><tr><th>項目</th><th>旧構成</th><th>新構成</th></tr></thead>
+          <thead><tr><th>用語</th><th>やさしい説明</th></tr></thead>
+          <tbody>
+            <tr><td>Originサーバー</td><td>SchedulerとCalendarを置く1台のLinuxコンピューター。</td></tr>
+            <tr><td>Linux</td><td>サーバーで広く使われる、コンピューターを動かす基本ソフトウェア。</td></tr>
+            <tr><td>Ubuntu</td><td>Linuxを利用しやすい形にまとめた種類の一つ。</td></tr>
+            <tr><td>PHP</td><td>サーバー側で予定の保存やJSON連携などを処理するプログラム言語。</td></tr>
+            <tr><td>Apache</td><td>ブラウザや別プログラムからのHTTP通信を受け取るWebサーバーソフトウェア。</td></tr>
+            <tr><td>Scheduler</td><td>社内で予定を登録・編集する画面と処理のまとまり。</td></tr>
+            <tr><td>Calendar</td><td>公開可能な試験室の空き状況だけを表示する画面と処理のまとまり。</td></tr>
+            <tr><td>Docker</td><td>必要なプログラムと設定を箱のようにまとめて動かす仕組み。</td></tr>
+            <tr><td>コンテナ</td><td>Dockerが動かす、ほかと区切られたプログラムの箱。</td></tr>
+            <tr><td>イメージ（Dockerイメージ）</td><td>コンテナを作るために、プログラムや設定をひとまとめにしたひな型。</td></tr>
+            <tr><td>Dockerfile</td><td>Dockerイメージの材料と組み立て方を書いた手順書。</td></tr>
+            <tr><td>Docker Compose</td><td>複数の箱を1枚の設定表でまとめて起動・停止する仕組み。</td></tr>
+            <tr><td>Compose定義</td><td>起動するコンテナ、通信路、保存場所などをまとめた設定表。</td></tr>
+            <tr><td>Dockerボリューム</td><td>箱を作り直してもデータを残すための専用保存場所。</td></tr>
+            <tr><td>ビルド</td><td>ソースファイルから配布用ファイルやDockerイメージを作る作業。</td></tr>
+            <tr><td>タグ</td><td>Dockerイメージの版や用途を見分けるために付ける名前札。</td></tr>
+            <tr><td>ロールバック</td><td>更新後に問題が起きたとき、以前の正常な状態へ戻す作業。</td></tr>
+            <tr><td>内部ネットワーク</td><td>同じサーバー内のコンテナ同士だけが話すための閉じた通信路。</td></tr>
+            <tr><td>リバースプロキシ</td><td>外から来た通信を、URLの道筋に合わせて内側の処理へ渡す受付。</td></tr>
+            <tr><td>IP制御</td><td>接続元の番号を見て、通す相手と拒む相手を分ける決まり。</td></tr>
+            <tr><td>ポート</td><td>1台のコンピューター内で通信の行き先を分ける受付番号。</td></tr>
+            <tr><td>ファイアウォール</td><td>通信の入口を見張り、許可した通信だけを通す仕組み。</td></tr>
+            <tr><td>ホスト名</td><td>ネットワーク上のコンピューターを人が読みやすい名前で示したもの。</td></tr>
+            <tr><td>IPアドレス</td><td>ネットワーク上のコンピューターや通信相手を見分けるための番号。</td></tr>
+            <tr><td>127.0.0.1</td><td>同じコンピューター自身だけを指し、外部から直接接続できない特別なIPアドレス。</td></tr>
+            <tr><td>名前解決</td><td>ホスト名から、通信に必要なIPアドレスを調べる処理。</td></tr>
+            <tr><td>URL</td><td>WebページやAPIの場所を示す住所。</td></tr>
+            <tr><td>ディレクトリ</td><td>ファイルを目的別にまとめる入れ物で、一般的な「フォルダ」と同じ意味。</td></tr>
+            <tr><td>SQLite</td><td>予定や利用者を1つのファイルへ整理して保存するデータベース。</td></tr>
+            <tr><td>JSON</td><td>名前と値の組を文字で表す、機械が読みやすいデータ形式。</td></tr>
+            <tr><td>envファイル</td><td>環境変数を「名前＝値」の形でまとめて保存する設定ファイル。</td></tr>
+            <tr><td>環境変数</td><td>秘密値やURLなどをプログラム本体の外から渡す設定値。</td></tr>
+            <tr><td>HTTP</td><td>ブラウザやプログラムがWebサーバーと情報をやり取りする通信方式。</td></tr>
+            <tr><td>HTTPS</td><td>ブラウザとサーバーの間を暗号化する通信方式。</td></tr>
+            <tr><td>HTTPヘッダー</td><td>通信するデータに添える、送信元や通信方法などの付加情報。</td></tr>
+            <tr><td>クエリ文字列</td><td>URLの末尾に「?」から続けて付ける、Webサーバーへ渡す追加情報。</td></tr>
+            <tr><td>リダイレクト</td><td>アクセスしたURLから別のURLへ自動的に案内する処理。</td></tr>
+            <tr><td>TLS</td><td>HTTPSで通信内容を暗号化し、接続先が正しいことを確かめる仕組み。</td></tr>
+            <tr><td>サーバー証明書</td><td>接続先のWebサーバーが本物であることを示す電子的な証明書。</td></tr>
+            <tr><td>秘密鍵</td><td>暗号化や本人確認に使う、外部へ見せてはいけない文字列やデータ。</td></tr>
+            <tr><td>API</td><td>別のプログラムから決められた方法で機能やデータを利用するための窓口。</td></tr>
+            <tr><td>HMAC-SHA256署名</td><td>共有した秘密値を使い、JSONが正しい送信元から届き、途中で書き換えられていないことを確かめる印。</td></tr>
+            <tr><td>トークン</td><td>利用者やアクセスの正しさを確認するため、通信時に渡す一時的な証明情報。</td></tr>
+            <tr><td>CBC方式</td><td>前の暗号化結果を次の処理へつなげながら、データを順番に暗号化する方法。</td></tr>
+            <tr><td>Base64</td><td>文字以外を含むデータを、通信しやすい英数字の並びに変える表し方。</td></tr>
+            <tr><td>IV</td><td>同じ内容を暗号化しても毎回違う結果にするため、暗号化の最初に加える値。</td></tr>
+            <tr><td>UTC</td><td>国や地域の時差に左右されない、世界共通の基準時刻。</td></tr>
+            <tr><td>Cookie</td><td>同じ利用者からの続きの操作だと見分けるため、ブラウザが一時保存する小さな情報。</td></tr>
+            <tr><td>セッション</td><td>利用者がページへ入ってから操作を終えるまでの一連の利用状態。</td></tr>
+            <tr><td>HTTP 403</td><td>サーバーへ到達したものの、アクセスを許可できないことを示す応答番号。</td></tr>
+            <tr><td>ヘルスチェック</td><td>コンテナや連携処理が正常に動いているかを定期的に確かめる確認。</td></tr>
+            <tr><td>ログ</td><td>プログラムの動作やエラーを時刻とともに残した記録。</td></tr>
+            <tr><td>キャッシュ</td><td>表示や処理を速くするため、以前の結果を一時的に保存したもの。</td></tr>
+            <tr><td>コマンド</td><td>文字を入力してコンピューターへ処理を指示する命令。</td></tr>
+            <tr><td>sudo</td><td>管理者だけに許された処理を、一時的な管理者権限で実行する命令。</td></tr>
+            <tr><td>cron</td><td>決めた時刻や間隔でコマンドを自動実行する仕組み。</td></tr>
+            <tr><td>チェックサム</td><td>ファイルが壊れたり書き換わったりしていないかを照合するための短い計算値。</td></tr>
+            <tr><td>リポジトリ</td><td>ソースファイルとその変更履歴をひとまとめに管理する保管場所。</td></tr>
+            <tr><td>Git</td><td>ファイルの変更内容と履歴を記録し、以前の状態も確認できる仕組み。</td></tr>
+            <tr><td>GitHub</td><td>Gitで管理するファイルと変更履歴を、ネットワーク上で共有するサービス。</td></tr>
+            <tr><td>コミット</td><td>ひとまとまりの変更を、説明とともにGitの履歴へ記録したもの。</td></tr>
+            <tr><td>main</td><td>本番へ反映する基準として使うGitの中心的な変更系列。</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="changes">
+        <h2>14. 変更履歴（旧手順からの変更点一覧）</h2>
+        <table>
+          <thead><tr><th>項目</th><th>旧構成・旧記載</th><th>現在の構成・記載</th></tr></thead>
           <tbody>
             <tr><td>サーバー</td><td>内部用・公開用の2台</td><td>Originサーバー1台</td></tr>
             <tr><td>公開パス</td><td>別ホストのルートURL</td><td><code>/Scheduler/</code>と<code>/Calendar/</code></td></tr>
@@ -592,30 +663,8 @@ sudo docker volume ls | grep kptc</code></pre>
             <tr><td>更新</td><td>別サーバーを順番に更新</td><td>同じGitコミットから2コンテナを一括再構築</td></tr>
             <tr><td>env設定</td><td>設定例だけを掲載</td><td>独自設定する変数の機能・生成方法・必須／任意を一覧化</td></tr>
             <tr><td>HTTP／HTTPS切替</td><td>リバースプロキシ要件のみ</td><td>envの変更前後、コンテナ再作成、証明書・ポート・確認方法を追記</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section id="glossary">
-        <h2>14. 用語集</h2>
-        <table>
-          <thead><tr><th>用語</th><th>やさしい説明</th></tr></thead>
-          <tbody>
-            <tr><td>Originサーバー</td><td>SchedulerとCalendarを置く1台のLinuxコンピューター。</td></tr>
-            <tr><td>Scheduler</td><td>社内で予定を登録・編集する画面と処理のまとまり。</td></tr>
-            <tr><td>Calendar</td><td>公開可能な試験室の空き状況だけを表示する画面と処理のまとまり。</td></tr>
-            <tr><td>Docker</td><td>必要なプログラムと設定を箱のようにまとめて動かす仕組み。</td></tr>
-            <tr><td>コンテナ</td><td>Dockerが動かす、ほかと区切られたプログラムの箱。</td></tr>
-            <tr><td>Docker Compose</td><td>複数の箱を1枚の設定表でまとめて起動・停止する仕組み。</td></tr>
-            <tr><td>Dockerボリューム</td><td>箱を作り直してもデータを残すための専用保存場所。</td></tr>
-            <tr><td>内部ネットワーク</td><td>同じサーバー内のコンテナ同士だけが話すための閉じた通信路。</td></tr>
-            <tr><td>リバースプロキシ</td><td>外から来た通信を、URLの道筋に合わせて内側の処理へ渡す受付。</td></tr>
-            <tr><td>IP制御</td><td>接続元の番号を見て、通す相手と拒む相手を分ける決まり。</td></tr>
-            <tr><td>SQLite</td><td>予定や利用者を1つのファイルへ整理して保存するデータベース。</td></tr>
-            <tr><td>JSON</td><td>名前と値の組を文字で表す、機械が読みやすいデータ形式。</td></tr>
-            <tr><td>環境変数</td><td>秘密値やURLをプログラム本体の外から渡す設定値。</td></tr>
-            <tr><td>HTTPS</td><td>ブラウザとサーバーの間を暗号化する通信方式。</td></tr>
-            <tr><td>Cookie</td><td>同じ利用者からの続きの操作だと見分けるため、ブラウザが一時保存する小さな情報。</td></tr>
+            <tr><td>表の表示</td><td>長い変数名やURLが本文幅を超える場合あり</td><td>列幅固定とセル内折り返しで白い本文領域内に収容</td></tr>
+            <tr><td>用語集</td><td>基本用語15語</td><td>Dockerイメージ、暗号・通信、Gitなどの専門用語を追加</td></tr>
           </tbody>
         </table>
       </section>
