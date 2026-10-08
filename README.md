@@ -12,7 +12,7 @@ PHP APIと内部用SQLiteへデータを保存するため、別端末・別ブ�
 - `02_release/origin/Scheduler/`: OriginサーバーのScheduler配下へ配置する完成物
 - `02_release/origin/Calendar/`: OriginサーバーのCalendar配下へ配置する完成物
 - `02_release/renkon/`: 社内システムからの接続を試す模擬サイト（開発・確認専用）
-- `docs/`: 仕様書、構築手順書、ファイル関係図
+- `docs/`: 専門外の方向けDocker構築手順書（HTML）
 - `docker/origin/Scheduler/`・`docker/origin/Calendar/`: Origin上の2コンテナ用Dockerfileと設定例
 
 ビルド前とビルド後を明確に分離しています。`02_release`にはデータベース、実環境設定、秘密鍵、公開JSON、ログを含めません。
@@ -21,10 +21,6 @@ DockerでOrigin単一サーバーへ構築する場合は、[Docker構築手順]
 
 ## システム資料
 
-- [現行アプリケーション仕様書（PDF）](docs/KPTC_Scheduler_現行アプリケーション仕様書.pdf)
-- [独立Linuxサーバー構築・移行手順書（PDF）](docs/KPTC_Scheduler_独立Linuxサーバー構築・移行手順書.pdf)
-- [ファイル機能・役割一覧とファイル間関係図（PDF）](docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf)
-- [スケジューラ操作マニュアル（PDF）](docs/KPTC_Scheduler_操作マニュアル.pdf)
 - [専門外の方向けDocker構築手順書（HTML）](docs/KPTC_Scheduler_Docker構築手順書.html)
 
 ## 実装済み

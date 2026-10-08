@@ -147,10 +147,14 @@ test("共有用画像を同梱する", async () => {
 });
 
 test("システム資料を同梱する", async () => {
-  await access(new URL("docs/KPTC_Scheduler_現行アプリケーション仕様書.pdf", repositoryRoot));
-  await access(new URL("docs/KPTC_Scheduler_独立Linuxサーバー構築・移行手順書.pdf", repositoryRoot));
-  await access(new URL("docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf", repositoryRoot));
   const dockerGuide = await readFile(new URL("docs/KPTC_Scheduler_Docker構築手順書.html", repositoryRoot), "utf8");
+  await assert.rejects(access(new URL("docs/KPTC_Scheduler_現行アプリケーション仕様書.pdf", repositoryRoot)));
+  await assert.rejects(access(new URL("docs/KPTC_Scheduler_独立Linuxサーバー構築・移行手順書.pdf", repositoryRoot)));
+  await assert.rejects(access(new URL("docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf", repositoryRoot)));
+  await assert.rejects(access(new URL("docs/KPTC_Scheduler_操作マニュアル.pdf", repositoryRoot)));
+  await assert.rejects(access(new URL("docs/assets", repositoryRoot)));
+  await assert.rejects(access(new URL("01_source/scripts/build-system-docs.py", repositoryRoot)));
+  await assert.rejects(access(new URL("01_source/scripts/build-operation-manual.py", repositoryRoot)));
   assert.match(dockerGuide, /docker\/origin\/Scheduler\/Dockerfile/);
   assert.match(dockerGuide, /docker\/origin\/Calendar\/Dockerfile/);
   assert.match(dockerGuide, /02_release\/origin\/Scheduler/);
