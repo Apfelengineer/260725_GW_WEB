@@ -45,6 +45,9 @@
     .config-table col:nth-child(2) { width:25%; }
     .config-table col:nth-child(3) { width:36%; }
     .config-table col:nth-child(4) { width:16%; }
+    .history-table col:nth-child(1) { width:17%; }
+    .history-table col:nth-child(2) { width:83%; }
+    .history-table td:first-child { white-space:nowrap; font-variant-numeric:tabular-nums; }
     ul,ol { padding-left:1.5rem; }
     li+li { margin-top:.25rem; }
     .flow { display:grid; grid-template-columns:1fr 55px 1fr 55px 1fr; gap:8px; align-items:stretch; margin:20px 0; }
@@ -77,7 +80,7 @@
     .checklist { list-style:none; padding-left:0; }
     .checklist li::before { content:"□"; margin-right:.5rem; color:var(--blue); font-weight:700; }
     footer { max-width:1120px; margin:-45px auto 40px; padding:0 20px; color:var(--muted); font-size:.9rem; }
-    @media(max-width:860px){ main{display:block} nav{position:static;max-height:none;margin-bottom:24px} section{padding:23px 20px}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.config-table{font-size:.8rem}.config-table th,.config-table td{padding:6px} }
+    @media(max-width:860px){ main{display:block} nav{position:static;max-height:none;margin-bottom:24px} section{padding:23px 20px}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.config-table{font-size:.8rem}.config-table th,.config-table td{padding:6px}.history-table col:nth-child(1){width:29%}.history-table col:nth-child(2){width:71%} }
     @media print { body{background:#fff;font-size:10.5pt} header{padding:22mm 16mm} main{display:block;max-width:none;padding:10mm 12mm} nav{display:none} section{border:0;box-shadow:none;padding:0;break-before:page} section:first-child{break-before:auto} pre{white-space:pre-wrap;word-break:break-all} a{color:inherit;text-decoration:none} footer{margin:0}.logic-diagram{overflow:visible}.logic-diagram svg{min-width:0}.diagram-legend{font-size:8.5pt} }
   </style>
 </head>
@@ -650,7 +653,8 @@ sudo docker volume ls | grep kptc</code></pre>
       <section id="changes">
         <h2>14. 変更履歴</h2>
         <p>主要な変更を古い順に記載します。</p>
-        <table>
+        <table class="history-table">
+          <colgroup><col><col></colgroup>
           <thead><tr><th>日付</th><th>変更内容</th></tr></thead>
           <tbody>
             <tr><td>2026-09-08</td><td>内部用・外部用の別サーバー構成を前提としたDocker構築手順を作成。</td></tr>
@@ -659,7 +663,7 @@ sudo docker volume ls | grep kptc</code></pre>
             <tr><td>2026-10-08</td><td>SchedulerとCalendarをOriginサーバー1台の別コンテナで動かす構成へ変更。</td></tr>
             <tr><td>2026-10-08</td><td>詳細論理構成図、保存領域の分離、公開パスとCalendar表記を更新。</td></tr>
             <tr><td>2026-10-08</td><td>env変数の設定一覧と、HTTP／HTTPSの切替手順を追加。</td></tr>
-            <tr><td>2026-10-08</td><td>表の幅と折り返しを調整し、用語集を拡充。変更履歴を時系列表示へ変更。</td></tr>
+            <tr><td>2026-10-08</td><td>Docker、通信、暗号、Gitなどの専門用語を用語集へ追加。</td></tr>
             <tr><td>2026-10-08</td><td>使用を終了したPDF資料、専用画像、PDF生成処理を削除し、資料を本HTMLへ一本化。</td></tr>
           </tbody>
         </table>

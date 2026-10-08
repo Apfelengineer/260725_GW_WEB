@@ -207,10 +207,13 @@ test("システム資料を同梱する", async () => {
   assert.ok(dockerGuide.indexOf('<section id="changes">') > dockerGuide.indexOf('<section id="trouble">'));
   assert.match(dockerGuide, /14\. 変更履歴/);
   const changes = dockerGuide.slice(dockerGuide.indexOf('<section id="changes">'), dockerGuide.indexOf('</section>', dockerGuide.indexOf('<section id="changes">')));
+  assert.match(dockerGuide, /\.history-table col:nth-child\(1\) \{ width:17%; \}/);
+  assert.match(changes, /<table class="history-table">/);
   assert.match(changes, /<th>日付<\/th><th>変更内容<\/th>/);
   assert.match(changes, /主要な変更を古い順に記載/);
   assert.ok(changes.indexOf('2026-09-08') < changes.indexOf('2026-10-08'));
   assert.doesNotMatch(changes, /旧構成・旧記載/);
+  assert.doesNotMatch(changes, /表の幅と折り返し/);
   const glossary = dockerGuide.slice(dockerGuide.indexOf('<section id="glossary">'), dockerGuide.indexOf('</section>', dockerGuide.indexOf('<section id="glossary">')));
   assert.match(glossary, /イメージ（Dockerイメージ）/);
   assert.match(glossary, /Dockerfile/);
