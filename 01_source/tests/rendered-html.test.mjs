@@ -216,6 +216,10 @@ test("システム資料を同梱する", async () => {
   assert.doesNotMatch(changes, /表の幅と折り返し/);
   const glossary = dockerGuide.slice(dockerGuide.indexOf('<section id="glossary">'), dockerGuide.indexOf('</section>', dockerGuide.indexOf('<section id="glossary">')));
   assert.match(glossary, /イメージ（Dockerイメージ）/);
+  assert.match(dockerGuide, /\.glossary-table col:nth-child\(1\) \{ width:28%; \}/);
+  assert.match(glossary, /<table class="glossary-table">/);
+  assert.match(glossary, /<th>用語<\/th><th>解説<\/th>/);
+  assert.doesNotMatch(glossary, /やさしい説明/);
   assert.match(glossary, /Dockerfile/);
   assert.match(glossary, /HMAC-SHA256署名/);
   assert.match(glossary, /ヘルスチェック/);
