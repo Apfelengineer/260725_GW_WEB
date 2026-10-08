@@ -35,9 +35,16 @@
     code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#edf1f4; border-radius:4px; padding:.1em .35em; }
     pre { overflow-x:auto; padding:17px 18px; color:#e8f1f6; background:var(--code); border-radius:9px; line-height:1.55; font-size:.9rem; }
     pre code { color:inherit; background:none; padding:0; }
-    table { width:100%; border-collapse:collapse; margin:16px 0; font-size:.95rem; }
-    th,td { padding:10px 12px; border:1px solid var(--line); vertical-align:top; text-align:left; }
+    table { width:100%; max-width:100%; table-layout:fixed; border-collapse:collapse; margin:16px 0; font-size:.95rem; }
+    th,td { padding:10px 12px; border:1px solid var(--line); vertical-align:top; text-align:left; overflow-wrap:anywhere; }
     th { color:var(--navy); background:#eaf2f7; }
+    th code,td code { white-space:normal; overflow-wrap:anywhere; word-break:break-word; }
+    .config-table { font-size:.88rem; line-height:1.65; }
+    .config-table th,.config-table td { padding:8px 9px; }
+    .config-table col:nth-child(1) { width:23%; }
+    .config-table col:nth-child(2) { width:25%; }
+    .config-table col:nth-child(3) { width:36%; }
+    .config-table col:nth-child(4) { width:16%; }
     ul,ol { padding-left:1.5rem; }
     li+li { margin-top:.25rem; }
     .flow { display:grid; grid-template-columns:1fr 55px 1fr 55px 1fr; gap:8px; align-items:stretch; margin:20px 0; }
@@ -70,7 +77,7 @@
     .checklist { list-style:none; padding-left:0; }
     .checklist li::before { content:"□"; margin-right:.5rem; color:var(--blue); font-weight:700; }
     footer { max-width:1120px; margin:-45px auto 40px; padding:0 20px; color:var(--muted); font-size:.9rem; }
-    @media(max-width:860px){ main{display:block} nav{position:static;max-height:none;margin-bottom:24px} section{padding:23px 20px}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg)} }
+    @media(max-width:860px){ main{display:block} nav{position:static;max-height:none;margin-bottom:24px} section{padding:23px 20px}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.config-table{font-size:.8rem}.config-table th,.config-table td{padding:6px} }
     @media print { body{background:#fff;font-size:10.5pt} header{padding:22mm 16mm} main{display:block;max-width:none;padding:10mm 12mm} nav{display:none} section{border:0;box-shadow:none;padding:0;break-before:page} section:first-child{break-before:auto} pre{white-space:pre-wrap;word-break:break-all} a{color:inherit;text-decoration:none} footer{margin:0}.logic-diagram{overflow:visible}.logic-diagram svg{min-width:0}.diagram-legend{font-size:8.5pt} }
   </style>
 </head>
@@ -338,7 +345,8 @@ KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800</code></pre>
 
         <h3>5-4. 環境ごとに決める変数</h3>
         <p>次の表は、<code>/etc/kptc/scheduler.env</code>と<code>/etc/kptc/calendar.env</code>で利用者が決める値、または必要に応じて変更できる値です。コマンドで秘密値を生成した場合、envファイルへコマンド自体を書かず、表示された文字列だけを貼り付けます。</p>
-        <table>
+        <table class="config-table">
+          <colgroup><col><col><col><col></colgroup>
           <thead><tr><th>変数名</th><th>機能</th><th>設定方法・例</th><th>必須／任意</th></tr></thead>
           <tbody>
             <tr><td><code>KPTC_PORTAL_TOKEN_KEY</code></td><td>社内システムが発行するCBC暗号化tokenをSchedulerが復号するための元鍵。プログラムが末尾へUTC当日の日付を付けて日ごとの鍵を作る。</td><td><code>openssl rand -hex 32</code>で生成し、社内システム側とScheduler側へ同じ文字列を設定。日付は手入力しない。</td><td><strong>必須</strong></td></tr>
@@ -357,7 +365,8 @@ KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800</code></pre>
           </tbody>
         </table>
         <p>次の保存先変数はDockerfileで設定済みです。保存先を別Volumeへ変更する場合に限り上書きします。</p>
-        <table>
+        <table class="config-table">
+          <colgroup><col><col><col><col></colgroup>
           <thead><tr><th>変数名</th><th>既定値</th><th>用途</th><th>必須／任意</th></tr></thead>
           <tbody>
             <tr><td><code>KPTC_INTERNAL_SCHEDULER_DB</code></td><td><code>/var/lib/kptc-scheduler/group-watcher.sqlite</code></td><td>SchedulerのSQLite保存先。</td><td>任意（高度な設定）</td></tr>

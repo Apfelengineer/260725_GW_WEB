@@ -163,6 +163,9 @@ test("システム資料を同梱する", async () => {
   assert.match(dockerGuide, /KPTC_SESSION_COOKIE_PATH=\/Scheduler\//);
   assert.match(dockerGuide, /http:\/\/kptc-calendar\/receive-availability\.php/);
   assert.match(dockerGuide, /5-4\. 環境ごとに決める変数/);
+  assert.match(dockerGuide, /table-layout:fixed/);
+  assert.match(dockerGuide, /overflow-wrap:anywhere/);
+  assert.match(dockerGuide, /<table class="config-table">/);
   assert.match(dockerGuide, /KPTC_RENKON_SCHEDULER_URL/);
   assert.match(dockerGuide, /openssl rand -hex 32/);
   assert.match(dockerGuide, /KPTC_PUBLIC_AVAILABILITY_MODE/);
