@@ -314,10 +314,13 @@ sudo chmod 600 /etc/kptc/scheduler.env /etc/kptc/calendar.env
 sudo nano /etc/kptc/scheduler.env</code></pre>
         <h3>5-2. Scheduler側の値</h3>
         <pre><code>KPTC_PORTAL_TOKEN_KEY=社内入口と共通の十分に長い固定文字列
+KPTC_PUBLIC_AVAILABILITY_MODE=https
 KPTC_PUBLIC_AVAILABILITY_ENDPOINT=http://kptc-calendar/receive-availability.php
 KPTC_PUBLIC_AVAILABILITY_PAGE_URL=https://origin.example.jp/Calendar/
 KPTC_PUBLIC_AVAILABILITY_SECRET=32文字以上のランダムな共通秘密値
 KPTC_PUBLIC_AVAILABILITY_ALLOW_HTTP=1
+KPTC_PUBLIC_AVAILABILITY_TIMEOUT=10
+KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800
 KPTC_SESSION_COOKIE_SECURE=1
 KPTC_SESSION_COOKIE_PATH=/Scheduler/
 KPTC_AUTH_IDLE_TIMEOUT=1800
@@ -332,13 +335,83 @@ KPTC_AUTH_ABSOLUTE_TIMEOUT=43200</code></pre>
         <pre><code>KPTC_PUBLIC_AVAILABILITY_SECRET=Scheduler側と同じ32文字以上の秘密値
 KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800</code></pre>
         <p class="checkpoint">2つの設定ファイルで<code>KPTC_PUBLIC_AVAILABILITY_SECRET</code>が完全一致し、どちらにも<code>REPLACE_</code>が残っていないことを確認します。</p>
+
+        <h3>5-4. 環境ごとに決める変数</h3>
+        <p>次の表は、<code>/etc/kptc/scheduler.env</code>と<code>/etc/kptc/calendar.env</code>で利用者が決める値、または必要に応じて変更できる値です。コマンドで秘密値を生成した場合、envファイルへコマンド自体を書かず、表示された文字列だけを貼り付けます。</p>
+        <table>
+          <thead><tr><th>変数名</th><th>機能</th><th>設定方法・例</th><th>必須／任意</th></tr></thead>
+          <tbody>
+            <tr><td><code>KPTC_PORTAL_TOKEN_KEY</code></td><td>社内システムが発行するCBC暗号化tokenをSchedulerが復号するための元鍵。プログラムが末尾へUTC当日の日付を付けて日ごとの鍵を作る。</td><td><code>openssl rand -hex 32</code>で生成し、社内システム側とScheduler側へ同じ文字列を設定。日付は手入力しない。</td><td><strong>必須</strong></td></tr>
+            <tr><td><code>KPTC_RENKON_SCHEDULER_URL</code></td><td>既存社内システムまたは検証用renkonがtoken付きで移動するSchedulerのURL。</td><td><code>https://origin.example.jp/Scheduler/</code>。既存社内システム側の設定として、実際のホスト名と公開パスを指定。</td><td>社内入口側で<strong>必須</strong></td></tr>
+            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_SECRET</code></td><td>SchedulerからCalendarへ送る3か月JSONのHMAC-SHA256署名と検証に使う共有秘密値。</td><td><code>openssl rand -hex 32</code>で生成し、<code>scheduler.env</code>と<code>calendar.env</code>へ完全に同じ値を設定。</td><td><strong>必須</strong></td></tr>
+            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_MODE</code></td><td>公開JSONをローカル保存するか、受信APIへ送るかを選ぶ。<code>https</code>は「API送信モード」という名称で、エンドポイント自体がHTTPの場合にも使用する。</td><td>本構成は別コンテナへ送るため<code>https</code>。<code>local</code>は単一PHP領域で直接ファイル保存する特殊構成だけに使用。</td><td><strong>必須</strong>（本構成は<code>https</code>）</td></tr>
+            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_ENDPOINT</code></td><td>Calendarの署名付きJSON受信APIのURL。</td><td>同一Origin内の推奨値は<code>http://kptc-calendar/receive-availability.php</code>。TLS経由にする場合は<code>https://origin.example.jp/Calendar/receive-availability.php</code>。</td><td><strong>必須</strong></td></tr>
+            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_PAGE_URL</code></td><td>Scheduler画面の「試験室予約」から開く公開CalendarのURL。</td><td><code>https://origin.example.jp/Calendar/</code>のホスト名を実環境のものへ変更。</td><td><strong>必須</strong></td></tr>
+            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_ALLOW_HTTP</code></td><td>JSON受信APIへのHTTP送信を明示的に許可する。</td><td>閉じたDocker内部通信では<code>1</code>。HTTPSエンドポイントでは<code>0</code>または行を削除。</td><td>HTTP時のみ<strong>必須</strong></td></tr>
+            <tr><td><code>KPTC_SESSION_COOKIE_SECURE</code></td><td>ブラウザがHTTPS通信のときだけセッションCookieを送るかを指定する。</td><td>本番HTTPSは<code>1</code>。閉じた試験環境でブラウザもHTTPを使う場合だけ<code>0</code>。</td><td><strong>必須</strong></td></tr>
+            <tr><td><code>KPTC_SESSION_COOKIE_PATH</code></td><td>SchedulerのCookieを送信するURL範囲。Calendarへ認証Cookieを送らないための設定。</td><td>公開パスに合わせて<code>/Scheduler/</code>。Schedulerを別パスへ置く場合だけ変更。</td><td>推奨（通常は変更不要）</td></tr>
+            <tr><td><code>KPTC_AUTH_IDLE_TIMEOUT</code></td><td>操作がない状態でセッションを終了するまでの秒数。</td><td>既定例は<code>1800</code>（30分）。最小値は300秒。</td><td>任意</td></tr>
+            <tr><td><code>KPTC_AUTH_ABSOLUTE_TIMEOUT</code></td><td>操作を続けていてもセッションを終了する最長時間。</td><td>既定例は<code>43200</code>（12時間）。アイドル時間以上に設定。</td><td>任意</td></tr>
+            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_TIMEOUT</code></td><td>SchedulerがCalendarへの送信完了を待つ秒数。</td><td>既定値は<code>10</code>。3～60秒の範囲で通信環境に合わせて変更。</td><td>任意</td></tr>
+            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS</code></td><td>公開JSONを「更新が古い」と判定するまでの秒数。</td><td>既定例は<code>1800</code>（30分）。監視間隔に合わせ、両側で同じ値を推奨。</td><td>任意</td></tr>
+          </tbody>
+        </table>
+        <p>次の保存先変数はDockerfileで設定済みです。保存先を別Volumeへ変更する場合に限り上書きします。</p>
+        <table>
+          <thead><tr><th>変数名</th><th>既定値</th><th>用途</th><th>必須／任意</th></tr></thead>
+          <tbody>
+            <tr><td><code>KPTC_INTERNAL_SCHEDULER_DB</code></td><td><code>/var/lib/kptc-scheduler/group-watcher.sqlite</code></td><td>SchedulerのSQLite保存先。</td><td>任意（高度な設定）</td></tr>
+            <tr><td><code>KPTC_SCHEDULER_BACKUP_JSON</code></td><td><code>/var/lib/kptc-scheduler/backups/scheduler-latest.json</code></td><td>毎日22時の最新バックアップJSON保存先。</td><td>任意（高度な設定）</td></tr>
+            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_JSON</code></td><td><code>/var/lib/kptc-availability/public-availability.json</code></td><td>Calendar専用Volume内の公開用3か月JSON保存先。</td><td>任意（高度な設定）</td></tr>
+          </tbody>
+        </table>
+        <div class="callout danger"><strong>秘密値：</strong><code>KPTC_PORTAL_TOKEN_KEY</code>と<code>KPTC_PUBLIC_AVAILABILITY_SECRET</code>は別の値を使います。実値をGitHub、HTML手順書、作業記録、画面写真へ載せません。envファイルの権限は<code>600</code>を維持します。</div>
+
+        <h3>5-5. HTTPとHTTPSを切り替える</h3>
+        <p>本システムには、利用者のブラウザからリバースプロキシまでの<strong>外部通信</strong>と、SchedulerからCalendarへJSONを送る<strong>Docker内部通信</strong>があります。別々に設定します。</p>
+        <h4>外部通信をHTTPからHTTPSへ変更する場合</h4>
+        <p><code>/etc/kptc/scheduler.env</code>を次のように変更します。</p>
+        <table>
+          <thead><tr><th>変数</th><th>変更前：HTTP試験</th><th>変更後：HTTPS本番</th></tr></thead>
+          <tbody>
+            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_PAGE_URL</code></td><td><code>http://origin.example.jp/Calendar/</code></td><td><code>https://origin.example.jp/Calendar/</code></td></tr>
+            <tr><td><code>KPTC_SESSION_COOKIE_SECURE</code></td><td><code>0</code></td><td><code>1</code></td></tr>
+          </tbody>
+        </table>
+        <p>既存社内システムまたは検証用renkonの<code>KPTC_RENKON_SCHEDULER_URL</code>も、<code>http://origin.example.jp/Scheduler/</code>から<code>https://origin.example.jp/Scheduler/</code>へ変更します。</p>
+        <p>env変更後はOriginサーバーでコンテナを再作成します。envだけの変更ではイメージの再ビルドは不要です。</p>
+        <pre><code>cd /opt/kptc/260725_GW_WEB
+sudo docker compose -f compose.origin-single.yaml config --quiet
+sudo docker compose -f compose.origin-single.yaml \
+  up -d --force-recreate
+sudo docker compose -f compose.origin-single.yaml ps
+sudo docker compose -f compose.origin-single.yaml \
+  logs --since 10m --tail 200</code></pre>
+        <p>リバースプロキシ管理者は、正式なホスト名のサーバー証明書と秘密鍵をリバースプロキシへ配置し、443番ポートでTLSを終端します。80番ポートは443番への転送専用にするか閉じます。<code>Host</code>、<code>X-Forwarded-For</code>、<code>X-Forwarded-Proto: https</code>、クエリ文字列を保持してください。証明書と秘密鍵をScheduler・Calendarコンテナへコピーする必要はありません。外部ファイアウォールでは443番だけを公開し、8080番・8081番は引き続き<code>127.0.0.1</code>待受のままにします。</p>
+        <h4>外部通信をHTTPSからHTTPへ戻す場合（閉じた試験環境のみ）</h4>
+        <p>上表を逆に変更し、リバースプロキシで80番のHTTPを受けます。<code>KPTC_SESSION_COOKIE_SECURE=0</code>にしないとHTTPではセッションCookieが送られません。tokenとCookieを暗号化せず送るため、本番・社内LAN・VPNを含む実運用では使用しません。</p>
+        <h4>Docker内部のJSON通信を切り替える場合</h4>
+        <table>
+          <thead><tr><th>変数</th><th>推奨：内部HTTP</th><th>リバースプロキシ経由HTTPS</th></tr></thead>
+          <tbody>
+            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_MODE</code></td><td><code>https</code></td><td><code>https</code></td></tr>
+            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_ENDPOINT</code></td><td><code>http://kptc-calendar/receive-availability.php</code></td><td><code>https://origin.example.jp/Calendar/receive-availability.php</code></td></tr>
+            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_ALLOW_HTTP</code></td><td><code>1</code></td><td><code>0</code>または行を削除</td></tr>
+          </tbody>
+        </table>
+        <p>HTTPSへ変更する場合は、Schedulerコンテナから正式ホスト名を名前解決でき、証明書を検証できること、リバースプロキシが<code>/Calendar/receive-availability.php</code>へのPOSTを許可することが必要です。内部HTTPでもHMAC署名・送信時刻・JSON形式を検証し、通信は外部へ公開されないDockerネットワークだけを通るため、同一Originサーバーでは内部HTTPを推奨します。</p>
+        <p>再作成後、JSON連携を確認します。</p>
+        <pre><code>sudo docker exec kptc-scheduler \
+  php /var/www/html/publish-availability-cli.php
+curl -i https://origin.example.jp/Calendar/health-availability.php</code></pre>
+        <p class="checkpoint">送信結果が<code>"ok":true</code>、Calendarのヘルス確認がHTTP 200、ブラウザのSchedulerとCalendarがHTTPSで表示されれば切替完了です。</p>
       </section>
 
       <section id="start">
         <h2>6. 構築と起動</h2>
         <p>リポジトリ最上位で、同梱のCompose定義を使います。</p>
         <pre><code>cd /opt/kptc/260725_GW_WEB
-sudo docker compose -f compose.origin-single.yaml config
+sudo docker compose -f compose.origin-single.yaml config --quiet
 sudo docker compose -f compose.origin-single.yaml up -d --build
 sudo docker compose -f compose.origin-single.yaml ps</code></pre>
         <p><code>kptc-scheduler</code>と<code>kptc-calendar</code>の2行が表示され、しばらく待って<code>healthy</code>になれば起動成功です。</p>
@@ -508,6 +581,8 @@ sudo docker volume ls | grep kptc</code></pre>
             <tr><td>アクセス制御</td><td>サーバー単位</td><td>管理者のリバースプロキシでパス単位</td></tr>
             <tr><td>リバースプロキシ</td><td>設定例を手順内で作成</td><td>本作業では作成せず、必要条件だけを記載</td></tr>
             <tr><td>更新</td><td>別サーバーを順番に更新</td><td>同じGitコミットから2コンテナを一括再構築</td></tr>
+            <tr><td>env設定</td><td>設定例だけを掲載</td><td>独自設定する変数の機能・生成方法・必須／任意を一覧化</td></tr>
+            <tr><td>HTTP／HTTPS切替</td><td>リバースプロキシ要件のみ</td><td>envの変更前後、コンテナ再作成、証明書・ポート・確認方法を追記</td></tr>
           </tbody>
         </table>
       </section>

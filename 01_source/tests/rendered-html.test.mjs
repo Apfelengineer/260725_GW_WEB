@@ -162,6 +162,15 @@ test("システム資料を同梱する", async () => {
   assert.match(dockerGuide, /\/Calendar\//);
   assert.match(dockerGuide, /KPTC_SESSION_COOKIE_PATH=\/Scheduler\//);
   assert.match(dockerGuide, /http:\/\/kptc-calendar\/receive-availability\.php/);
+  assert.match(dockerGuide, /5-4\. 環境ごとに決める変数/);
+  assert.match(dockerGuide, /KPTC_RENKON_SCHEDULER_URL/);
+  assert.match(dockerGuide, /openssl rand -hex 32/);
+  assert.match(dockerGuide, /KPTC_PUBLIC_AVAILABILITY_MODE/);
+  assert.match(dockerGuide, /5-5\. HTTPとHTTPSを切り替える/);
+  assert.match(dockerGuide, /変更前：HTTP試験/);
+  assert.match(dockerGuide, /up -d --force-recreate/);
+  assert.match(dockerGuide, /X-Forwarded-Proto: https/);
+  assert.match(dockerGuide, /8080番・8081番/);
   assert.match(dockerGuide, /<section id="browser-ready">/);
   assert.match(dockerGuide, /Webブラウザで閲覧・操作できるまで/);
   assert.match(dockerGuide, /既存社内システムがログイン済み利用者について保持しているID/);
@@ -463,10 +472,11 @@ test("分離配置でも公開領域外の実行設定を探索する", async ()
 });
 
 test("Origin単一サーバー上へPHP 8.4の2コンテナを構築できる", async () => {
-  const [schedulerDockerfile, schedulerEntrypoint, schedulerCron, calendarDockerfile, calendarEntrypoint, guide, compose] = await Promise.all([
+  const [schedulerDockerfile, schedulerEntrypoint, schedulerCron, schedulerEnvExample, calendarDockerfile, calendarEntrypoint, guide, compose] = await Promise.all([
     readFile(new URL("docker/origin/Scheduler/Dockerfile", repositoryRoot), "utf8"),
     readFile(new URL("docker/origin/Scheduler/entrypoint.sh", repositoryRoot), "utf8"),
     readFile(new URL("docker/origin/Scheduler/kptc-cron", repositoryRoot), "utf8"),
+    readFile(new URL("docker/origin/Scheduler/scheduler.env.example", repositoryRoot), "utf8"),
     readFile(new URL("docker/origin/Calendar/Dockerfile", repositoryRoot), "utf8"),
     readFile(new URL("docker/origin/Calendar/entrypoint.sh", repositoryRoot), "utf8"),
     readFile(new URL("docker/README.md", repositoryRoot), "utf8"),
@@ -481,6 +491,9 @@ test("Origin単一サーバー上へPHP 8.4の2コンテナを構築できる", 
   assert.match(schedulerEntrypoint, /KPTC_PUBLIC_AVAILABILITY_SECRET/);
   assert.match(schedulerCron, /\*\/5 \* \* \* \*/);
   assert.match(schedulerCron, /0 22 \* \* \*/);
+  assert.match(schedulerEnvExample, /KPTC_PUBLIC_AVAILABILITY_MODE=https/);
+  assert.match(schedulerEnvExample, /KPTC_PUBLIC_AVAILABILITY_TIMEOUT=10/);
+  assert.match(schedulerEnvExample, /KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800/);
 
   assert.match(calendarDockerfile, /FROM php:8\.4-apache-bookworm/);
   assert.match(calendarDockerfile, /COPY 02_release\/origin\/Calendar\/ \/var\/www\/html\//);
