@@ -1,11 +1,12 @@
 /** 配布版を一時PHPサーバーで動かし、renkon→origin→APIを実通信で検証します。 */
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
+import { randomBytes } from 'node:crypto';
 
 const temporary = await mkdtemp(join(tmpdir(), 'kptc-cbc-test-'));
 const base = 'http://127.0.0.1:18903';
@@ -56,10 +57,40 @@ try {
   const savedPayload = await deltaSave.json();
   assert.equal(savedPayload.version,payload.version+1);
   assert.equal(savedPayload.state.schedules.filter(item => item.id===createdSchedule.id).length,1);
+  const testPassword = randomBytes(18).toString('hex');
+  const setup = spawnSync('php', ['-r', 'require $argv[1]; $pdo=new PDO("sqlite:".$argv[2]); kptc_auth_set_admin_password($pdo, $argv[3]);', fileURLToPath(new URL('../../02_release/origin/Scheduler/auth.php', import.meta.url)), join(temporary, 'test.sqlite'), testPassword], { encoding: 'utf8' });
+  assert.equal(setup.status, 0, setup.stderr);
+  const post = (action, payload, data) => fetch(base+'/origin/Scheduler/api.php?action='+action, {
+    method: 'POST', headers: { cookie, 'Content-Type': 'application/json', 'X-CSRF-Token': payload.csrfToken }, body: JSON.stringify(data),
+  });
+  const empty = { scheduleUpserts: [], scheduleDeleteIds: [] };
+  const noChange = await post('save-delta', savedPayload, { version: savedPayload.version, delta: empty });
+  assert.equal(noChange.status, 200);
+  assert.equal((await noChange.json()).version, savedPayload.version, 'Empty delta must not increment version');
+  const admin = await post('admin-mode-enter', savedPayload, { password: testPassword });
+  assert.equal(admin.status, 200);
+  cookie = admin.headers.getSetCookie().map(value => value.split(';')[0]).join('; ') || cookie;
+  const adminPayload = await admin.json();
+  assert.equal(adminPayload.role, 'admin');
+  assert.notEqual(adminPayload.csrfToken, savedPayload.csrfToken);
+  const oldToken = await post('save-delta', savedPayload, { version: adminPayload.version, delta: empty });
+  assert.equal(oldToken.status, 403, 'Stale CSRF must remain rejected');
+  assert.equal((await oldToken.json()).error, 'セッションを確認できません');
+  const currentToken = await post('save-delta', adminPayload, { version: adminPayload.version, delta: empty });
+  assert.equal(currentToken.status, 200, 'Save with rotated CSRF must succeed');
+  const general = await post('admin-mode-exit', adminPayload, {});
+  assert.equal(general.status, 200);
+  const generalPayload = await general.json();
+  assert.equal(generalPayload.role, 'user');
+  const updatedSchedule = { ...createdSchedule, title: '管理者切替後の保存試験' };
+  const afterSwitch = await post('save-delta', generalPayload, { version: generalPayload.version, delta: { scheduleUpserts: [updatedSchedule], scheduleDeleteIds: [] } });
+  assert.equal(afterSwitch.status, 200);
+  const reloaded = await fetch(base+'/origin/Scheduler/api.php?action=bootstrap', { headers: { cookie } });
+  assert.equal((await reloaded.json()).state.schedules.find(item => item.id === createdSchedule.id).title, updatedSchedule.title);
   assert.equal((await fetch(base+'/origin/Scheduler/api.php?action=bootstrap',{headers:{cookie}})).status,200);
   assert.equal((await fetch(base+'/origin/Scheduler/',{headers:{cookie}})).status,403);
   assert.equal((await fetch(base+'/origin/Scheduler/?token=invalid')).status,403);
-  console.log('CBC HTTP: missing/invalid token 403, randomized redirect, valid entry/API 200, delta save, ID 007 retained: OK');
+  console.log('CBC HTTP: entry/API, delta save, empty delta, admin enter/exit, CSRF rotation, stale token rejection, persistence after reload: OK');
 } finally {
   server.kill('SIGTERM');
   if (server.exitCode === null) await once(server,'exit');

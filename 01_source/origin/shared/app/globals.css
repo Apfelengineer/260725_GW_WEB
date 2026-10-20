@@ -140,6 +140,8 @@ button, select { cursor: pointer; }
 .sync-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 0 9px; border-radius: 13px; color: #0b7569; background: #e5f5f1; font-size: 8px; font-weight: 730; white-space: nowrap; }
 .sync-badge.saving { color: #7b6822; background: #fff7d9; }
 .sync-badge.offline { color: #b14f3c; background: #fff0eb; }
+.sync-error-banner { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 16px 24px 0; padding: 14px 18px; color: #8b382a; background: #fff0eb; border: 1px solid #e4aaa0; border-radius: 10px; font-size: 13px; }
+.sync-error-banner span { flex: 1; min-width: 200px; }
 .publish-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 0 9px; border-radius: 13px; font-size: 8px; font-weight: 730; white-space: nowrap; }
 .publish-badge.ok { color: #0b7569; background: #e5f5f1; }
 .publish-badge.pending { color: #a44734; background: #fff0eb; }

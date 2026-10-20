@@ -12,7 +12,7 @@
     "build:scheduler": "vite build --config vite.scheduler.config.ts && node scripts/copy-distribution-files.mjs scheduler",
     "build:calendar": "vite build --config vite.calendar.config.ts && node scripts/copy-distribution-files.mjs calendar",
     "build:renkon": "node scripts/copy-distribution-files.mjs renkon",
-    "test": "node --test tests/rendered-html.test.mjs",
+    "test": "node --test tests/rendered-html.test.mjs tests/scheduler-sync.test.mjs",
     "test:backup": "php tests/scheduler-backup.test.php",
     "test:token": "php tests/cbc-token.test.php",
     "test:http": "node tests/cbc-http.test.mjs",

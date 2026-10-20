@@ -94,8 +94,7 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.doesNotMatch(styles, /schedule-event \{[^}]*min-height: 54px;/);
   assert.match(api, /groupWatcherApi/);
   assert.match(api, /saveDelta/);
-  assert.match(page, /scheduleUpserts/);
-  assert.match(page, /scheduleDeleteIds/);
+  assert.match(page, /SchedulerSync/);
   assert.doesNotMatch(api, /demoCategories|demoMembers|demoSchedules/);
   assert.match(api, /\["すべてのグループ", "電気通信係", "試験室"\]/);
   for (const category of ["休暇", "機器点検", "機器利用", "キャンセル待ち", "所内会議", "出張・外出", "その他"]) {

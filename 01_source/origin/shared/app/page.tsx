@@ -3,7 +3,8 @@
  * 予定表とユーザー・予定種別管理を一つの画面で制御します。
  */
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { SchedulerSync, type Mutation, type SyncStatus } from "./lib/scheduler-sync";
 import {
   groupWatcherApi,
   groups,
@@ -16,7 +17,6 @@ import {
   type ScheduleCategory,
   type ScheduleItem,
   type SharedState,
-  type SharedStateDelta,
   type SessionRole,
 } from "./lib/group-watcher-api";
 
@@ -183,7 +183,6 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [csrfToken, setCsrfToken] = useState("");
   const [currentRole, setCurrentRole] = useState<SessionRole>("user");
   const [adminModal, setAdminModal] = useState<AdminModal>(null);
   const [adminModePasswordConfigured, setAdminModePasswordConfigured] = useState(false);
@@ -191,12 +190,22 @@ export default function Home() {
   const [publicAvailabilityUrl, setPublicAvailabilityUrl] = useState(defaultPublicAvailabilityUrl);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
   const [availabilityPublish, setAvailabilityPublish] = useState<AvailabilityPublishStatus | null>(null);
-  const [syncStatus, setSyncStatus] = useState<"saved" | "saving" | "offline">("saving");
-  const versionRef = useRef(0);
-  const lastSyncedRef = useRef("");
-  const lastSyncedStateRef = useRef<SharedState | null>(null);
-  const mutationRef = useRef({ action: "更新", summary: "共有データを更新" });
-  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("saving");
+  const [syncError, setSyncError] = useState("");
+  const [commandPending, setCommandPending] = useState(false);
+  const mutationRef = useRef<Mutation>({ action: "更新", summary: "共有データを更新" });
+  const syncRef = useRef<SchedulerSync | null>(null);
+  if (syncRef.current === null) {
+    syncRef.current = new SchedulerSync({
+      save: (delta, payload, mutation) => groupWatcherApi.saveDelta(delta, payload.version, payload.csrfToken, mutation.action, mutation.summary),
+      bootstrap: () => groupWatcherApi.bootstrap(),
+      onApply: applyServerPayload,
+      onStatus: (status) => { setSyncStatus(status); if (status === "saved") setSyncError(""); },
+      onSaved: (mutation) => setToast(mutation.successMessage || "変更を共有データに保存しました"),
+      onError: (message) => { setSyncError(message); setToast(message); },
+    });
+  }
+  const sync = syncRef.current;
   const pointerDragRef = useRef<{ scheduleId: string; startX: number; startY: number } | null>(null);
 
   function applySharedState(state: SharedState) {
@@ -205,11 +214,7 @@ export default function Home() {
     setCategories(state.categories);
   }
 
-  function applyServerPayload(payload: AuthenticatedBootstrapResponse) {
-    lastSyncedRef.current = JSON.stringify(payload.state);
-    lastSyncedStateRef.current = payload.state;
-    versionRef.current = payload.version;
-    setCsrfToken(payload.csrfToken);
+  function applyServerPayload(payload: AuthenticatedBootstrapResponse, visible: SharedState) {
     setCurrentUserId(payload.currentUserId);
     setCurrentRole(payload.role);
     setAdminModePasswordConfigured(payload.adminModePasswordConfigured);
@@ -218,12 +223,11 @@ export default function Home() {
     if (payload.role !== "admin") setSection("schedule");
     setAuditLogs(payload.audit);
     setAvailabilityPublish(payload.availabilityPublish);
-    applySharedState(payload.state);
-    setSyncStatus("saved");
+    applySharedState(visible);
   }
 
-  function markMutation(action: string, summary: string) {
-    mutationRef.current = { action, summary };
+  function markMutation(action: string, summary: string, successMessage?: string) {
+    mutationRef.current = { action, summary, successMessage };
   }
 
   useEffect(() => {
@@ -231,7 +235,7 @@ export default function Home() {
     let active = true;
     groupWatcherApi.bootstrap().then((payload) => {
       if (!active) return;
-      applyServerPayload(payload);
+      sync.initialize(payload);
       setAuthReady(true);
     }).catch(() => {
       if (!active) return;
@@ -239,52 +243,23 @@ export default function Home() {
       setSyncStatus("offline");
       setAuthReady(true);
     });
-    return () => { active = false; };
+    return () => { active = false; sync.cancelTimer(); };
     // 初回だけ共有データとログイン状態を取得します。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useLayoutEffect(() => {
+    // 描画済みの最新編集を、通信の応答より先に同期担当へ渡します。
+    if (authReady && serverAvailable && currentUserId) sync.update({ members, schedules, categories }, mutationRef.current);
+  }, [authReady, categories, currentUserId, members, schedules, serverAvailable, sync]);
+
   useEffect(() => {
-    // 変更分だけを送り、予定件数が増えてもWAFへ全予定を再送しないようにします。
-    if (!authReady || !serverAvailable || !currentUserId || !csrfToken || !["admin", "user"].includes(currentRole)) return;
-    const state: SharedState = { members, schedules, categories };
-    const serialized = JSON.stringify(state);
-    if (serialized === lastSyncedRef.current) return;
-    const base = lastSyncedStateRef.current;
-    if (!base) return;
-    const mutation = { ...mutationRef.current };
-    const timer = window.setTimeout(() => {
-      saveQueueRef.current = saveQueueRef.current.then(async () => {
-        if (serialized === lastSyncedRef.current) return;
-        const currentById = new Map(state.schedules.map((item) => [item.id, item]));
-        const baseById = new Map(base.schedules.map((item) => [item.id, item]));
-        const delta: SharedStateDelta = {
-          scheduleUpserts: state.schedules.filter((item) => JSON.stringify(item) !== JSON.stringify(baseById.get(item.id))),
-          scheduleDeleteIds: base.schedules.filter((item) => !currentById.has(item.id)).map((item) => item.id),
-        };
-        if (JSON.stringify(state.members) !== JSON.stringify(base.members)) delta.members = state.members;
-        if (JSON.stringify(state.categories) !== JSON.stringify(base.categories)) delta.categories = state.categories;
-        setSyncStatus("saving");
-        try {
-          const payload = await groupWatcherApi.saveDelta(delta, versionRef.current, csrfToken, mutation.action, mutation.summary);
-          applyServerPayload(payload);
-        } catch (error) {
-          const conflict = (error as { status?: number; payload?: AuthenticatedBootstrapResponse }).status === 409;
-          const payload = (error as { payload?: AuthenticatedBootstrapResponse }).payload;
-          if (payload?.state) {
-            applyServerPayload(payload);
-            setToast(conflict ? "他の利用者の更新を反映しました。もう一度操作してください" : error instanceof Error ? error.message : "変更を保存できませんでした");
-          } else {
-            setSyncStatus("offline");
-            setToast(error instanceof Error ? error.message : "共有保存に失敗しました。通信を確認してください");
-          }
-        }
-      });
-    }, 260);
-    return () => window.clearTimeout(timer);
-    // サーバー反映関数は最新状態を直列に保存します。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, categories, csrfToken, currentRole, currentUserId, members, schedules, serverAvailable]);
+    const warnUnsaved = (event: BeforeUnloadEvent) => {
+      if (sync.pending) { event.preventDefault(); event.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", warnUnsaved);
+    return () => window.removeEventListener("beforeunload", warnUnsaved);
+  }, [sync]);
 
   useEffect(() => {
     if (!toast) return;
@@ -313,56 +288,59 @@ export default function Home() {
 
   const currentMember = members.find((member) => member.id === currentUserId);
   const defaultTargetMember = currentMember ?? members[0];
-  const canEditSchedule = currentRole === "admin" || currentRole === "user";
-  const canManageUsers = currentRole === "admin";
+  const canEditSchedule = serverAvailable && syncStatus !== "offline" && !commandPending && (currentRole === "admin" || currentRole === "user");
+  const canManageUsers = canEditSchedule && currentRole === "admin";
   const selectedSchedules = selectedScheduleIds.map((id) => schedules.find((item) => item.id === id)).filter((item): item is ScheduleItem => Boolean(item));
   const selectedSchedule = selectedSchedules.length === 1 ? selectedSchedules[0] : null;
 
   async function enterAdminMode(password: string) {
     if (!serverAvailable) throw new Error("内部サーバーへ接続できません");
+    setCommandPending(true);
     try {
-      const payload = await groupWatcherApi.enterAdminMode(password, csrfToken);
-      applyServerPayload(payload);
+      await sync.command(payload => groupWatcherApi.enterAdminMode(password, payload.csrfToken));
       setAdminModal(null);
       setToast("管理者モードへ切り替えました");
-    } catch (reason) {
-      throw reason;
-    }
+    } finally { setCommandPending(false); }
   }
 
   async function exitAdminMode() {
     if (!serverAvailable) return;
+    setCommandPending(true);
     try {
-      const payload = await groupWatcherApi.exitAdminMode(csrfToken);
-      applyServerPayload(payload);
+      await sync.command(payload => groupWatcherApi.exitAdminMode(payload.csrfToken));
       setAdminModal(null);
       setSection("schedule");
       setToast("一般モードへ戻りました");
     } catch (reason) {
       setToast(reason instanceof Error ? reason.message : "一般モードへ戻せませんでした");
-    }
+    } finally { setCommandPending(false); }
   }
 
   async function changeAdminPassword(currentPassword: string, newPassword: string) {
-    const payload = await groupWatcherApi.changeAdminPassword(currentPassword, newPassword, csrfToken);
-    applyServerPayload(payload);
-    setAdminModal(null);
-    setToast("管理者パスワードを変更しました");
+    setCommandPending(true);
+    try {
+      await sync.command(payload => groupWatcherApi.changeAdminPassword(currentPassword, newPassword, payload.csrfToken));
+      setAdminModal(null);
+      setToast("管理者パスワードを変更しました");
+    } finally { setCommandPending(false); }
+  }
+
+  async function retrySync() {
+    setCommandPending(true);
+    try { await sync.retry(); }
+    catch { /* 原因と未保存状態は同期担当が画面へ表示します。 */ }
+    finally { setCommandPending(false); }
   }
 
   async function undoAudit(entry: AuditEntry) {
     if (!entry.canUndo || !serverAvailable) return;
     if (!window.confirm(`「${entry.summary}」を取り消しますか？`)) return;
-    await saveQueueRef.current;
+    setCommandPending(true);
     try {
-      const payload = await groupWatcherApi.undo(entry.id, versionRef.current, csrfToken);
-      applyServerPayload(payload);
+      await sync.command(payload => groupWatcherApi.undo(entry.id, payload.version, payload.csrfToken));
       setToast("操作を取り消して以前の状態に戻しました");
-    } catch (error) {
-      const payload = (error as { payload?: AuthenticatedBootstrapResponse }).payload;
-      if (payload?.state) applyServerPayload(payload);
-      setToast("取り消せませんでした。最新状態を確認してください");
-    }
+    } catch (error) { setToast(error instanceof Error ? error.message : "取り消せませんでした。最新状態を確認してください"); }
+    finally { setCommandPending(false); }
   }
 
   function openCreateSchedule(target?: Partial<CellTarget>) {
@@ -411,12 +389,11 @@ export default function Home() {
       memo: String(form.get("memo") ?? ""),
       private: form.get("private") === "on",
     };
-    markMutation(scheduleEditor.mode === "edit" ? "予定編集" : "予定作成", `${nextItem.title}（${nextItem.date}〜${nextItem.endDate}）`);
+    markMutation(scheduleEditor.mode === "edit" ? "予定編集" : "予定作成", `${nextItem.title}（${nextItem.date}〜${nextItem.endDate}）`, scheduleEditor.mode === "edit" ? "予定を更新しました" : "予定を登録しました");
     setSchedules((items) => scheduleEditor.mode === "edit" ? items.map((item) => item.id === nextItem.id ? nextItem : item) : [...items, nextItem]);
     setSelectedScheduleIds([nextItem.id]);
     setSelectedCell({ memberId: nextItem.memberId, date: nextItem.date });
     setScheduleEditor(null);
-    setToast(scheduleEditor.mode === "edit" ? "予定を更新しました" : "予定を登録しました");
   }
 
   function actionScheduleIds(anchorId?: string) {
@@ -439,13 +416,12 @@ export default function Home() {
     const message = targetItems.length === 1 ? `「${targetItems[0].title}」を削除しますか？` : `選択した${targetItems.length}件の予定を削除しますか？`;
     if (confirmDelete && !window.confirm(message)) return;
     const targetIds = new Set(targetItems.map((item) => item.id));
-    markMutation("予定削除", targetItems.length === 1 ? `${targetItems[0].title}を削除` : `${targetItems.length}件の予定を一括削除`);
+    markMutation("予定削除", targetItems.length === 1 ? `${targetItems[0].title}を削除` : `${targetItems.length}件の予定を一括削除`, `${targetItems.length}件の予定を削除しました`);
     setSchedules((items) => items.filter((item) => !targetIds.has(item.id)));
     setSelectedScheduleIds([]);
     if (scheduleEditor?.mode === "edit" && targetIds.has(scheduleEditor.item.id)) setScheduleEditor(null);
     if (clipboard?.mode === "cut" && clipboard.items.some((item) => targetIds.has(item.id))) setClipboard(null);
     setContextMenu(null);
-    setToast(targetItems.length === 1 ? "予定を削除しました" : `${targetItems.length}件の予定を削除しました`);
   }
 
   function selectSchedule(item: ScheduleItem, additive = false) {
@@ -507,17 +483,16 @@ export default function Home() {
       };
     });
     if (clipboard.mode === "copy") {
-      markMutation("予定貼り付け", `${transformed.length}件の予定を${target.date}からコピー`);
+      markMutation("予定貼り付け", `${transformed.length}件の予定を${target.date}からコピー`, `${transformed.length}件の予定を貼り付けました`);
       setSchedules((items) => [...items, ...transformed]);
     } else {
       const moved = new Map(transformed.map((item) => [item.id, item]));
-      markMutation("予定移動", `${transformed.length}件の予定を${target.date}から移動`);
+      markMutation("予定移動", `${transformed.length}件の予定を${target.date}から移動`, `${transformed.length}件の予定を移動しました`);
       setSchedules((items) => items.map((item) => moved.get(item.id) ?? item));
       setClipboard(null);
     }
     setSelectedScheduleIds(transformed.map((item) => item.id));
     setSelectedCell(target);
-    setToast(`${transformed.length}件の予定を貼り付けました`);
   }
 
   function moveSchedule(id: string, target: CellTarget) {
@@ -543,13 +518,12 @@ export default function Home() {
       return;
     }
     const { scheduleId, target, targetEndDate } = pendingMove;
-    markMutation("予定移動", `${source.title}を${target.date}へ移動`);
+    markMutation("予定移動", `${source.title}を${target.date}へ移動`, "予定を移動しました");
     setSchedules((items) => items.map((item) => item.id === scheduleId ? { ...item, memberId: target.memberId, date: target.date, endDate: targetEndDate } : item));
     setSelectedScheduleIds([scheduleId]);
     setSelectedCell(target);
     setClipboard((value) => value?.mode === "cut" && value.items.some((item) => item.id === scheduleId) ? null : value);
     setPendingMove(null);
-    setToast("予定を移動しました");
   }
 
   function cancelScheduleMove() {
@@ -634,24 +608,21 @@ export default function Home() {
       color: String(form.get("color")),
       extension: String(form.get("extension") ?? ""),
     };
-    await saveQueueRef.current;
+    setCommandPending(true);
     try {
       const account = existing ? authAccounts.find((item) => item.memberId === existing.id) : null;
-      const payload = await groupWatcherApi.saveMemberAccount({
+      await sync.command(payload => groupWatcherApi.saveMemberAccount({
         operation: "save",
-        version: versionRef.current,
+        version: payload.version,
         member,
         username: account?.username ?? (member.group === "試験室" ? "" : `member-${member.id}`),
         role: account?.role ?? (member.group === "試験室" ? "room" : "user"),
-      }, csrfToken);
-      applyServerPayload(payload);
+      }, payload.csrfToken));
       setMemberEditor(null);
       setToast(existing ? "ユーザーとログイン情報を更新しました" : "ユーザーを追加しました");
     } catch (reason) {
-      const payload = (reason as { payload?: AuthenticatedBootstrapResponse }).payload;
-      if (payload?.state) applyServerPayload(payload);
       setToast(reason instanceof Error ? reason.message : "ユーザー情報を保存できませんでした");
-    }
+    } finally { setCommandPending(false); }
   }
 
   async function deleteMember(member: Member) {
@@ -663,18 +634,15 @@ export default function Home() {
     const count = schedules.filter((item) => item.memberId === member.id).length;
     const detail = count ? `\nこのユーザーの予定 ${count}件も削除されます。` : "";
     if (!window.confirm(`「${member.name}」を削除しますか？${detail}`)) return;
-    await saveQueueRef.current;
+    setCommandPending(true);
     try {
       const account = authAccounts.find((item) => item.memberId === member.id);
-      const payload = await groupWatcherApi.saveMemberAccount({ operation: "delete", version: versionRef.current, member, username: account?.username ?? "", role: account?.role ?? "room" }, csrfToken);
-      applyServerPayload(payload);
+      await sync.command(payload => groupWatcherApi.saveMemberAccount({ operation: "delete", version: payload.version, member, username: account?.username ?? "", role: account?.role ?? "room" }, payload.csrfToken));
       if (selectedCell?.memberId === member.id) setSelectedCell(null);
       setToast("ユーザーと関連予定を削除しました");
     } catch (reason) {
-      const payload = (reason as { payload?: AuthenticatedBootstrapResponse }).payload;
-      if (payload?.state) applyServerPayload(payload);
       setToast(reason instanceof Error ? reason.message : "ユーザーを削除できませんでした");
-    }
+    } finally { setCommandPending(false); }
   }
 
   function moveMember(member: Member, direction: -1 | 1) {
@@ -688,7 +656,6 @@ export default function Home() {
       [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
       return reordered;
     });
-    setToast(`${member.name}の表示順を変更しました`);
   }
 
   function saveCategory(event: FormEvent<HTMLFormElement>) {
@@ -709,7 +676,6 @@ export default function Home() {
       setSchedules((items) => items.map((item) => item.category === existing.name ? { ...item, category: name } : item));
     }
     setCategoryEditor(null);
-    setToast(existing ? "予定種別を更新しました" : "予定種別を追加しました");
   }
 
   function deleteCategory(category: ScheduleCategory) {
@@ -725,7 +691,6 @@ export default function Home() {
     markMutation("予定種別削除", `${category.name}を削除`);
     setCategories((items) => items.filter((item) => item.id !== category.id));
     setSchedules((items) => items.map((item) => item.category === category.name ? { ...item, category: fallback.name } : item));
-    setToast("予定種別を削除しました");
   }
 
   function moveCategory(category: ScheduleCategory, direction: -1 | 1) {
@@ -739,7 +704,6 @@ export default function Home() {
       [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
       return reordered;
     });
-    setToast(`${category.name}の表示順を変更しました`);
   }
 
   function navigateCalendar(direction: -1 | 1) {
@@ -789,7 +753,7 @@ export default function Home() {
         </div>
 
         <div className="admin-mode-control">
-          {currentRole === "admin" ? <button onClick={exitAdminMode}>一般モードへ戻る</button> : <button onClick={() => setAdminModal("enter")}>管理者モードへ</button>}
+          {currentRole === "admin" ? <button disabled={commandPending || syncStatus === "offline"} onClick={exitAdminMode}>一般モードへ戻る</button> : <button disabled={commandPending || syncStatus === "offline"} onClick={() => setAdminModal("enter")}>管理者モードへ</button>}
         </div>
         {currentMember ? <div className="sidebar-user"><Avatar member={currentMember} small /><span><b>{currentMember.name}</b><small>{currentRole === "admin" ? "管理者モード" : "一般モード"}</small></span></div> : null}
       </aside>
@@ -799,12 +763,14 @@ export default function Home() {
           <div className="mobile-brand"><Logo /></div>
           <label className="global-search"><span aria-hidden="true">⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="予定・メンバーを検索" aria-label="予定・メンバーを検索" /><kbd>⌘ K</kbd></label>
           <div className="topbar-actions">
-            <button className="secondary-button mode-switch-button" onClick={currentRole === "admin" ? exitAdminMode : () => setAdminModal("enter")}>{currentRole === "admin" ? "一般モードへ" : "管理者モード"}</button>
+            <button className="secondary-button mode-switch-button" disabled={commandPending || syncStatus === "offline"} onClick={currentRole === "admin" ? exitAdminMode : () => setAdminModal("enter")}>{currentRole === "admin" ? "一般モードへ" : "管理者モード"}</button>
             {canManageUsers && availabilityPublish && <span className={`publish-badge ${availabilityPublish.pending ? "pending" : "ok"}`} title={availabilityPublish.lastSuccessAt ? `最終送信: ${new Date(availabilityPublish.lastSuccessAt).toLocaleString("ja-JP")}` : "送信実績なし"}>{availabilityPublish.pending ? `△ 公開JSON再送待ち${availabilityPublish.consecutiveFailures ? ` (${availabilityPublish.consecutiveFailures})` : ""}` : "● 公開JSON送信済み"}</span>}
-            <span className={`sync-badge ${syncStatus}`}>{canEditSchedule ? (syncStatus === "saved" ? "● 共有済み" : syncStatus === "saving" ? "○ 保存中" : "△ オフライン") : "● 閲覧専用"}</span>
+            <span className={`sync-badge ${syncStatus}`}>{syncStatus === "saved" ? "● 共有済み" : syncStatus === "saving" ? "○ 保存中" : "△ 保存失敗"}</span>
             {canEditSchedule && <button className="primary-button" onClick={() => openCreateSchedule()}><span>＋</span> 予定を登録</button>}
           </div>
         </header>
+
+        {syncError && <div className="sync-error-banner" role="alert"><span>{syncError} ページを閉じたり再読み込みしたりせず、再試行してください。</span><button className="secondary-button" disabled={commandPending} onClick={retrySync}>{commandPending ? "確認中…" : "再試行"}</button></div>}
 
         {section === "schedule" && (
           <SchedulePage
@@ -868,7 +834,7 @@ export default function Home() {
       {adminModal === "password" && currentRole === "admin" && <AdminPasswordModal onClose={() => setAdminModal(null)} onSubmit={changeAdminPassword} />}
       {scheduleEditor && canEditSchedule && <ScheduleModal editor={scheduleEditor} members={members} categories={categories} onClose={() => setScheduleEditor(null)} onSubmit={saveSchedule} onDelete={scheduleEditor.mode === "edit" ? () => deleteSchedules([scheduleEditor.item.id]) : undefined} />}
       {memberEditor && canManageUsers && <MemberModal member={memberEditor === "new" ? null : memberEditor} onClose={() => setMemberEditor(null)} onSubmit={saveMember} />}
-      {categoryEditor && <CategoryModal category={categoryEditor === "new" ? null : categoryEditor} onClose={() => setCategoryEditor(null)} onSubmit={saveCategory} />}
+      {categoryEditor && canManageUsers && <CategoryModal category={categoryEditor === "new" ? null : categoryEditor} onClose={() => setCategoryEditor(null)} onSubmit={saveCategory} />}
       {contextMenu && canEditSchedule && (
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()} role="menu">
           <button role="menuitem" onClick={() => copySchedules(actionScheduleIds(contextMenu.scheduleId))}><span>□</span>コピー<kbd>Ctrl+C</kbd></button>

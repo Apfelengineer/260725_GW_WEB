@@ -570,6 +570,11 @@ if ($action === 'save-delta') {
         $pdo->rollBack();
         respond(['error'=>'一般ユーザーはユーザー・予定種別を変更できません'], 403);
     }
+    // 旧画面などから空の差分が届いても、版番号・操作履歴・公開JSONを増やしません。
+    if ($upserts === [] && $deleteIds === [] && !$membersChanged && !$categoriesChanged) {
+        $pdo->rollBack();
+        respond(bootstrap_payload($pdo));
+    }
     if ($membersChanged) {
         if (!is_array($delta['members'])) { $pdo->rollBack(); respond(['error'=>'ユーザーデータが不正です'], 422); }
         $state['members'] = array_values($delta['members']);
