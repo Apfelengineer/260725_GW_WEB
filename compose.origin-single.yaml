@@ -9,7 +9,7 @@ services:
     env_file:
       - /etc/kptc/calendar.env
     ports:
-      - "127.0.0.1:8081:80"
+      - "${KPTC_ORIGIN_BIND_ADDRESS:?Set KPTC_ORIGIN_BIND_ADDRESS in the repository .env file}:8081:80"
     volumes:
       - kptc-calendar-data:/var/lib/kptc-availability
     networks:
@@ -28,7 +28,7 @@ services:
     env_file:
       - /etc/kptc/scheduler.env
     ports:
-      - "127.0.0.1:8080:80"
+      - "${KPTC_ORIGIN_BIND_ADDRESS:?Set KPTC_ORIGIN_BIND_ADDRESS in the repository .env file}:8080:80"
     volumes:
       - kptc-scheduler-data:/var/lib/kptc-scheduler
     networks:

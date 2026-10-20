@@ -13,9 +13,11 @@ ENV TZ=Asia/Tokyo \
     KPTC_PUBLIC_AVAILABILITY_TIMEOUT=10 \
     KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800
 
+# sqlite3はPHP 8.4 Apache基本イメージの拡張を使い、docker-php-ext-installの対象に重複指定しません。
 RUN apt-get update \
     && apt-get install -y --no-install-recommends cron curl libcurl4-openssl-dev libonig-dev libsqlite3-dev tzdata \
-    && docker-php-ext-install -j"$(nproc)" curl mbstring pdo_sqlite sqlite3 \
+    && docker-php-ext-install -j"$(nproc)" curl mbstring pdo_sqlite \
+    && php -r 'foreach (["pdo_sqlite", "sqlite3"] as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "Missing PHP extension: {$extension}\n"); exit(1); } }' \
     && ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo "${TZ}" > /etc/timezone \
     && a2enmod headers \

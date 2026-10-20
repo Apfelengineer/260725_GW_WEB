@@ -166,14 +166,14 @@ test("システム資料を同梱する", async () => {
   assert.match(dockerGuide, /\/Calendar\//);
   assert.match(dockerGuide, /KPTC_SESSION_COOKIE_PATH=\/Scheduler\//);
   assert.match(dockerGuide, /http:\/\/kptc-calendar\/receive-availability\.php/);
-  assert.match(dockerGuide, /5-4\. 環境ごとに決める変数/);
+  assert.match(dockerGuide, /5-5\. 環境ごとに決める変数/);
   assert.match(dockerGuide, /table-layout:fixed/);
   assert.match(dockerGuide, /overflow-wrap:anywhere/);
   assert.match(dockerGuide, /<table class="config-table">/);
   assert.match(dockerGuide, /KPTC_RENKON_SCHEDULER_URL/);
   assert.match(dockerGuide, /openssl rand -hex 32/);
   assert.match(dockerGuide, /KPTC_PUBLIC_AVAILABILITY_MODE/);
-  assert.match(dockerGuide, /5-5\. HTTPとHTTPSを切り替える/);
+  assert.match(dockerGuide, /5-6\. HTTPとHTTPSを切り替える/);
   assert.match(dockerGuide, /変更前：HTTP試験/);
   assert.match(dockerGuide, /up -d --force-recreate/);
   assert.match(dockerGuide, /X-Forwarded-Proto: https/);
@@ -502,7 +502,7 @@ test("分離配置でも公開領域外の実行設定を探索する", async ()
 });
 
 test("Origin単一サーバー上へPHP 8.4の2コンテナを構築できる", async () => {
-  const [schedulerDockerfile, schedulerEntrypoint, schedulerCron, schedulerEnvExample, calendarDockerfile, calendarEntrypoint, guide, compose] = await Promise.all([
+  const [schedulerDockerfile, schedulerEntrypoint, schedulerCron, schedulerEnvExample, calendarDockerfile, calendarEntrypoint, guide, compose, composeEnvExample] = await Promise.all([
     readFile(new URL("docker/origin/Scheduler/Dockerfile", repositoryRoot), "utf8"),
     readFile(new URL("docker/origin/Scheduler/entrypoint.sh", repositoryRoot), "utf8"),
     readFile(new URL("docker/origin/Scheduler/kptc-cron", repositoryRoot), "utf8"),
@@ -511,11 +511,14 @@ test("Origin単一サーバー上へPHP 8.4の2コンテナを構築できる", 
     readFile(new URL("docker/origin/Calendar/entrypoint.sh", repositoryRoot), "utf8"),
     readFile(new URL("docker/README.md", repositoryRoot), "utf8"),
     readFile(new URL("compose.origin-single.yaml", repositoryRoot), "utf8"),
+    readFile(new URL("compose.env.example", repositoryRoot), "utf8"),
   ]);
 
   assert.match(schedulerDockerfile, /FROM php:8\.4-apache-bookworm/);
   assert.match(schedulerDockerfile, /COPY 02_release\/origin\/Scheduler\/ \/var\/www\/html\//);
-  assert.match(schedulerDockerfile, /pdo_sqlite sqlite3/);
+  assert.match(schedulerDockerfile, /curl mbstring pdo_sqlite/);
+  assert.doesNotMatch(schedulerDockerfile, /docker-php-ext-install[^\n]*sqlite3/);
+  assert.match(schedulerDockerfile, /extension_loaded\(\$extension\)/);
   assert.match(schedulerDockerfile, /VOLUME \["\/var\/lib\/kptc-scheduler"\]/);
   assert.match(schedulerEntrypoint, /KPTC_PORTAL_TOKEN_KEY/);
   assert.match(schedulerEntrypoint, /KPTC_PUBLIC_AVAILABILITY_SECRET/);
@@ -533,7 +536,10 @@ test("Origin単一サーバー上へPHP 8.4の2コンテナを構築できる", 
   assert.match(guide, /リバースプロキシ/);
   assert.match(compose, /dockerfile: docker\/origin\/Scheduler\/Dockerfile/);
   assert.match(compose, /dockerfile: docker\/origin\/Calendar\/Dockerfile/);
-  assert.match(compose, /127\.0\.0\.1:8080:80/);
-  assert.match(compose, /127\.0\.0\.1:8081:80/);
+  assert.match(compose, /KPTC_ORIGIN_BIND_ADDRESS[^\n]*:8080:80/);
+  assert.match(compose, /KPTC_ORIGIN_BIND_ADDRESS[^\n]*:8081:80/);
+  assert.match(composeEnvExample, /KPTC_ORIGIN_BIND_ADDRESS=/);
+  assert.match(schedulerEnvExample, /KPTC_SESSION_COOKIE_SECURE=0/);
+  assert.match(schedulerEnvExample, /KPTC_SESSION_COOKIE_PATH=\//);
   assert.match(compose, /kptc-internal/);
 });
