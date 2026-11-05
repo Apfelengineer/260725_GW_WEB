@@ -6,3 +6,6 @@
 !docker/
 !docker/origin/
 !docker/**
+!01_source/
+!01_source/publisher/
+!01_source/publisher/delivery.py

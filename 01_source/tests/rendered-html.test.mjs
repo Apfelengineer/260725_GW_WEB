@@ -293,6 +293,10 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   assert.doesNotMatch(publicSection, /api\.php|auth\.php|manage-auth-user|publish-availability-cli|group-watcher\.sqlite/);
   await access(new URL("deploy/kptc-availability-publish.timer", root));
   await access(new URL("deploy/kptc-availability-monitor.timer", root));
+  const dockerIgnore = await readFile(new URL("../.dockerignore", root), "utf8");
+  for (const allowed of ["!01_source/", "!01_source/publisher/", "!01_source/publisher/delivery.py"]) {
+    assert.ok(dockerIgnore.split(/\r?\n/).includes(allowed), `Docker配信担当のビルド元を除外しない: ${allowed}`);
+  }
 });
 
 test("renkon模擬サイトでユーザーIDから暗号化入口へのリンクを作る", async () => {
