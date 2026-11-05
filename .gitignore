@@ -46,3 +46,7 @@ next-env.d.ts
 
 # local PHP runtime data
 /GW/
+
+# Python配信担当・テストの一時キャッシュ
+__pycache__/
+*.pyc

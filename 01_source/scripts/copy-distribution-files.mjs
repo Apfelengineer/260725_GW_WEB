@@ -30,11 +30,6 @@ const distributions = {
   calendar: {
     directory: "origin/Calendar",
     files: [
-      "origin/shared/public/runtime-config.php",
-      "origin/shared/public/availability-contract.php",
-      "origin/shared/public/receive-availability.php",
-      "origin/shared/public/public-availability.php",
-      "origin/shared/public/health-availability.php",
       "origin/shared/public/technology-center-logo-white.png",
       "origin/shared/public/m6.png",
       "origin/shared/public/m7.png",

@@ -1,30 +1,20 @@
-# KPTC Scheduler ビルド後配布ファイル
+# KPTC ビルド後配布ファイル
 
-このフォルダには、`01_source`から生成したサーバー配布用ファイルだけを保存します。TypeScriptやTSXの開発用ソースは含みません。
+- `origin/Scheduler/`：内部PHP API、画面、認証、公開JSON生成、バックアップ・監視コマンド。
+- `origin/Calendar/`：静的HTML・CSS・JavaScript・画像。PHPなし。同一Originでも別Tamanegiでも同じ配布物。
+- `renkon/`：検証用社内入口。本番配置は不要。
+- `SHA256SUMS`：配布物のSHA-256一覧。
 
-## 配布先
+公開JSON、SQLite、秘密鍵、実env、ログは含みません。静的カレンダーは固定相対URL`./data/public-availability.json`を読みます。実際の公開JSONは専用VolumeまたはTamanegiの専用フォルダから配信します。
 
-- `origin/Scheduler/`：Originサーバーの内部スケジューラ公開フォルダ
-- `origin/Calendar/`：Originサーバーの公開カレンダー公開フォルダ
-- `renkon/`：既存社内システムとの接続を試す模擬サイト
-- `SHA256SUMS`：配布ファイルの破損・差替え確認用一覧
+Docker構成には`docker/`・Compose定義・配信担当の`01_source/publisher/delivery.py`も必要です。配布フォルダだけをコピーしてコンテナを構築することはできません。詳細は[HTML構築手順書](../docs/KPTC_Scheduler_Docker構築手順書.html)を参照してください。
 
-`origin/Scheduler/index.php`は暗号化トークンを検証してから画面を返す入口です。`origin/Calendar/index.html`は認証を必要としない公開カレンダーの入口です。SQLite、公開JSON、環境設定、秘密値、ログは含めません。
-
-`renkon/`は開発・確認専用です。本番では既存社内システムへ`open-scheduler.php`相当の処理を組み込むため、Originサーバーへ配置する必要はありません。
-
-## 再生成
-
+再生成：
 ```bash
 cd 01_source
-pnpm install
 pnpm run build
 pnpm run check
 pnpm test
 ```
 
-ビルドは`origin/Scheduler/`、`origin/Calendar/`、`renkon/`を作り直し、最後に`SHA256SUMS`を更新します。古いハッシュ名付きJavaScript・CSSは残りません。
-
-## 配置時の注意
-
-このフォルダだけでは動作しません。PHP実行環境、Webサーバー、HTTPS、非公開の保存領域、実環境設定が必要です。さくら用`.user.ini`の例は`01_source/deploy/`、Docker用設定例は`docker/origin/`にあります。
+旧PHPカレンダーへファイルを重ねず、新しい静的フォルダへ切り替えてください。旧PHP・.user.ini・実環境設定を静的公開領域へ持ち込みません。

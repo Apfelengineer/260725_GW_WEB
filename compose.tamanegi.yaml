@@ -1,0 +1,17 @@
+# 既存HPとは別の静的コンテナ。ホスト側8081が使用中なら左側だけ変更してください。
+services:
+  kptc-calendar:
+    container_name: kptc-calendar
+    build:
+      context: .
+      dockerfile: docker/origin/Calendar/Dockerfile
+    image: kptc-calendar:latest
+    restart: unless-stopped
+    ports:
+      - "${KPTC_CALENDAR_BIND_ADDRESS:?Set KPTC_CALENDAR_BIND_ADDRESS in .env}:8081:8080"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - /srv/kptc-calendar/data:/var/lib/kptc-public:ro

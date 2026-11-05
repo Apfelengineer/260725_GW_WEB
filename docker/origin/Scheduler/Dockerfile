@@ -9,14 +9,14 @@ ENV TZ=Asia/Tokyo \
     KPTC_SESSION_COOKIE_SECURE=1 \
     KPTC_AUTH_IDLE_TIMEOUT=1800 \
     KPTC_AUTH_ABSOLUTE_TIMEOUT=43200 \
-    KPTC_PUBLIC_AVAILABILITY_MODE=https \
-    KPTC_PUBLIC_AVAILABILITY_TIMEOUT=10 \
+    KPTC_PUBLIC_AVAILABILITY_JSON=/var/lib/kptc-outbox/public-availability.json \
+    KPTC_AVAILABILITY_STATUS_JSON=/var/lib/kptc-publish-status/status.json \
     KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800
 
 # sqlite3はPHP 8.4 Apache基本イメージの拡張を使い、docker-php-ext-installの対象に重複指定しません。
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends cron curl libcurl4-openssl-dev libonig-dev libsqlite3-dev tzdata \
-    && docker-php-ext-install -j"$(nproc)" curl mbstring pdo_sqlite \
+    && apt-get install -y --no-install-recommends cron curl libonig-dev libsqlite3-dev tzdata util-linux \
+    && docker-php-ext-install -j"$(nproc)" mbstring pdo_sqlite \
     && php -r 'foreach (["pdo_sqlite", "sqlite3"] as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "Missing PHP extension: {$extension}\n"); exit(1); } }' \
     && ln -snf /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo "${TZ}" > /etc/timezone \
@@ -34,8 +34,9 @@ RUN a2enconf kptc-security \
     && chown -R root:root /var/www/html \
     && find /var/www/html -type d -exec chmod 0755 {} + \
     && find /var/www/html -type f -exec chmod 0644 {} + \
-    && mkdir -p /var/lib/kptc-scheduler/backups /run/kptc \
-    && chown -R www-data:www-data /var/lib/kptc-scheduler
+    && mkdir -p /var/lib/kptc-scheduler/backups /var/lib/kptc-outbox /var/lib/kptc-publish-status /run/kptc \
+    && chown -R www-data:www-data /var/lib/kptc-scheduler /var/lib/kptc-outbox \
+    && chown 1000:1000 /var/lib/kptc-publish-status
 
 VOLUME ["/var/lib/kptc-scheduler"]
 EXPOSE 80

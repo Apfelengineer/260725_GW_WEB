@@ -5,14 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { japaneseHolidays } from "./lib/group-watcher-api";
 import "./reservations.css";
-
-type PublicRoom = { id: string; name: string; image: string };
-type PublicStatus = "morning_available" | "afternoon_available" | "reserved" | "maintenance";
-type PublicAvailabilityResponse = {
-  updatedAt: string;
-  rooms?: Array<PublicRoom & { description?: string }>;
-  availability: Record<string, Record<string, PublicStatus>>;
-};
+import { japanToday, validatePublicAvailability, type PublicRoom, type PublicStatus } from "./lib/public-availability";
 
 const defaultRooms: Array<PublicRoom & { description?: string }> = [
   { id: "m6", name: "電波暗室", image: "m6.png", description: "" },
@@ -79,11 +72,14 @@ export default function ReservationsPage() {
   const [updatedAt, setUpdatedAt] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const [range, setRange] = useState({ start: "", end: "" });
+  const [now, setNow] = useState(Date.now);
   const [failedImageRoomId, setFailedImageRoomId] = useState("");
   const requestedRoom = new URLSearchParams(window.location.search).get("room") || "m6";
   const room = rooms.find((item) => item.id === requestedRoom) ?? rooms[0] ?? defaultRooms[0];
   const roomId = room.id;
-  const months = useMemo(() => Array.from({ length: 3 }, (_, index) => addMonths(new Date(), index)), []);
+  const months = useMemo(() => Array.from({ length: 3 }, (_, index) => addMonths(japanToday(now), index)), [now]);
   const imageVersion = useMemo(() => Date.now(), []);
 
   useEffect(() => {
@@ -91,19 +87,42 @@ export default function ReservationsPage() {
   }, [room.name]);
 
   useEffect(() => {
-    fetch("./public-availability.php", { headers: { Accept: "application/json" } })
-      .then(async (response) => {
-        const payload = await response.json() as PublicAvailabilityResponse | { error?: string };
-        if (!response.ok || !("availability" in payload)) throw new Error("error" in payload ? payload.error : "公開用データを取得できません");
+    let active = true;
+    let loaded = false;
+    let refreshing = false;
+    const controller = new AbortController();
+    async function refresh() {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const response = await fetch("./data/public-availability.json", { cache: "no-store", credentials: "omit", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]), headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error("公開JSONを取得できません");
+        const text = await response.text();
+        if (text.length > 131072) throw new Error("公開JSONが大きすぎます");
+        const payload = validatePublicAvailability(JSON.parse(text));
+        if (!active) return;
+        loaded = true;
         setAvailability(payload.availability);
-        if (Array.isArray(payload.rooms) && payload.rooms.length) setRooms(payload.rooms);
+        setRooms(payload.rooms);
         setUpdatedAt(payload.updatedAt);
-      })
-      .catch(() => setError("空き情報を取得できませんでした。時間をおいて再読み込みしてください。"))
-      .finally(() => setLoading(false));
+        setRange({ start: payload.rangeStart, end: payload.rangeEnd });
+        setError("");
+        setRefreshFailed(false);
+      } catch {
+        if (!active) return;
+        if (!loaded) setError("空き情報を準備中、または取得できません。時間をおいて再読み込みしてください。");
+        setRefreshFailed(true);
+      } finally { refreshing = false; if (active) { setLoading(false); setNow(Date.now()); } }
+    }
+    void refresh();
+    const timer = window.setInterval(() => { void refresh(); }, 60000);
+    return () => { active = false; controller.abort(); window.clearInterval(timer); };
   }, []);
 
   const finalMonth = months[2];
+  const finalDay = new Date(finalMonth.getFullYear(), finalMonth.getMonth() + 1, 0, 12);
+  const periodMissing = Boolean(updatedAt) && (range.start > dateKey(months[0]) || range.end < dateKey(finalDay));
+  const stale = Boolean(updatedAt) && now - Date.parse(updatedAt) > 1800000;
   return (
     <main className="reservation-page">
       <section className="reservation-board">
@@ -119,7 +138,8 @@ export default function ReservationsPage() {
 
         <div className="reception-period">受付期間：{finalMonth.getFullYear()}年 {finalMonth.getMonth() + 1}月末まで</div>
 
-        {loading ? <div className="reservation-message">公開用の空き情報を読み込んでいます…</div> : error ? <div className="reservation-message error">{error}</div> : (
+        {!loading && !error && (stale || refreshFailed) && <div className="reservation-message warning" role="status">更新が遅れています。表示は最後に取得できた情報です。最新状況はお問い合わせください。</div>}
+        {loading ? <div className="reservation-message">公開用の空き情報を読み込んでいます…</div> : error || periodMissing ? <div className="reservation-message error">{error || "当月を含む3か月分の情報を準備しています。最新状況はお問い合わせください。"}</div> : (
           <div className="reservation-months">{months.map((month) => <MonthCalendar month={month} availability={availability[roomId] ?? {}} key={`${month.getFullYear()}-${month.getMonth()}`} />)}</div>
         )}
 

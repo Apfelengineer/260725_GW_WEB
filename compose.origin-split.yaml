@@ -1,0 +1,44 @@
+# 分離後のOrigin専用。CalendarはTamanegiで起動します。
+services:
+  kptc-scheduler:
+    container_name: kptc-scheduler
+    build:
+      context: .
+      dockerfile: docker/origin/Scheduler/Dockerfile
+    image: kptc-scheduler:latest
+    restart: unless-stopped
+    env_file:
+      - /etc/kptc/scheduler.env
+    ports:
+      - "${KPTC_ORIGIN_BIND_ADDRESS:?Set KPTC_ORIGIN_BIND_ADDRESS in .env}:8080:80"
+    volumes:
+      - kptc-scheduler-data:/var/lib/kptc-scheduler
+      - kptc-outbox:/var/lib/kptc-outbox
+      - kptc-publish-status:/var/lib/kptc-publish-status:ro
+  kptc-publisher:
+    container_name: kptc-publisher
+    build:
+      context: .
+      dockerfile: docker/publisher/Dockerfile
+    image: kptc-publisher:latest
+    restart: unless-stopped
+    depends_on:
+      kptc-scheduler:
+        condition: service_healthy
+    env_file:
+      - /etc/kptc/publisher.env
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - kptc-outbox:/var/lib/kptc-outbox:ro
+      - kptc-publish-status:/var/lib/kptc-publish-status
+      - /etc/kptc/sftp:/run/kptc-sftp:ro
+volumes:
+  kptc-scheduler-data:
+    name: kptc-scheduler-data
+  kptc-outbox:
+    name: kptc-outbox
+  kptc-publish-status:
+    name: kptc-publish-status

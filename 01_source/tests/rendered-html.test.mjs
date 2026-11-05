@@ -146,195 +146,50 @@ test("共有用画像を同梱する", async () => {
 });
 
 test("システム資料を同梱する", async () => {
-  const dockerGuide = await readFile(new URL("docs/KPTC_Scheduler_Docker構築手順書.html", repositoryRoot), "utf8");
-  await assert.rejects(access(new URL("docs/KPTC_Scheduler_現行アプリケーション仕様書.pdf", repositoryRoot)));
-  await assert.rejects(access(new URL("docs/KPTC_Scheduler_独立Linuxサーバー構築・移行手順書.pdf", repositoryRoot)));
-  await assert.rejects(access(new URL("docs/KPTC_Scheduler_ファイル機能・役割一覧_関係図.pdf", repositoryRoot)));
-  await assert.rejects(access(new URL("docs/KPTC_Scheduler_操作マニュアル.pdf", repositoryRoot)));
+  const guide = await readFile(new URL("docs/KPTC_Scheduler_Docker構築手順書.html", repositoryRoot), "utf8");
+  for (const id of [...guide.matchAll(/href="#([^"]+)"/g)].map(match => match[1])) assert.ok(guide.includes('id="' + id + '"'), 'Missing section: ' + id);
+  for (const file of ["compose.origin-single.yaml", "compose.origin-split.yaml", "compose.tamanegi.yaml", "docker/publisher/publisher.env.example", "docker/tamanegi/60-kptc-upload.conf.example"]) {
+    assert.ok(guide.includes(file));
+    await access(new URL(file, repositoryRoot));
+  }
+  assert.match(guide, /localからsftpへ切り替える/);
+  assert.match(guide, /queued:true/);
+  assert.match(guide, /JSONバックアップからSQLiteへ復元/);
+  assert.match(guide, /save-delta/);
+  assert.match(guide, /困ったときのQ＆A/);
+  assert.match(guide, /KPTC_SESSION_COOKIE_PATH/);
+  assert.match(guide, /KPTC_SESSION_COOKIE_SECURE/);
+  assert.ok(guide.indexOf('<section id="changes">') > guide.indexOf('<section id="glossary">'));
+  assert.match(guide, /2026-11-06/);
+  assert.match(guide, /<th>用語<\/th><th>解説<\/th>/);
   await assert.rejects(access(new URL("docs/assets", repositoryRoot)));
-  await assert.rejects(access(new URL("01_source/scripts/build-system-docs.py", repositoryRoot)));
-  await assert.rejects(access(new URL("01_source/scripts/build-operation-manual.py", repositoryRoot)));
-  assert.match(dockerGuide, /docker\/origin\/Scheduler\/Dockerfile/);
-  assert.match(dockerGuide, /docker\/origin\/Calendar\/Dockerfile/);
-  assert.match(dockerGuide, /02_release\/origin\/Scheduler/);
-  assert.match(dockerGuide, /02_release\/origin\/Calendar/);
-  assert.match(dockerGuide, /KPTC_PUBLIC_AVAILABILITY_ENDPOINT/);
-  assert.match(dockerGuide, /\/opt\/kptc\/260725_GW_WEB/);
-  assert.match(dockerGuide, /Originサーバー1台/);
-  assert.match(dockerGuide, /\/Scheduler\//);
-  assert.match(dockerGuide, /\/Calendar\//);
-  assert.match(dockerGuide, /KPTC_SESSION_COOKIE_PATH=\/Scheduler\//);
-  assert.match(dockerGuide, /http:\/\/kptc-calendar\/receive-availability\.php/);
-  assert.match(dockerGuide, /5-5\. 環境ごとに決める変数/);
-  assert.match(dockerGuide, /table-layout:fixed/);
-  assert.match(dockerGuide, /overflow-wrap:anywhere/);
-  assert.match(dockerGuide, /<table class="config-table">/);
-  assert.match(dockerGuide, /KPTC_RENKON_SCHEDULER_URL/);
-  assert.match(dockerGuide, /openssl rand -hex 32/);
-  assert.match(dockerGuide, /KPTC_PUBLIC_AVAILABILITY_MODE/);
-  assert.match(dockerGuide, /5-6\. HTTPとHTTPSを切り替える/);
-  assert.match(dockerGuide, /変更前：HTTP試験/);
-  assert.match(dockerGuide, /up -d --force-recreate/);
-  assert.match(dockerGuide, /X-Forwarded-Proto: https/);
-  assert.match(dockerGuide, /8080番・8081番/);
-  assert.match(dockerGuide, /<section id="browser-ready">/);
-  assert.match(dockerGuide, /Webブラウザで閲覧・操作できるまで/);
-  assert.match(dockerGuide, /既存社内システムがログイン済み利用者について保持しているID/);
-  assert.match(dockerGuide, /Base64\(IV＋暗号文\)/);
-  assert.match(dockerGuide, /利用開始の合格表/);
-  assert.match(dockerGuide, /compose\.origin-single\.yaml/);
-  assert.match(dockerGuide, /docker compose down -v/);
-  assert.match(dockerGuide, /更新・復旧・バックアップ/);
-  assert.match(dockerGuide, /開発用PCで修正 → 試験 → ビルド → GitHubのmainへ反映 → Originサーバーで再構築/);
-  assert.match(dockerGuide, /01_source/);
-  assert.match(dockerGuide, /02_release/);
-  assert.match(dockerGuide, /詳細論理構成図/);
-  assert.match(dockerGuide, /aria-labelledby="logic-title logic-desc"/);
-  assert.match(dockerGuide, /Scheduler SQLite/);
-  assert.match(dockerGuide, /公開用3か月JSON（単一ファイル）/);
-  assert.match(dockerGuide, /Scheduler専用の非公開Volume/);
-  assert.match(dockerGuide, /Calendar専用Volume（実ファイルは直接配信しない）/);
-  assert.match(dockerGuide, /CalendarからScheduler専用Volumeへの接続経路はなく/);
-  assert.match(dockerGuide, /\.\.\/docker\/README\.md/);
-  assert.match(dockerGuide, /pre-update-YYYYMMDD-HHMM\.sqlite/);
-  assert.match(dockerGuide, /kptc-scheduler:rollback-YYYYMMDD-HHMM/);
-  assert.match(dockerGuide, /SchedulerとCalendarをOriginサーバー1台の別コンテナで動かす構成へ変更/);
-  assert.match(dockerGuide, /up -d --no-build --force-recreate/);
-  assert.match(dockerGuide, /<section id="changes">/);
-  assert.match(dockerGuide, /リバースプロキシの導入・設定変更はサーバー管理者が別途実施/);
-  assert.ok(dockerGuide.indexOf('<section id="glossary">') < dockerGuide.indexOf('<section id="changes">'));
-  assert.ok(dockerGuide.indexOf('<section id="changes">') > dockerGuide.indexOf('<section id="trouble">'));
-  assert.match(dockerGuide, /14\. 変更履歴/);
-  const changes = dockerGuide.slice(dockerGuide.indexOf('<section id="changes">'), dockerGuide.indexOf('</section>', dockerGuide.indexOf('<section id="changes">')));
-  assert.match(dockerGuide, /\.history-table col:nth-child\(1\) \{ width:17%; \}/);
-  assert.match(changes, /<table class="history-table">/);
-  assert.match(changes, /<th>日付<\/th><th>変更内容<\/th>/);
-  assert.match(changes, /主要な変更を古い順に記載/);
-  assert.ok(changes.indexOf('2026-09-08') < changes.indexOf('2026-10-08'));
-  assert.doesNotMatch(changes, /旧構成・旧記載/);
-  assert.doesNotMatch(changes, /表の幅と折り返し/);
-  const glossary = dockerGuide.slice(dockerGuide.indexOf('<section id="glossary">'), dockerGuide.indexOf('</section>', dockerGuide.indexOf('<section id="glossary">')));
-  assert.match(glossary, /イメージ（Dockerイメージ）/);
-  assert.match(dockerGuide, /\.glossary-table col:nth-child\(1\) \{ width:28%; \}/);
-  assert.match(glossary, /<table class="glossary-table">/);
-  assert.match(glossary, /<th>用語<\/th><th>解説<\/th>/);
-  assert.doesNotMatch(glossary, /やさしい説明/);
-  assert.match(glossary, /Dockerfile/);
-  assert.match(glossary, /HMAC-SHA256署名/);
-  assert.match(glossary, /ヘルスチェック/);
-  assert.match(glossary, /127\.0\.0\.1/);
-  assert.match(glossary, /HTTPヘッダー/);
-  assert.match(glossary, /チェックサム/);
-  assert.match(glossary, /コミット/);
-  assert.doesNotMatch(glossary, /(?:です|ます|ません)。<\/td>/);
 });
 
-test("試験室の空き状況ページと署名付きJSON連携を提供する", async () => {
-  // 表示記号、配色、用途別画面、署名付き3か月JSON連携を確認します。
-  const [page, styles, internalVite, publicVite, phpApi, publicApi, jsonPublisher, jsonContract, roomConfig, publisher, receiver, retryPublisher, monitor, publicHealth] = await Promise.all([
-    readFile(new URL("origin/shared/app/reservations-page.tsx", root), "utf8"),
-    readFile(new URL("origin/shared/app/reservations.css", root), "utf8"),
-    readFile(new URL("vite.scheduler.config.ts", root), "utf8"),
-    readFile(new URL("vite.calendar.config.ts", root), "utf8"),
-    readFile(new URL("origin/shared/public/api.php", root), "utf8"),
-    readFile(new URL("origin/shared/public/public-availability.php", root), "utf8"),
-    readFile(new URL("origin/shared/public/availability-json.php", root), "utf8"),
-    readFile(new URL("origin/shared/public/availability-contract.php", root), "utf8"),
-    readFile(new URL("origin/shared/public/availability-room-config.php", root), "utf8"),
-    readFile(new URL("origin/shared/public/availability-publisher.php", root), "utf8"),
-    readFile(new URL("origin/shared/public/receive-availability.php", root), "utf8"),
-    readFile(new URL("origin/shared/public/publish-availability-cli.php", root), "utf8"),
-    readFile(new URL("origin/shared/public/monitor-availability-cli.php", root), "utf8"),
-    readFile(new URL("origin/shared/public/health-availability.php", root), "utf8"),
-  ]);
-  assert.match(page, /電波暗室/);
-  assert.match(page, /電磁波妨害評価装置\(G-TEM\)/);
-  assert.match(page, /パルスサージシステム/);
-  assert.match(page, /image: "m6\.png"/);
-  assert.match(page, /image: "m7\.png"/);
-  assert.match(page, /image: "m8\.png"/);
-  assert.match(page, /alt={`\$\{room\.name\}の設備写真`}/);
-  assert.match(page, /setRooms\(payload\.rooms\)/);
-  assert.doesNotMatch(page, /const roomIds/);
-  assert.doesNotMatch(page, /KPTC SCHEDULER \/ LAB AVAILABILITY/);
-  assert.match(page, /入力インパルス試験機/);
-  assert.match(page, /ご予約・お問い合わせ:denki@kptc\.jp\/075-315-8634/);
-  assert.match(page, /必ずメールか電話でお問い合わせ/);
-  assert.match(page, /technology-center-logo-white\.png/);
-  assert.doesNotMatch(page, /KPTC Schedulerへ戻る|予約の登録・変更/);
-  assert.match(page, /メンテナンス/);
-  assert.match(page, /キャンセル待ち/);
-  assert.match(page, /午前空きあり/);
-  assert.match(page, /午後空きあり/);
+test("静的カレンダーの現行デザインと公開専用JSONを提供する", async () => {
+  const page = await readFile(new URL("origin/shared/app/reservations-page.tsx", root), "utf8");
+  const styles = await readFile(new URL("origin/shared/app/reservations.css", root), "utf8");
+  const exporter = await readFile(new URL("origin/shared/public/availability-json.php", root), "utf8");
+  const contract = await readFile(new URL("origin/shared/public/availability-contract.php", root), "utf8");
+  for (const label of ["電波暗室", "電磁波妨害評価装置(G-TEM)", "パルスサージシステム", "午前空きあり", "午後空きあり", "メンテナンス", "キャンセル待ち", "denki@kptc.jp/075-315-8634"]) assert.ok(page.includes(label));
+  assert.match(page, /data\/public-availability\.json/);
+  assert.match(page, /credentials: "omit"/);
+  assert.match(page, /cache: "no-store"/);
+  assert.doesNotMatch(page, /public-availability\.php/);
+  assert.match(page, /const marker = nonBusinessDay \? "" : statusMarker/);
   assert.match(page, /status === "morning_available" \? "▲"/);
   assert.match(page, /status === "afternoon_available" \? "▼"/);
-  assert.match(page, /status === "reserved"/);
-  assert.match(page, /const nonBusinessDay = date\.getDay\(\) === 0 \|\| date\.getDay\(\) === 6 \|\| Boolean\(holiday\)/);
-  assert.match(page, /const marker = nonBusinessDay \? "" : statusMarker/);
-  assert.match(page, /const hideDate = !nonBusinessDay && \(status === "maintenance" \|\| Boolean\(marker\)\)/);
-  assert.match(page, /public-availability\.php/);
-  assert.doesNotMatch(page, /groupWatcherApi|bootstrap\(|ScheduleItem|Member/);
-  assert.match(page, /length: 3/);
-  assert.match(styles, /sold-out-overlay/);
-  assert.match(styles, /reservation-day\.saturday/);
-  assert.match(styles, /reservation-day\.sunday/);
   assert.match(styles, /reservation-day\.reserved \{ color: #111; background: #555b60; \}/);
-  assert.match(styles, /\.room-emblem img/);
-  assert.match(styles, /object-fit: contain/);
+  assert.match(styles, /sold-out-overlay/);
   assert.match(styles, /width: min\(340px,46%\)/);
-  assert.doesNotMatch(internalVite, /reservations\.html/);
-  assert.match(publicVite, /origin\/Calendar\/index\.html/);
-  assert.doesNotMatch(publicVite, /origin\/Scheduler\/index\.html/);
-  assert.match(phpApi, /room_demo_v1/);
-  assert.match(phpApi, /public_availability_pending/);
-  assert.match(phpApi, /kptc_publish_availability/);
-  assert.match(phpApi, /public_availability_json_v1/);
-  assert.match(jsonContract, /public-availability\.json/);
-  assert.match(jsonPublisher, /\+3 months/);
-  assert.doesNotMatch(jsonPublisher, /\+12 months/);
-  assert.match(jsonPublisher, /機器利用/);
-  assert.match(jsonPublisher, /キャンセル待ち/);
-  assert.match(jsonPublisher, /機器点検/);
-  assert.match(jsonPublisher, /sourceVersion/);
-  assert.match(jsonPublisher, /'schemaVersion'=>2/);
-  assert.match(jsonPublisher, /kptc_public_rooms_from_state/);
-  assert.match(jsonPublisher, /array_column\(\$rooms, 'id'\)/);
-  assert.doesNotMatch(jsonPublisher, /repeatUntil|\$repeat/);
-  assert.match(roomConfig, /function kptc_public_room_ids\(\): array/);
-  assert.match(roomConfig, /return \['m6', 'm7', 'm8'\]/);
-  assert.match(roomConfig, /公開対象の試験室ユーザーが見つかりません/);
-  assert.match(roomConfig, /\$memberId \. '\.png'/);
-  assert.match(roomConfig, /電磁波妨害評価装置\(G-TEM\)/);
-  assert.match(roomConfig, /パルスサージシステム/);
-  assert.match(jsonContract, /JSON_PRETTY_PRINT/);
-  assert.match(jsonContract, /KPTC_PUBLIC_MAX_ROOMS = 32/);
-  assert.match(jsonContract, /\['schemaVersion', 'sourceVersion', 'updatedAt', 'rangeStart', 'rangeEnd', 'rooms', 'availability'\]/);
-  assert.match(jsonContract, /rename\(\$temporary, \$path\)/);
-  assert.match(jsonContract, /kptc_validate_public_availability/);
-  assert.doesNotMatch(jsonPublisher, /PDO|sqlite:|CREATE TABLE|public_meta/);
-  assert.doesNotMatch(jsonContract, /PDO|sqlite:|CREATE TABLE|public_meta/);
-  assert.doesNotMatch(publicApi, /app_state|audit_logs|group-watcher\.sqlite/);
-  assert.match(publisher, /hash_hmac\('sha256'/);
-  assert.match(publisher, /X-KPTC-Timestamp/);
-  assert.match(publisher, /X-KPTC-Signature/);
-  assert.match(publisher, /CURLOPT_FOLLOWLOCATION => false/);
-  assert.match(receiver, /hash_equals/);
-  assert.match(receiver, /131072/);
-  assert.match(receiver, /kptc_validate_public_availability/);
-  assert.match(receiver, /kptc_compare_public_availability/);
-  assert.match(retryPublisher, /PHP_SAPI !== 'cli'/);
-  assert.match(retryPublisher, /public_availability_consecutive_failures/);
-  assert.match(retryPublisher, /exit\(1\)/);
-  assert.match(monitor, /public_availability_last_success_at/);
-  assert.match(monitor, /exit\(\$healthy \? 0 : 1\)/);
-  assert.match(publicHealth, /http_response_code\(\$healthy \? 200 : 503\)/);
-  assert.match(publicHealth, /KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS/);
-  await assert.rejects(access(new URL("origin/shared/public/availability-store.php", root)));
-  await access(new URL("origin/shared/public/technology-center-logo-white.png", root));
-  await access(new URL("origin/shared/public/m6.png", root));
-  await access(new URL("origin/shared/public/m7.png", root));
-  await access(new URL("origin/shared/public/m8.png", root));
-  await access(new URL("origin/shared/public/availability-room-config.php", root));
+  assert.match(exporter, /\+3 months/);
+  assert.match(exporter, /機器利用/);
+  assert.match(exporter, /キャンセル待ち/);
+  assert.match(exporter, /機器点検/);
+  assert.match(contract, /flock\(\$lock, LOCK_EX\)/);
+  assert.match(contract, /rename\(\$temporary, \$path\)/);
+  for (const old of ["receive-availability.php", "public-availability.php", "health-availability.php"]) {
+    await assert.rejects(access(new URL("origin/shared/public/" + old, root)));
+  }
 });
 
 test("ログイン画面なしの一般モードとパスワード付き管理者モードを提供する", async () => {
@@ -431,11 +286,7 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   assert.doesNotMatch(publicSection, /scheduler-backup\.php|backup-scheduler-cli\.php|restore-scheduler-cli\.php/);
   assert.match(internalSection, /publish-availability-cli\.php/);
   assert.match(internalSection, /availability-room-config\.php/);
-  assert.match(publicSection, /receive-availability\.php/);
-  assert.match(publicSection, /public-availability\.php/);
-  assert.match(publicSection, /health-availability\.php/);
-  assert.match(publicSection, /availability-contract\.php/);
-  assert.match(publicSection, /runtime-config\.php/);
+  assert.doesNotMatch(publicSection, /\.php/);
   assert.match(copier, /directory: "origin\/Calendar"/);
   assert.doesNotMatch(publicSection, /availability-json\.php/);
   assert.doesNotMatch(publicSection, /availability-room-config\.php/);
@@ -500,45 +351,24 @@ test("分離配置でも公開領域外の実行設定を探索する", async ()
   assert.match(runtimeConfig, /GW\/config/);
 });
 
-test("Origin単一サーバー上へPHP 8.4の2コンテナを構築できる", async () => {
-  const [schedulerDockerfile, schedulerEntrypoint, schedulerCron, schedulerEnvExample, calendarDockerfile, calendarEntrypoint, guide, compose, composeEnvExample] = await Promise.all([
+test("同一サーバーと別サーバーの配信を切り替え、公開側にPHPを置かない", async () => {
+  const [scheduler, calendar, single, split, tamanegi] = await Promise.all([
     readFile(new URL("docker/origin/Scheduler/Dockerfile", repositoryRoot), "utf8"),
-    readFile(new URL("docker/origin/Scheduler/entrypoint.sh", repositoryRoot), "utf8"),
-    readFile(new URL("docker/origin/Scheduler/kptc-cron", repositoryRoot), "utf8"),
-    readFile(new URL("docker/origin/Scheduler/scheduler.env.example", repositoryRoot), "utf8"),
     readFile(new URL("docker/origin/Calendar/Dockerfile", repositoryRoot), "utf8"),
-    readFile(new URL("docker/origin/Calendar/entrypoint.sh", repositoryRoot), "utf8"),
-    readFile(new URL("docker/README.md", repositoryRoot), "utf8"),
     readFile(new URL("compose.origin-single.yaml", repositoryRoot), "utf8"),
-    readFile(new URL("compose.env.example", repositoryRoot), "utf8"),
+    readFile(new URL("compose.origin-split.yaml", repositoryRoot), "utf8"),
+    readFile(new URL("compose.tamanegi.yaml", repositoryRoot), "utf8"),
   ]);
-
-  assert.match(schedulerDockerfile, /FROM php:8\.4-apache-bookworm/);
-  assert.match(schedulerDockerfile, /COPY 02_release\/origin\/Scheduler\/ \/var\/www\/html\//);
-  assert.match(schedulerDockerfile, /curl mbstring pdo_sqlite/);
-  assert.doesNotMatch(schedulerDockerfile, /docker-php-ext-install[^\n]*sqlite3/);
-  assert.match(schedulerDockerfile, /extension_loaded\(\$extension\)/);
-  assert.match(schedulerDockerfile, /VOLUME \["\/var\/lib\/kptc-scheduler"\]/);
-  assert.match(schedulerEntrypoint, /KPTC_PORTAL_TOKEN_KEY/);
-  assert.match(schedulerEntrypoint, /KPTC_PUBLIC_AVAILABILITY_SECRET/);
-  assert.match(schedulerCron, /\*\/5 \* \* \* \*/);
-  assert.match(schedulerCron, /0 22 \* \* \*/);
-  assert.match(schedulerEnvExample, /KPTC_PUBLIC_AVAILABILITY_MODE=https/);
-  assert.match(schedulerEnvExample, /KPTC_PUBLIC_AVAILABILITY_TIMEOUT=10/);
-  assert.match(schedulerEnvExample, /KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800/);
-
-  assert.match(calendarDockerfile, /FROM php:8\.4-apache-bookworm/);
-  assert.match(calendarDockerfile, /COPY 02_release\/origin\/Calendar\/ \/var\/www\/html\//);
-  assert.match(calendarDockerfile, /VOLUME \["\/var\/lib\/kptc-availability"\]/);
-  assert.match(calendarEntrypoint, /KPTC_PUBLIC_AVAILABILITY_SECRET/);
-  assert.match(guide, /compose\.origin-single\.yaml/);
-  assert.match(guide, /リバースプロキシ/);
-  assert.match(compose, /dockerfile: docker\/origin\/Scheduler\/Dockerfile/);
-  assert.match(compose, /dockerfile: docker\/origin\/Calendar\/Dockerfile/);
-  assert.match(compose, /KPTC_ORIGIN_BIND_ADDRESS[^\n]*:8080:80/);
-  assert.match(compose, /KPTC_ORIGIN_BIND_ADDRESS[^\n]*:8081:80/);
-  assert.match(composeEnvExample, /KPTC_ORIGIN_BIND_ADDRESS=/);
-  assert.match(schedulerEnvExample, /KPTC_SESSION_COOKIE_SECURE=0/);
-  assert.match(schedulerEnvExample, /KPTC_SESSION_COOKIE_PATH=\//);
-  assert.match(compose, /kptc-internal/);
+  assert.match(scheduler, /FROM php:8\.4-apache-bookworm/);
+  assert.match(scheduler, /extension_loaded\(\$extension\)/);
+  assert.match(calendar, /FROM nginx:stable-alpine/);
+  assert.doesNotMatch(calendar, /FROM php:/);
+  assert.match(single, /network_mode: none/);
+  assert.match(single, /kptc-calendar-static-data:\/var\/lib\/kptc-public:ro/);
+  assert.match(split, /\/etc\/kptc\/sftp:\/run\/kptc-sftp:ro/);
+  assert.doesNotMatch(split, /  kptc-calendar:/);
+  assert.doesNotMatch(tamanegi, /kptc-scheduler-data|kptc-outbox|kptc-scheduler:/);
+  assert.match(tamanegi, /\/srv\/kptc-calendar\/data:\/var\/lib\/kptc-public:ro/);
+  const entries = await (await import("node:fs/promises")).readdir(new URL("02_release/origin/Calendar/", repositoryRoot));
+  assert.ok(entries.every(name => !name.endsWith(".php")), "Calendar release must not contain PHP");
 });

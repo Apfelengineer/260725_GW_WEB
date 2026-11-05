@@ -274,7 +274,7 @@ function db(): PDO {
     $publishPending = $pdo->query("SELECT value FROM app_meta WHERE key='public_availability_pending'")->fetchColumn();
     $publishedRangeStart = $pdo->query("SELECT value FROM app_meta WHERE key='public_availability_range_start'")->fetchColumn();
     $currentRangeStart = (new DateTimeImmutable('first day of this month', new DateTimeZone('Asia/Tokyo')))->format('Y-m-d');
-    if ($jsonPublished === false || $publishPending === '1' || $publishedRangeStart !== $currentRangeStart) {
+    if ($jsonPublished === false || $publishPending === '1' || $publishedRangeStart !== $currentRangeStart || !is_file(kptc_availability_json_path())) {
         // 初回、未送信、月替わりのいずれかで、公開用の3か月分JSONを上書き生成します。
         $row = $pdo->query('SELECT payload,version FROM app_state WHERE id=1')->fetch(PDO::FETCH_ASSOC);
         $state = json_decode($row['payload'], true);
@@ -379,12 +379,7 @@ function bootstrap_payload(PDO $pdo): array {
         'publicAvailabilityPageUrl'=>public_availability_page_url(),
         'authAccounts'=>$user['role'] === 'admin' ? kptc_auth_account_list($pdo) : [],
         'audit'=>$user['role'] === 'admin' ? audit_list($pdo) : [],
-        'availabilityPublish'=>[
-            'pending'=>get_meta($pdo, 'public_availability_pending') === '1',
-            'lastAttemptAt'=>get_meta($pdo, 'public_availability_last_attempt_at'),
-            'lastSuccessAt'=>get_meta($pdo, 'public_availability_last_success_at'),
-            'consecutiveFailures'=>(int)(get_meta($pdo, 'public_availability_consecutive_failures') ?? '0'),
-        ],
+        'availabilityPublish'=>kptc_availability_delivery_status((int)$record['version'], get_meta($pdo, 'public_availability_pending') === '1'),
     ];
 }
 

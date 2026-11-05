@@ -97,31 +97,39 @@ function kptc_compare_public_availability(array $incoming, array $existing): int
 
 function kptc_store_public_availability(array $payload): array {
     $payload = kptc_validate_public_availability($payload);
-    $existing = kptc_read_public_availability();
-    if ($existing !== null) {
-        try { $existing = kptc_validate_public_availability($existing); }
-        catch (InvalidArgumentException $error) { $existing = null; }
-    }
-    if ($existing !== null) {
-        $comparison = kptc_compare_public_availability($payload, $existing);
-        if ($comparison < 0) throw new UnexpectedValueException('現在の公開情報より古いJSONです');
-        if ($comparison === 0) return $existing;
-    }
-
     $path = kptc_availability_json_path();
     $directory = dirname($path);
-    if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)) throw new RuntimeException('公開JSONの保存先を作成できません');
-    $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
-    if ($json === false) throw new RuntimeException('公開JSONを生成できません');
-    $temporary = $path . '.tmp.' . bin2hex(random_bytes(6));
+    if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) throw new RuntimeException('公開JSONの保存先を作成できません');
+    // 複数利用者の保存と定期生成が競合しても、古い世代を上書きしません。
+    $lock = fopen($path . '.lock', 'c');
+    if ($lock === false) throw new RuntimeException('公開JSONのロックを作成できません');
+    chmod($path . '.lock', 0600);
+    $temporary = '';
     try {
+        if (!flock($lock, LOCK_EX)) throw new RuntimeException('公開JSONをロックできません');
+        $existing = kptc_read_public_availability();
+        if ($existing !== null) {
+            try { $existing = kptc_validate_public_availability($existing); }
+            catch (InvalidArgumentException $error) { $existing = null; }
+        }
+        if ($existing !== null) {
+            $comparison = kptc_compare_public_availability($payload, $existing);
+            if ($comparison < 0) throw new UnexpectedValueException('現在の公開情報より古いJSONです');
+            if ($comparison === 0) return $existing;
+        }
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+        if ($json === false) throw new RuntimeException('公開JSONを生成できません');
+        $temporary = $path . '.tmp.' . bin2hex(random_bytes(6));
         if (file_put_contents($temporary, $json . PHP_EOL, LOCK_EX) === false) throw new RuntimeException('公開JSONを書き込めません');
-        chmod($temporary, 0600);
+        // 個人情報を含まない専用JSONだけを、別UIDの配信担当へ読取り許可します。
+        if (!chmod($temporary, 0644)) throw new RuntimeException('公開JSONの読取り権限を設定できません');
         if (!rename($temporary, $path)) throw new RuntimeException('公開JSONを置き換えられません');
+        return $payload;
     } finally {
-        if (is_file($temporary)) unlink($temporary);
+        if ($temporary !== '' && is_file($temporary)) unlink($temporary);
+        flock($lock, LOCK_UN);
+        fclose($lock);
     }
-    return $payload;
 }
 
 if (isset($_SERVER['SCRIPT_FILENAME']) && realpath((string)$_SERVER['SCRIPT_FILENAME']) === __FILE__) {

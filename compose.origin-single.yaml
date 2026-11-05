@@ -1,20 +1,5 @@
+# 初期運用：Origin上のScheduler・転送担当・静的Calendar。
 services:
-  kptc-calendar:
-    container_name: kptc-calendar
-    build:
-      context: .
-      dockerfile: docker/origin/Calendar/Dockerfile
-    image: kptc-calendar:latest
-    restart: unless-stopped
-    env_file:
-      - /etc/kptc/calendar.env
-    ports:
-      - "${KPTC_ORIGIN_BIND_ADDRESS:?Set KPTC_ORIGIN_BIND_ADDRESS in the repository .env file}:8081:80"
-    volumes:
-      - kptc-calendar-data:/var/lib/kptc-availability
-    networks:
-      - kptc-internal
-
   kptc-scheduler:
     container_name: kptc-scheduler
     build:
@@ -22,25 +7,58 @@ services:
       dockerfile: docker/origin/Scheduler/Dockerfile
     image: kptc-scheduler:latest
     restart: unless-stopped
-    depends_on:
-      kptc-calendar:
-        condition: service_healthy
     env_file:
       - /etc/kptc/scheduler.env
     ports:
-      - "${KPTC_ORIGIN_BIND_ADDRESS:?Set KPTC_ORIGIN_BIND_ADDRESS in the repository .env file}:8080:80"
+      - "${KPTC_ORIGIN_BIND_ADDRESS:?Set KPTC_ORIGIN_BIND_ADDRESS in .env}:8080:80"
     volumes:
       - kptc-scheduler-data:/var/lib/kptc-scheduler
-    networks:
-      - kptc-internal
-
-networks:
-  kptc-internal:
-    name: kptc-internal
-    driver: bridge
-
+      - kptc-outbox:/var/lib/kptc-outbox
+      - kptc-publish-status:/var/lib/kptc-publish-status:ro
+  kptc-publisher:
+    container_name: kptc-publisher
+    build:
+      context: .
+      dockerfile: docker/publisher/Dockerfile
+    image: kptc-publisher:latest
+    restart: unless-stopped
+    depends_on:
+      kptc-scheduler:
+        condition: service_healthy
+    env_file:
+      - /etc/kptc/publisher.env
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - kptc-outbox:/var/lib/kptc-outbox:ro
+      - kptc-publish-status:/var/lib/kptc-publish-status
+      - kptc-calendar-static-data:/var/lib/kptc-public
+  kptc-calendar:
+    container_name: kptc-calendar
+    build:
+      context: .
+      dockerfile: docker/origin/Calendar/Dockerfile
+    image: kptc-calendar:latest
+    restart: unless-stopped
+    ports:
+      - "${KPTC_ORIGIN_BIND_ADDRESS:?Set KPTC_ORIGIN_BIND_ADDRESS in .env}:8081:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - kptc-calendar-static-data:/var/lib/kptc-public:ro
 volumes:
   kptc-scheduler-data:
     name: kptc-scheduler-data
-  kptc-calendar-data:
-    name: kptc-calendar-data
+  kptc-outbox:
+    name: kptc-outbox
+  kptc-publish-status:
+    name: kptc-publish-status
+  kptc-calendar-static-data:
+    name: kptc-calendar-static-data

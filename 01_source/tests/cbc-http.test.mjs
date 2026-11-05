@@ -12,7 +12,8 @@ const temporary = await mkdtemp(join(tmpdir(), 'kptc-cbc-test-'));
 const base = 'http://127.0.0.1:18903';
 const server = spawn('php', ['-S','127.0.0.1:18903','-t',fileURLToPath(new URL('../../02_release/', import.meta.url))], {
   env: {...process.env, KPTC_INTERNAL_SCHEDULER_DB:join(temporary,'test.sqlite'),
-    KPTC_PUBLIC_AVAILABILITY_JSON:join(temporary,'public.json'), KPTC_PUBLIC_AVAILABILITY_MODE:'local',
+    KPTC_PUBLIC_AVAILABILITY_JSON:join(temporary,'public.json'),
+    KPTC_AVAILABILITY_STATUS_JSON:join(temporary,'status.json'),
     KPTC_SESSION_COOKIE_SECURE:'0', KPTC_RENKON_SCHEDULER_URL:base+'/origin/Scheduler/', KPTC_PORTAL_TOKEN_KEY:'SecretKey'},
   stdio:['ignore','ignore','pipe'],
 });
@@ -57,6 +58,14 @@ try {
   const savedPayload = await deltaSave.json();
   assert.equal(savedPayload.version,payload.version+1);
   assert.equal(savedPayload.state.schedules.filter(item => item.id===createdSchedule.id).length,1);
+  assert.equal(savedPayload.availabilityPublish.pending, true, 'Generation is not delivery');
+  const delivery = spawnSync('python3', [fileURLToPath(new URL('../publisher/delivery.py', import.meta.url)), '--once'], {
+    env: { ...process.env, KPTC_AVAILABILITY_DELIVERY_MODE: 'local', KPTC_AVAILABILITY_SOURCE_JSON: join(temporary, 'public.json'), KPTC_AVAILABILITY_STATUS_JSON: join(temporary, 'status.json'), KPTC_AVAILABILITY_LOCAL_JSON: join(temporary, 'calendar', 'public-availability.json') },
+    encoding: 'utf8',
+  });
+  assert.equal(delivery.status, 0, delivery.stdout + delivery.stderr);
+  const delivered = await (await fetch(base+'/origin/Scheduler/api.php?action=bootstrap', { headers: { cookie } })).json();
+  assert.equal(delivered.availabilityPublish.pending, false, 'Bootstrap reflects actual public JSON delivery');
   const testPassword = randomBytes(18).toString('hex');
   const setup = spawnSync('php', ['-r', 'require $argv[1]; $pdo=new PDO("sqlite:".$argv[2]); kptc_auth_set_admin_password($pdo, $argv[3]);', fileURLToPath(new URL('../../02_release/origin/Scheduler/auth.php', import.meta.url)), join(temporary, 'test.sqlite'), testPassword], { encoding: 'utf8' });
   assert.equal(setup.status, 0, setup.stderr);

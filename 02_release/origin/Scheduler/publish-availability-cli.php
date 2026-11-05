@@ -48,7 +48,7 @@ try {
     kptc_cli_meta($pdo, 'public_availability_last_success_at', date(DATE_ATOM));
     kptc_cli_meta($pdo, 'public_availability_last_error', '');
     kptc_cli_meta($pdo, 'public_availability_consecutive_failures', '0');
-    fwrite(STDOUT, json_encode(['ok'=>true, 'updatedAt'=>$published['updatedAt'], 'sourceVersion'=>$published['sourceVersion']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL);
+    fwrite(STDOUT, json_encode(['ok'=>true, 'queued'=>true, 'updatedAt'=>$published['updatedAt'], 'sourceVersion'=>$published['sourceVersion'], 'delivery'=>kptc_availability_delivery_status((int)$row['version'])], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . PHP_EOL);
     exit(0);
 } catch (Throwable $error) {
     $failures = (int)(kptc_cli_meta_value($pdo, 'public_availability_consecutive_failures') ?? '0') + 1;

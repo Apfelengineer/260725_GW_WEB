@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/local/bin/php -d auto_prepend_file=/home/apfelrunner/GW/config/internal-env.php /home/apfelrunner/GW/bin/delivery-local-cli.php /home/apfelrunner/www/GW/Scheduler/availability-contract.php

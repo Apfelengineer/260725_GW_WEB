@@ -1,0 +1,4 @@
+*/5 * * * * /home/apfelrunner/GW/bin/publish-availability >/home/apfelrunner/GW/publish-availability.log 2>&1
+* * * * * /home/apfelrunner/GW/bin/deliver-availability >/home/apfelrunner/GW/deliver-availability.log 2>&1
+*/10 * * * * /home/apfelrunner/GW/bin/monitor-availability >/home/apfelrunner/GW/monitor-availability.log 2>&1
+0 22 * * * /usr/local/bin/php /home/apfelrunner/www/GW/Scheduler/backup-scheduler-cli.php >/home/apfelrunner/GW/scheduler-backup.log 2>&1

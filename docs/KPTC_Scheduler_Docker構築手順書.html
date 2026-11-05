@@ -84,655 +84,480 @@
     footer { max-width:1120px; margin:-45px auto 40px; padding:0 20px; color:var(--muted); font-size:.9rem; }
     @media(max-width:860px){ main{display:block} nav{position:static;max-height:none;margin-bottom:24px} section{padding:23px 20px}.flow{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.config-table,.issue-table{font-size:.8rem}.config-table th,.config-table td,.issue-table th,.issue-table td{padding:6px}.history-table col:nth-child(1){width:29%}.history-table col:nth-child(2){width:71%}.glossary-table col:nth-child(1){width:36%}.glossary-table col:nth-child(2){width:64%} }
     @media print { body{background:#fff;font-size:10.5pt} header{padding:22mm 16mm} main{display:block;max-width:none;padding:10mm 12mm} nav{display:none} section{border:0;box-shadow:none;padding:0;break-before:page} section:first-child{break-before:auto} pre{white-space:pre-wrap;word-break:break-all} a{color:inherit;text-decoration:none} footer{margin:0}.logic-diagram{overflow:visible}.logic-diagram svg{min-width:0}.diagram-legend{font-size:8.5pt} }
+    .architecture { display:grid; gap:12px; margin:18px 0; }
+    .architecture .flow-box { text-align:left; }
+    .architecture .flow-box small { display:block; color:var(--muted); }
+    .architecture .data { background:#eaf8f3; border-color:#6ca48e; }
+    .architecture .external { background:#fff7e8; border-color:#c79c4c; }
+    .qa h3 { margin-top:1.7em; }
   </style>
 </head>
 <body>
   <header>
-    <span class="tag">Ubuntu 24.04 / PHP 8.4 / Docker / Origin単一サーバー</span>
+    <span class="tag">Ubuntu 24.04 / 内部PHP 8.4 / 静的カレンダー / local・SFTP切替</span>
     <h1>KPTC Scheduler<br>Docker構築手順書</h1>
-    <p>内部スケジューラと外部公開カレンダーを、1台のOriginサーバー上の別コンテナ・別保存領域へ構築する手順です。Originへの直接接続と、別サーバーのリバースプロキシを介する接続の両方を説明します。</p>
+    <p>まずOriginサーバー1台で運用し、後から公開カレンダーだけをTamanegiへ移す手順です。カレンダーの見た目は共通で、公開側にはPHP・データベース・受信API・秘密鍵を置きません。</p>
   </header>
-
   <main>
-    <nav aria-label="目次">
-      <b>目次</b>
-      <ol>
-        <li><a href="#overview">構成の全体像</a></li>
-        <li><a href="#prepare">事前準備</a></li>
-        <li><a href="#files">ファイル配置</a></li>
-        <li><a href="#install">Docker導入</a></li>
-        <li><a href="#env">実環境設定</a></li>
-        <li><a href="#start">構築と起動</a></li>
-        <li><a href="#proxy">リバースプロキシ特記事項</a></li>
-        <li><a href="#initial">初期設定・通信確認</a></li>
-        <li><a href="#migration">既存データ移行</a></li>
-        <li><a href="#update">更新・復旧・バックアップ</a></li>
-        <li><a href="#browser-ready">ブラウザ利用開始まで</a></li>
-        <li><a href="#trouble">困ったとき</a></li>
-        <li><a href="#glossary">用語集</a></li>
-        <li><a href="#changes">変更履歴</a></li>
-      </ol>
-    </nav>
-
+    <nav aria-label="目次"><b>目次</b><ol>
+      <li><a href="#overview">構成と情報の流れ</a></li><li><a href="#prepare">事前準備</a></li>
+      <li><a href="#files">必要ファイル・配置先</a></li><li><a href="#install">Docker導入</a></li>
+      <li><a href="#env">環境設定</a></li><li><a href="#start">同一サーバーで起動</a></li>
+      <li><a href="#proxy">リバースプロキシ</a></li><li><a href="#initial">初期設定・動作確認</a></li>
+      <li><a href="#migration">旧版の移行・Tamanegiへの分離</a></li><li><a href="#update">更新・復元・バックアップ</a></li>
+      <li><a href="#browser-ready">ブラウザで利用する</a></li><li><a href="#trouble">困ったときのQ＆A</a></li>
+      <li><a href="#glossary">用語集</a></li><li><a href="#changes">変更履歴</a></li>
+    </ol></nav>
     <article>
       <section id="overview">
-        <h2>1. 構成の全体像</h2>
-        <p class="lead"><strong>Originサーバー1台</strong>の中で、スケジューラと公開カレンダーを分離して動かします。サーバーは同じでも、SQLiteと公開JSONは別の保存領域です。</p>
-        <div class="flow" role="img" aria-label="Origin単一サーバーの構成図">
-          <div class="flow-box"><b>利用者</b>社内利用者または一般閲覧者</div>
-          <div class="arrow">→</div>
-          <div class="flow-box"><b>管理者のリバースプロキシ</b><code>/Scheduler/</code>はIP制限<br><code>/Calendar/</code>は一般公開</div>
-          <div class="arrow">→</div>
-          <div class="flow-box"><b>Originサーバー</b>Schedulerコンテナ<br>Calendarコンテナ</div>
-        </div>
-        <table>
-          <thead><tr><th>区分</th><th>ブラウザ側URL</th><th>コンテナ</th><th>保存する情報</th></tr></thead>
-          <tbody>
-            <tr><td>内部スケジューラ</td><td>直接：<code>http://origin:8080/</code><br>プロキシ：<code>/Scheduler/</code></td><td><code>kptc-scheduler</code></td><td>予定、利用者、設定、JSONバックアップ</td></tr>
-            <tr><td>公開カレンダー</td><td>直接：<code>http://origin:8081/</code><br>プロキシ：<code>/Calendar/</code></td><td><code>kptc-calendar</code></td><td>公開してよい直近3か月の空き状況JSON</td></tr>
-          </tbody>
-        </table>
-        <div class="callout"><strong>データ連携：</strong>Schedulerは予定を保存すると、公開可能な試験室情報だけを署名付きJSONに変換し、Docker内部ネットワークの<code>http://kptc-calendar/receive-availability.php</code>へ送ります。CalendarがSQLiteを直接読む構成ではありません。</div>
-        <p><code>/Scheduler/</code>と<code>/Calendar/</code>は、リバースプロキシ経由時に利用者から見える<strong>URL上のディレクトリ</strong>です。コンテナへ直接接続する場合、各アプリは8080番・8081番のルート<code>/</code>で動作します。OS上へ同名の公開フォルダを作る必要はありません。</p>
+        <h2>1. 構成と情報の流れ</h2>
+        <p class="lead"><strong>初期運用はOriginサーバー1台</strong>です。Scheduler・JSON配信担当・静的Calendarの3コンテナを動かします。将来はCalendarだけをTamanegiへ移し、配信担当の設定を<code>local</code>から<code>sftp</code>へ変更します。</p>
+        <table><thead><tr><th>担当</th><th>実行環境・役割</th><th>参照できる情報</th></tr></thead><tbody>
+          <tr><td>Scheduler</td><td>PHP 8.4＋Apache。予定の保存、認証、公開JSONの生成。</td><td>内部SQLite・バックアップ・公開用出力。</td></tr>
+          <tr><td>配信担当</td><td>Python＋OpenSSH。JSONを検証し、local書込みまたはSFTP転送。外部からの受付ポートなし。</td><td>公開JSONと配信状態だけ。分離時のみ転送鍵。SQLiteはマウントしない。</td></tr>
+          <tr><td>Calendar</td><td>Nginx。HTML・CSS・JavaScript・画像・JSONの静的配信。</td><td>公開用JSONを読取り専用で参照。PHP・SQLite・秘密鍵なし。</td></tr>
+        </tbody></table>
         <h3>1-1. 詳細論理構成図</h3>
-        <p>青線は利用者のアクセス、緑線は予定・公開情報の流れ、オレンジ色の点線はGitHubから実行環境を更新する流れです。赤い点線内はWebから直接公開しない保存領域です。</p>
-        <div class="logic-diagram">
-          <svg viewBox="0 0 1120 900" role="img" aria-labelledby="logic-title logic-desc">
-            <title id="logic-title">KPTC Schedulerの詳細論理構成図</title>
-            <desc id="logic-desc">社内利用者は社内システムで生成された暗号化トークンを使い、リバースプロキシ経由でSchedulerへ接続します。一般閲覧者はCalendarへ接続します。SchedulerのSQLiteから公開可能な3か月分だけが署名付きJSONとしてCalendarへ送信されます。</desc>
-            <defs>
-              <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#1f67a5"/></marker>
-              <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#16745a"/></marker>
-              <marker id="arrow-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#c07c12"/></marker>
-            </defs>
-
-            <text x="25" y="28" class="title">利用者・入口</text>
-            <rect x="25" y="45" width="180" height="72" rx="9" class="actor"/>
-            <text x="115" y="74" text-anchor="middle" class="label"><tspan font-weight="700">社内利用者・管理者</tspan><tspan x="115" dy="22" class="small-label">予定の閲覧・編集・管理</tspan></text>
-            <rect x="245" y="45" width="245" height="72" rx="9" class="component"/>
-            <text x="367" y="69" text-anchor="middle" class="label"><tspan font-weight="700">既存社内システム</tspan><tspan x="367" dy="20" class="small-label">検証時のみ renkon</tspan><tspan x="367" dy="17" class="small-label">CBC暗号化tokenを発行</tspan></text>
-            <rect x="875" y="45" width="220" height="72" rx="9" class="actor"/>
-            <text x="985" y="74" text-anchor="middle" class="label"><tspan font-weight="700">一般公開の閲覧者</tspan><tspan x="985" dy="22" class="small-label">試験室の空き状況を閲覧</tspan></text>
-
-            <rect x="25" y="150" width="1070" height="100" rx="12" class="zone"/>
-            <text x="45" y="178" class="title">サーバー管理者のリバースプロキシ</text>
-            <rect x="55" y="192" width="450" height="42" rx="7" class="private-zone"/>
-            <text x="280" y="218" text-anchor="middle" class="label">/Scheduler/ → Origin内部IP:8080　特定IPのみ許可</text>
-            <rect x="615" y="192" width="450" height="42" rx="7" class="public-zone"/>
-            <text x="840" y="218" text-anchor="middle" class="label">/Calendar/ → Origin内部IP:8081　すべてのIPから閲覧可</text>
-            <text x="560" y="243" text-anchor="middle" class="small-label">HTTPS・Host・X-Forwarded-For・X-Forwarded-Proto・クエリ文字列を保持</text>
-
-            <rect x="25" y="285" width="1070" height="465" rx="14" class="zone"/>
-            <text x="45" y="315" class="title">Originサーバー（Ubuntu 24.04／Docker内部ネットワーク kptc-internal）</text>
-
-            <rect x="50" y="335" width="500" height="285" rx="12" class="private-zone"/>
-            <text x="70" y="365" class="title">Schedulerコンテナ（PHP 8.4＋Apache）</text>
-            <rect x="75" y="390" width="210" height="68" rx="7" class="component"/>
-            <text x="180" y="414" text-anchor="middle" class="label"><tspan font-weight="700">index.php／portal-access.php</tspan><tspan x="180" dy="20" class="small-label">token復号・形式・UTC日付を検証</tspan></text>
-            <rect x="315" y="390" width="210" height="68" rx="7" class="component"/>
-            <text x="420" y="414" text-anchor="middle" class="label"><tspan font-weight="700">Reactスケジュール画面</tspan><tspan x="420" dy="20" class="small-label">一般モード／管理者モード</tspan></text>
-            <rect x="75" y="485" width="210" height="68" rx="7" class="component"/>
-            <text x="180" y="509" text-anchor="middle" class="label"><tspan font-weight="700">api.php／auth.php</tspan><tspan x="180" dy="20" class="small-label">予定・利用者・CSRF・セッション</tspan></text>
-            <rect x="315" y="485" width="210" height="68" rx="7" class="component"/>
-            <text x="420" y="505" text-anchor="middle" class="label"><tspan font-weight="700">公開JSON生成・送信</tspan><tspan x="420" dy="18" class="small-label">保存時＋5分ごと再送</tspan><tspan x="420" dy="17" class="small-label">HMAC-SHA256署名</tspan></text>
-            <rect x="75" y="570" width="450" height="34" rx="6" class="component"/>
-            <text x="300" y="592" text-anchor="middle" class="small-label">毎日22時バックアップ／監視／再送の定期処理</text>
-
-            <rect x="585" y="335" width="485" height="285" rx="12" class="public-zone"/>
-            <text x="605" y="365" class="title">Calendarコンテナ（PHP 8.4＋Apache）</text>
-            <rect x="610" y="390" width="200" height="68" rx="7" class="component"/>
-            <text x="710" y="410" text-anchor="middle" class="label"><tspan font-weight="700">receive-availability.php</tspan><tspan x="710" dy="18" class="small-label">署名・時刻・世代・形式を検証</tspan><tspan x="710" dy="17" class="small-label">正常時だけJSONを置換</tspan></text>
-            <rect x="845" y="390" width="200" height="68" rx="7" class="component"/>
-            <text x="945" y="414" text-anchor="middle" class="label"><tspan font-weight="700">React空き状況画面</tspan><tspan x="945" dy="20" class="small-label">直近3か月・部屋別表示</tspan></text>
-            <rect x="610" y="485" width="200" height="68" rx="7" class="component"/>
-            <text x="710" y="509" text-anchor="middle" class="label"><tspan font-weight="700">public-availability.php</tspan><tspan x="710" dy="20" class="small-label">公開可能な項目だけを返却</tspan></text>
-            <rect x="845" y="485" width="200" height="68" rx="7" class="component"/>
-            <text x="945" y="509" text-anchor="middle" class="label"><tspan font-weight="700">health-availability.php</tspan><tspan x="945" dy="20" class="small-label">更新状態をHTTPで監視</tspan></text>
-            <rect x="610" y="570" width="435" height="34" rx="6" class="component"/>
-            <text x="827" y="592" text-anchor="middle" class="small-label">SchedulerのSQLite・利用者名・予定件名にはアクセスしない</text>
-
-            <rect x="50" y="650" width="500" height="75" rx="10" class="secure-zone"/>
-            <text x="70" y="675" class="title">Scheduler専用の非公開Volume</text>
-            <ellipse cx="185" cy="700" rx="105" ry="20" class="data-store"/>
-            <text x="185" y="705" text-anchor="middle" class="small-label">Scheduler SQLite</text>
-            <ellipse cx="415" cy="700" rx="105" ry="20" class="data-store"/>
-            <text x="415" y="705" text-anchor="middle" class="small-label">最新バックアップJSON</text>
-
-            <rect x="585" y="650" width="485" height="75" rx="10" class="secure-zone"/>
-            <text x="605" y="675" class="title">Calendar専用Volume（実ファイルは直接配信しない）</text>
-            <ellipse cx="827" cy="700" rx="145" ry="20" class="data-store"/>
-            <text x="827" y="705" text-anchor="middle" class="small-label">公開用3か月JSON（単一ファイル）</text>
-
-            <rect x="25" y="790" width="250" height="66" rx="9" class="component"/>
-            <text x="150" y="814" text-anchor="middle" class="label"><tspan font-weight="700">GitHub main</tspan><tspan x="150" dy="20" class="small-label">01_source／Docker設定／手順書</tspan></text>
-            <rect x="390" y="790" width="300" height="66" rx="9" class="component"/>
-            <text x="540" y="814" text-anchor="middle" class="label"><tspan font-weight="700">02_release/origin</tspan><tspan x="540" dy="20" class="small-label">Scheduler／Calendarのビルド後ファイル</tspan></text>
-            <rect x="805" y="790" width="290" height="66" rx="9" class="component"/>
-            <text x="950" y="814" text-anchor="middle" class="label"><tspan font-weight="700">Docker Composeで再構築</tspan><tspan x="950" dy="20" class="small-label">同じコミットから2コンテナを更新</tspan></text>
-
-            <path d="M205 81 H245" class="access-line"/>
-            <path d="M367 117 V150" class="access-line"/>
-            <path d="M985 117 V150" class="access-line"/>
-            <path d="M280 250 V335" class="access-line"/>
-            <path d="M840 250 V335" class="access-line"/>
-            <path d="M285 424 H315" class="access-line"/>
-            <path d="M420 458 V475 H180 V485" class="access-line"/>
-            <path d="M945 458 V475 H710 V485" class="access-line"/>
-
-            <path d="M180 553 V630 H185 V680" class="data-line"/>
-            <path d="M300 604 V635 H415 V680" class="data-line"/>
-            <path d="M285 519 H315" class="data-line"/>
-            <path d="M525 519 H570 V424 H610" class="data-line"/>
-            <path d="M710 458 V640 H827 V680" class="data-line"/>
-            <path d="M827 680 V630 H710 V553" class="data-line"/>
-
-            <path d="M275 823 H390" class="manage-line"/>
-            <path d="M690 823 H805" class="manage-line"/>
-            <path d="M950 790 V755 H300 V620" class="manage-line"/>
-            <path d="M950 755 H827 V620" class="manage-line"/>
-
-            <text x="550" y="408" class="small-label" fill="#16745a">署名付きJSON</text>
-            <text x="550" y="427" class="small-label" fill="#16745a">直近3か月のみ</text>
-          </svg>
+        <div class="architecture" role="img" aria-label="Origin内でSQLiteと公開JSONを分離し、専用配信担当が同一サーバーまたはTamanegiへ公開JSONだけを渡す論理構成図">
+          <div class="flow-box"><b>既存社内システム → Scheduler【Origin・社内向け】</b>社内システムがCBC tokenを発行。Schedulerが検証し、予定表を表示。<small>renkonは検証用の模擬入口。本番への配置は不要。</small></div>
+          <div class="flow-box"><b>Scheduler専用の非公開Volume</b>SQLite ＋ 毎日22時の最新JSONバックアップ<small>この領域をCalendar・配信担当へ共有しません。</small></div>
+          <div class="flow-box data"><b>Scheduler → 公開用出力Volume（kptc-outbox）</b>当月を含む3か月分の室名・画像名・日別状態だけ。氏名・予定件名・メモ・認証情報なし。<small>Schedulerが書込み、配信担当は読取り専用。</small></div>
+          <div class="flow-box"><b>JSON配信担当【Origin】</b>形式・期間・世代・更新日時を検証。失敗しても内部予定の保存は成功させ、30秒間隔で再試行。<small>配信状態Volume：配信担当が書込み、Schedulerが読取り専用で参照。</small></div>
+          <div class="flow-box data"><b>方式A：local【初期運用】</b>配信担当 → 公開JSON専用Volume → Originの静的Calendar → 閲覧者<small>配信担当はネットワークなし。Calendarは公開JSONを読取り専用マウント。</small></div>
+          <div class="flow-box external"><b>方式B：sftp【将来の分離】</b>Origin配信担当 → SFTP → TamanegiのJSON専用フォルダ → 静的Calendar → 閲覧者<small>接続開始はOriginだけ。TamanegiからOriginへの新規接続を許可しない。秘密鍵はOriginの配信担当だけが保有。</small></div>
         </div>
-        <ul class="diagram-legend" aria-label="論理構成図の凡例">
-          <li><span class="legend-line"></span>ブラウザからのアクセス</li>
-          <li><span class="legend-line data"></span>予定・公開情報の流れ</li>
-          <li><span class="legend-line manage"></span>配布・更新の流れ</li>
-          <li><span class="legend-box"></span>Webから直接公開しない領域</li>
-        </ul>
-        <ol>
-          <li><strong>社内から利用：</strong>既存社内システムが利用者IDを暗号化したtokenを付け、IP制限されたScheduler URLへ移動します。</li>
-          <li><strong>予定を保存：</strong>SchedulerのAPIが権限とCSRFを確認し、予定をSQLiteへ保存します。管理者モードだけが利用者・部屋・管理者パスワードを変更できます。</li>
-          <li><strong>公開情報を連携：</strong>試験室予定から公開可能な直近3か月分だけを生成し、HMAC署名を付けてDocker内部ネットワークからCalendarへ送ります。</li>
-          <li><strong>一般公開：</strong>閲覧者は<code>/Calendar/</code>へアクセスし、公開用JSONだけを参照します。内部SQLiteを直接読むことはありません。</li>
-          <li><strong>更新・保守：</strong>GitHubの同じコミットに含まれるビルド後ファイルから両コンテナを再構築し、SQLiteと公開JSONはDocker Volumeに保持します。</li>
-        </ol>
-        <div class="callout warning"><strong>直接HTTP接続の場合：</strong>上図のリバースプロキシを通らず、許可済み社内端末から<code>http://origin:8080/</code>へ接続します。この経路のアクセス制限はOrigin側ファイアウォールで行います。</div>
-        <div class="callout success"><strong>保存領域の分離：</strong>SchedulerのSQLiteとバックアップJSONはScheduler専用Volume、公開用3か月JSONはCalendar専用Volumeに保存します。CalendarからScheduler専用Volumeへの接続経路はなく、公開画面は<code>public-availability.php</code>を通してCalendar側のJSONだけを読みます。</div>
-        <div class="callout"><strong>簡易参照資料：</strong>Docker構成と主要コマンドだけを短く確認したい場合は、リポジトリ内の<a href="../docker/README.md"><code>docker/README.md</code></a>を参照してください。構築作業では本HTML手順書を正式な手順とし、内容に差がある場合は本書を優先します。</div>
-        <div class="callout warning"><strong>表記：</strong>カレンダーの英語表記は<code>Calendar</code>に統一しています。LinuxのパスとURLでは大文字・小文字を区別するため、公開パスは<code>/Calendar/</code>を使用してください。</div>
+        <p>CalendarからScheduler専用Volumeへの接続経路はありません。同一サーバーでも共有するのは公開JSONだけです。別サーバーでも内部DBを公開したり、Tamanegiから取りに来させたりしません。</p>
+        <p>画面が取得する固定URLは<code>./data/public-availability.json</code>です。公開用3か月JSON（単一ファイル）を更新し、過去月のファイルは増やしません。ファイルの更新日時が30分を超えた場合は注意を表示し、当月から3か月分が揃っていない場合は空きと誤表示せず準備中とします。</p>
+        <div class="callout"><strong>URLと実フォルダ：</strong><code>/Scheduler/</code>・<code>/Calendar/</code>はプロキシ側の公開パスです。コンテナはルート<code>/</code>で動作します。ブラウザがOriginへ直接接続する場合は<code>http://origin:8080/</code>・<code>http://origin:8081/</code>です。大文字・小文字を区別してください。</div>
+        <p>簡易参考資料：<a href="../docker/README.md">docker/README.md</a>。詳細な構築作業は本HTMLを参照してください。</p>
       </section>
 
       <section id="prepare">
         <h2>2. 事前準備</h2>
-        <ul class="checklist">
-          <li>Ubuntu 24.04のOriginサーバー1台</li>
-          <li>管理者権限を持つ作業用アカウント</li>
-          <li>GitHubから本リポジトリを取得できる通信</li>
-          <li>Originの内部IPアドレスと、直接HTTPまたはプロキシ経由HTTPSのどちらを使うかの決定</li>
-          <li>外部リバースプロキシを使う場合は、そのIPアドレスと公開ホスト名</li>
-          <li>社内入口と同じ<code>KPTC_PORTAL_TOKEN_KEY</code>の固定部分</li>
-          <li>32文字以上の公開JSON連携用秘密値</li>
-          <li>管理者が設定するIP許可範囲</li>
+        <ul><li>Ubuntu 24.04のOriginと、sudoを使える作業アカウント。</li>
+          <li>Origin内部IP・利用者の公開URL・リバースプロキシのIPを管理者に確認。</li>
+          <li>社内システムと同じtoken鍵の固定文字列。実値をGitHubや資料へ記載しない。</li>
+          <li>分離時はUbuntu 24.04のTamanegi、SFTP接続許可、公開ホスト名・証明書も準備。</li>
         </ul>
-        <div class="callout danger"><strong>秘密値の扱い：</strong>実値をGitHub、手順書、メール、画面写真へ載せません。実環境設定は<code>/etc/kptc/</code>へ置き、管理者だけが読める権限にします。</div>
+        <p>本書はDocker Composeによる構築を標準とします。Tamanegiに既存のWordPress等がある場合、カレンダーは独立コンテナ・独立データフォルダに置き、既存サイトのファイルを上書きしません。</p>
+        <div class="callout warning"><strong>既存運用がある方：</strong>初期設定例を実環境envへ上書きしないでください。まず9章の移行手順を確認します。</div>
       </section>
 
       <section id="files">
         <h2>3. 必要ファイルと配置場所</h2>
-        <p>Originサーバーへ接続し、1か所だけにリポジトリを取得します。</p>
+        <p>Originでリポジトリを取得します。サーバー上ではビルド済みの<code>02_release</code>をDockerfileが組み込みます。Node.jsによる画面ビルドは開発PCで行います。</p>
         <pre><code>sudo mkdir -p /opt/kptc
 sudo chown "$USER":"$USER" /opt/kptc
 cd /opt/kptc
 git clone https://github.com/Apfelengineer/260725_GW_WEB.git
 cd 260725_GW_WEB
 git switch main</code></pre>
-        <p class="checkpoint"><code>pwd</code>の結果が<code>/opt/kptc/260725_GW_WEB</code>になれば正しい場所です。</p>
-        <pre class="tree"><code>/opt/kptc/260725_GW_WEB/
-├── 01_source/                 開発用ソース
+        <pre class="tree"><code>260725_GW_WEB/
+├── 01_source/
+│   ├── origin/shared/             画面と内部PHPの原本
+│   └── publisher/delivery.py      JSON専用配信処理
 ├── 02_release/
-│   ├── origin/
-│   │   ├── Scheduler/        Schedulerのビルド後ファイル
-│   │   └── Calendar/         Calendarのビルド後ファイル
-│   └── renkon/               模擬社内入口（検証時のみ）
+│   ├── origin/Scheduler/          内部用ビルド後ファイル
+│   ├── origin/Calendar/           静的カレンダー（PHPなし）
+│   └── renkon/                    検証用入口
 ├── docker/
-│   ├── origin/
-│   │   ├── Scheduler/        Scheduler用Dockerfileと設定例
-│   │   └── Calendar/         Calendar用Dockerfileと設定例
-├── compose.origin-single.yaml 2つを一括管理する定義
-└── compose.env.example      Origin側待受IPの設定例</code></pre>
-        <p>コンテナへ組み込む実行用ファイルは、Schedulerが<code>02_release/origin/Scheduler</code>、Calendarが<code>02_release/origin/Calendar</code>です。</p>
-        <p>Dockerfileは<code>docker/origin/Scheduler/Dockerfile</code>と<code>docker/origin/Calendar/Dockerfile</code>です。</p>
-        <p>各ファイルの位置、環境設定、起動コマンドを一覧で確認するときは、簡易参照資料の<a href="../docker/README.md"><code>docker/README.md</code></a>も利用できます。</p>
+│   ├── origin/Scheduler/          内部PHPのDockerfile
+│   ├── origin/Calendar/           静的NginxのDockerfile・設定
+│   ├── publisher/                 配信担当のDockerfile・env例
+│   └── tamanegi/                  SFTP受信制限の設定例
+├── compose.origin-single.yaml     初期：同一サーバー3コンテナ
+├── compose.origin-split.yaml      分離後：Originの2コンテナ
+├── compose.tamanegi.yaml          分離後：Tamanegiの静的Calendar
+└── compose.env.example            待受IPの設定例</code></pre>
+        <p>分離後のCalendarも同じ<code>02_release/origin/Calendar</code>を使います。フォルダ名の<code>origin</code>は配布物の分類名であり、配置先をOriginに限定しません。TamanegiへSchedulerの実環境設定・DB・鍵をコピーしません。</p>
       </section>
 
       <section id="install">
         <h2>4. Dockerの導入</h2>
-        <p>Dockerが未導入の場合のみ、Originサーバーで次を実行します。</p>
+        <p>Dockerが未導入のサーバーだけで実行します。Tamanegiに既存のDockerがあれば、新規導入せず管理者と既存環境への影響を確認してください。</p>
         <pre><code>sudo apt update
 sudo apt install -y ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  -o /etc/apt/keyrings/docker.asc
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release &amp;&amp; echo $VERSION_CODENAME) stable" \
-  | sudo tee /etc/apt/sources.list.d/docker.list &gt; /dev/null
-
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release &amp;&amp; echo $VERSION_CODENAME) stable" | sudo tee /etc/apt/sources.list.d/docker.list &gt; /dev/null
 sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io \
-  docker-buildx-plugin docker-compose-plugin
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo systemctl enable --now docker
 sudo docker version
 sudo docker compose version</code></pre>
-        <p class="checkpoint">DockerとDocker Composeのバージョンが表示されれば準備完了です。</p>
       </section>
 
       <section id="env">
-        <h2>5. 実環境設定</h2>
-        <h3>5-1. Origin側の待受IPを決める</h3>
-        <p>Composeの待受IPは、リポジトリ直下の<code>.env</code>で明示します。外部リバースプロキシはOriginサーバーの<code>127.0.0.1</code>へ接続できないため、プロキシから到達できるOriginの内部IPを設定します。</p>
+        <h2>5. 環境設定</h2>
+        <h3>5-1. Originの待受IP</h3>
         <pre><code>cd /opt/kptc/260725_GW_WEB
 cp compose.env.example .env
 nano .env</code></pre>
         <pre><code>KPTC_ORIGIN_BIND_ADDRESS=192.0.2.10</code></pre>
-        <p><code>192.0.2.10</code>は説明用です。実際のOrigin内部IPへ置き換えます。個別IPを指定できない検証環境で<code>0.0.0.0</code>を使う場合は、Origin側ファイアウォールで8080番・8081番の接続元を外部リバースプロキシと許可済み社内端末に制限します。</p>
-        <div class="callout danger"><strong>公開範囲：</strong><code>0.0.0.0</code>はすべてのネットワークインターフェースで待ち受けます。ファイアウォール未設定のまま使用しません。</div>
-        <h3>5-2. 設定ファイルを作る</h3>
+        <p><code>192.0.2.10</code>は説明用です。外部プロキシ・許可端末から到達できるOriginの実際の内部IPへ変更します。外部プロキシ構成では<code>127.0.0.1</code>を指定しません。<code>0.0.0.0</code>を使う場合も、Docker公開ポートを実際に制限できるホスト・上位ファイアウォールで接続元を限定します。単にUFWを有効にしただけでDockerの公開ポートが保護されたとは判断しません。</p>
+        <h3>5-2. アプリ用envを作成</h3>
         <pre><code>sudo install -d -m 700 /etc/kptc
 sudo cp docker/origin/Scheduler/scheduler.env.example /etc/kptc/scheduler.env
-sudo cp docker/origin/Calendar/calendar.env.example /etc/kptc/calendar.env
-sudo chmod 600 /etc/kptc/scheduler.env /etc/kptc/calendar.env
-sudo nano /etc/kptc/scheduler.env</code></pre>
-        <h3>5-3. Scheduler側の値（Originのルートへ直接HTTP接続）</h3>
+sudo cp docker/publisher/publisher.env.example /etc/kptc/publisher.env
+sudo chmod 600 /etc/kptc/scheduler.env /etc/kptc/publisher.env
+sudo nano /etc/kptc/scheduler.env
+sudo nano /etc/kptc/publisher.env</code></pre>
+        <p><code>scheduler.env</code>は次の値を実環境へ変更します。</p>
         <pre><code>KPTC_PORTAL_TOKEN_KEY=社内入口と共通の十分に長い固定文字列
-KPTC_PUBLIC_AVAILABILITY_MODE=https
-KPTC_PUBLIC_AVAILABILITY_ENDPOINT=http://kptc-calendar/receive-availability.php
 KPTC_PUBLIC_AVAILABILITY_PAGE_URL=https://origin.example.jp/Calendar/
-KPTC_PUBLIC_AVAILABILITY_SECRET=32文字以上のランダムな共通秘密値
-KPTC_PUBLIC_AVAILABILITY_ALLOW_HTTP=1
-KPTC_PUBLIC_AVAILABILITY_TIMEOUT=10
+KPTC_PUBLIC_AVAILABILITY_JSON=/var/lib/kptc-outbox/public-availability.json
+KPTC_AVAILABILITY_STATUS_JSON=/var/lib/kptc-publish-status/status.json
 KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800
-KPTC_SESSION_COOKIE_SECURE=0
 KPTC_SESSION_COOKIE_PATH=/
+KPTC_SESSION_COOKIE_SECURE=0
 KPTC_AUTH_IDLE_TIMEOUT=1800
 KPTC_AUTH_ABSOLUTE_TIMEOUT=43200</code></pre>
-        <ul>
-          <li><code>origin.example.jp</code>は実際のホスト名へ変更します。</li>
-          <li><code>KPTC_PUBLIC_AVAILABILITY_ALLOW_HTTP=1</code>は、同じOriginサーバー内の閉じたDockerネットワークでHTTP通信するための指定です。外部へHTTP公開する許可ではありません。</li>
-          <li>上のCookie設定は、ブラウザが<code>http://origin:8080/</code>へ直接接続する場合です。URLパスとCookieパスを必ず一致させます。</li>
-          <li>ブラウザが<code>https://公開名/Scheduler/</code>へ接続する場合は、<code>KPTC_SESSION_COOKIE_SECURE=1</code>と<code>KPTC_SESSION_COOKIE_PATH=/Scheduler/</code>に変更します。</li>
-        </ul>
-        <h3>5-4. Calendar側の値</h3>
-        <pre><code>sudo nano /etc/kptc/calendar.env</code></pre>
-        <pre><code>KPTC_PUBLIC_AVAILABILITY_SECRET=Scheduler側と同じ32文字以上の秘密値
+        <p><code>publisher.env</code>は初期運用では次の値です。SFTP設定や秘密鍵はまだ不要です。</p>
+        <pre><code>KPTC_AVAILABILITY_DELIVERY_MODE=local
+KPTC_AVAILABILITY_INTERVAL=30
 KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800</code></pre>
-        <p class="checkpoint">2つの設定ファイルで<code>KPTC_PUBLIC_AVAILABILITY_SECRET</code>が完全一致し、どちらにも<code>REPLACE_</code>が残っていないことを確認します。</p>
 
-        <h3>5-5. 環境ごとに決める変数</h3>
-        <p>次の表は、<code>/etc/kptc/scheduler.env</code>と<code>/etc/kptc/calendar.env</code>で利用者が決める値、または必要に応じて変更できる値です。コマンドで秘密値を生成した場合、envファイルへコマンド自体を書かず、表示された文字列だけを貼り付けます。</p>
-        <table class="config-table">
-          <colgroup><col><col><col><col></colgroup>
-          <thead><tr><th>変数名</th><th>機能</th><th>設定方法・例</th><th>必須／任意</th></tr></thead>
-          <tbody>
-            <tr><td><code>KPTC_PORTAL_TOKEN_KEY</code></td><td>社内システムが発行するCBC暗号化tokenをSchedulerが復号するための元鍵。プログラムが末尾へUTC当日の日付を付けて日ごとの鍵を作る。</td><td><code>openssl rand -hex 32</code>で生成し、社内システム側とScheduler側へ同じ文字列を設定。日付は手入力しない。</td><td><strong>必須</strong></td></tr>
-            <tr><td><code>KPTC_RENKON_SCHEDULER_URL</code></td><td>既存社内システムまたは検証用renkonがtoken付きで移動するSchedulerのURL。</td><td>直接接続は<code>http://origin:8080/</code>。プロキシ経由は<code>https://origin.example.jp/Scheduler/</code>。実際にブラウザが開くURLを指定。</td><td>社内入口側で<strong>必須</strong></td></tr>
-            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_SECRET</code></td><td>SchedulerからCalendarへ送る3か月JSONのHMAC-SHA256署名と検証に使う共有秘密値。</td><td><code>openssl rand -hex 32</code>で生成し、<code>scheduler.env</code>と<code>calendar.env</code>へ完全に同じ値を設定。</td><td><strong>必須</strong></td></tr>
-            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_MODE</code></td><td>公開JSONをローカル保存するか、受信APIへ送るかを選ぶ。<code>https</code>は「API送信モード」という名称で、エンドポイント自体がHTTPの場合にも使用する。</td><td>本構成は別コンテナへ送るため<code>https</code>。<code>local</code>は単一PHP領域で直接ファイル保存する特殊構成だけに使用。</td><td><strong>必須</strong>（本構成は<code>https</code>）</td></tr>
-            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_ENDPOINT</code></td><td>Calendarの署名付きJSON受信APIのURL。</td><td>同一Origin内の推奨値は<code>http://kptc-calendar/receive-availability.php</code>。TLS経由にする場合は<code>https://origin.example.jp/Calendar/receive-availability.php</code>。</td><td><strong>必須</strong></td></tr>
-            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_PAGE_URL</code></td><td>Scheduler画面の「試験室予約」から開く公開CalendarのURL。</td><td><code>https://origin.example.jp/Calendar/</code>のホスト名を実環境のものへ変更。</td><td><strong>必須</strong></td></tr>
-            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_ALLOW_HTTP</code></td><td>JSON受信APIへのHTTP送信を明示的に許可する。</td><td>閉じたDocker内部通信では<code>1</code>。HTTPSエンドポイントでは<code>0</code>または行を削除。</td><td>HTTP時のみ<strong>必須</strong></td></tr>
-            <tr><td><code>KPTC_SESSION_COOKIE_SECURE</code></td><td>ブラウザがHTTPS通信のときだけセッションCookieを送るかを指定する。</td><td><code>http://origin:8080/</code>の直接HTTPは<code>0</code>。プロキシ公開URLがHTTPSなら<code>1</code>。ブラウザ側URLの方式で決める。</td><td><strong>必須</strong></td></tr>
-            <tr><td><code>KPTC_SESSION_COOKIE_PATH</code></td><td>SchedulerのCookieを送信するURL範囲。</td><td>直接URLが<code>http://origin:8080/</code>なら<code>/</code>。プロキシ側URLが<code>/Scheduler/</code>なら<code>/Scheduler/</code>。URLのパスと必ず一致させる。</td><td><strong>必須</strong></td></tr>
-            <tr><td><code>KPTC_ORIGIN_BIND_ADDRESS</code></td><td>Originが8080番・8081番を待ち受けるIPアドレス。Compose用の<code>.env</code>に設定。</td><td>外部プロキシから到達できるOrigin内部IPを推奨。<code>0.0.0.0</code>はファイアウォールで接続元を制限できる場合だけ使用。</td><td><strong>必須</strong></td></tr>
-            <tr><td><code>KPTC_AUTH_IDLE_TIMEOUT</code></td><td>操作がない状態でセッションを終了するまでの秒数。</td><td>既定例は<code>1800</code>（30分）。最小値は300秒。</td><td>任意</td></tr>
-            <tr><td><code>KPTC_AUTH_ABSOLUTE_TIMEOUT</code></td><td>操作を続けていてもセッションを終了する最長時間。</td><td>既定例は<code>43200</code>（12時間）。アイドル時間以上に設定。</td><td>任意</td></tr>
-            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_TIMEOUT</code></td><td>SchedulerがCalendarへの送信完了を待つ秒数。</td><td>既定値は<code>10</code>。3～60秒の範囲で通信環境に合わせて変更。</td><td>任意</td></tr>
-            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS</code></td><td>公開JSONを「更新が古い」と判定するまでの秒数。</td><td>既定例は<code>1800</code>（30分）。監視間隔に合わせ、両側で同じ値を推奨。</td><td>任意</td></tr>
-          </tbody>
-        </table>
-        <p>次の保存先変数はDockerfileで設定済みです。保存先を別Volumeへ変更する場合に限り上書きします。</p>
-        <table class="config-table">
-          <colgroup><col><col><col><col></colgroup>
-          <thead><tr><th>変数名</th><th>既定値</th><th>用途</th><th>必須／任意</th></tr></thead>
-          <tbody>
-            <tr><td><code>KPTC_INTERNAL_SCHEDULER_DB</code></td><td><code>/var/lib/kptc-scheduler/group-watcher.sqlite</code></td><td>SchedulerのSQLite保存先。</td><td>任意（高度な設定）</td></tr>
-            <tr><td><code>KPTC_SCHEDULER_BACKUP_JSON</code></td><td><code>/var/lib/kptc-scheduler/backups/scheduler-latest.json</code></td><td>毎日22時の最新バックアップJSON保存先。</td><td>任意（高度な設定）</td></tr>
-            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_JSON</code></td><td><code>/var/lib/kptc-availability/public-availability.json</code></td><td>Calendar専用Volume内の公開用3か月JSON保存先。</td><td>任意（高度な設定）</td></tr>
-          </tbody>
-        </table>
-        <div class="callout danger"><strong>秘密値：</strong><code>KPTC_PORTAL_TOKEN_KEY</code>と<code>KPTC_PUBLIC_AVAILABILITY_SECRET</code>は別の値を使います。実値をGitHub、HTML手順書、作業記録、画面写真へ載せません。envファイルの権限は<code>600</code>を維持します。</div>
+        <h3>5-3. 環境ごとに決める変数</h3>
+        <table class="config-table"><colgroup><col><col><col><col></colgroup><thead><tr><th>変数名</th><th>機能</th><th>設定例・方法</th><th>必須／任意</th></tr></thead><tbody>
+          <tr><td><code>KPTC_ORIGIN_BIND_ADDRESS</code></td><td>Originの8080・8081番の待受IP。</td><td>リポジトリの<code>.env</code>へOrigin内部IP。</td><td>必須</td></tr>
+          <tr><td><code>KPTC_PORTAL_TOKEN_KEY</code></td><td>入口tokenの暗号鍵を作る固定部分。プログラムがUTC当日を末尾へ付加。</td><td><code>openssl rand -hex 32</code>で生成した文字列を社内入口とSchedulerへ同じ値で設定。日付は手入力しない。</td><td>必須</td></tr>
+          <tr><td><code>KPTC_RENKON_SCHEDULER_URL</code></td><td>社内入口から開くURL。入口側へ設定。</td><td>直接HTTPは<code>http://origin:8080/</code>、プロキシ経由は<code>https://公開名/Scheduler/</code>。</td><td>入口側で必須</td></tr>
+          <tr><td><code>KPTC_PUBLIC_AVAILABILITY_PAGE_URL</code></td><td>内部予定表の「試験室予約」リンク。</td><td>初期は<code>https://origin.example.jp/Calendar/</code>。分離後はTamanegiの実URL。</td><td>必須</td></tr>
+          <tr><td><code>KPTC_SESSION_COOKIE_PATH</code></td><td>認証Cookieを送るURL範囲。</td><td>ブラウザURLがルートなら<code>/</code>、<code>/Scheduler/</code>なら同じ<code>/Scheduler/</code>。</td><td>必須</td></tr>
+          <tr><td><code>KPTC_SESSION_COOKIE_SECURE</code></td><td>HTTPS専用Cookieにする指定。</td><td>ブラウザ側URLがHTTPSなら<code>1</code>、直接HTTPなら<code>0</code>。プロキシ内部の通信方式では決めない。</td><td>必須</td></tr>
+          <tr><td><code>KPTC_AUTH_IDLE_TIMEOUT</code><br><code>KPTC_AUTH_ABSOLUTE_TIMEOUT</code></td><td>無操作・最大利用時間の上限。</td><td>例：<code>1800</code>・<code>43200</code>秒。</td><td>任意</td></tr>
+          <tr><td><code>KPTC_PUBLIC_AVAILABILITY_JSON</code></td><td>Schedulerの公開専用出力先。</td><td><code>/var/lib/kptc-outbox/public-availability.json</code>。DBを置かない。</td><td>標準値を維持</td></tr>
+          <tr><td><code>KPTC_AVAILABILITY_STATUS_JSON</code></td><td>内部画面・監視が読む配信結果。</td><td><code>/var/lib/kptc-publish-status/status.json</code>。</td><td>標準値を維持</td></tr>
+          <tr><td><code>KPTC_AVAILABILITY_DELIVERY_MODE</code></td><td>配信担当の出力方式。</td><td><code>publisher.env</code>へ<code>local</code>または<code>sftp</code>。</td><td>必須</td></tr>
+          <tr><td><code>KPTC_AVAILABILITY_INTERVAL</code></td><td>配信確認・再試行の間隔。</td><td>標準<code>30</code>秒。5～300秒。</td><td>任意</td></tr>
+          <tr><td><code>KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS</code></td><td>配信監視の更新期限。</td><td>標準<code>1800</code>秒。両envを同じ値にする。画面上の注意表示は30分固定。</td><td>任意</td></tr>
+          <tr><td><code>KPTC_AVAILABILITY_SFTP_HOST</code><br><code>KPTC_AVAILABILITY_SFTP_PORT</code></td><td>分離後の転送先。</td><td>例：<code>tamanegi.example.jp</code>・<code>22</code>。ホスト名かIPv4。</td><td>SFTP時に必須／ポートは任意</td></tr>
+          <tr><td><code>KPTC_AVAILABILITY_SFTP_USER</code><br><code>KPTC_AVAILABILITY_SFTP_DIRECTORY</code></td><td>転送専用アカウントと、隔離領域内の保存先。</td><td><code>kptc-upload</code>・<code>/data</code>。rootアカウント不可。</td><td>SFTP時に指定</td></tr>
+          <tr><td><code>KPTC_AVAILABILITY_SOURCE_JSON</code><br><code>KPTC_AVAILABILITY_LOCAL_JSON</code></td><td>配信担当の入力・local出力。通常変更しない。</td><td>入力：<code>/var/lib/kptc-outbox/public-availability.json</code><br>出力：<code>/var/lib/kptc-public/public-availability.json</code></td><td>任意</td></tr>
+          <tr><td><code>KPTC_AVAILABILITY_SFTP_KEY</code><br><code>KPTC_AVAILABILITY_SFTP_KNOWN_HOSTS</code></td><td>配信担当の鍵・接続先確認ファイル。</td><td><code>/run/kptc-sftp/id_ed25519</code>・<code>/run/kptc-sftp/known_hosts</code>。ファイルは別途マウント。</td><td>SFTP時に準備</td></tr>
+          <tr><td><code>KPTC_INTERNAL_SCHEDULER_DB</code><br><code>KPTC_SCHEDULER_BACKUP_JSON</code></td><td>内部DB・毎日22時のバックアップ。</td><td><code>/var/lib/kptc-scheduler/group-watcher.sqlite</code><br><code>/var/lib/kptc-scheduler/backups/scheduler-latest.json</code>。</td><td>Dockerfileの既定値</td></tr>
+        </tbody></table>
 
-        <h3>5-6. HTTPとHTTPSを切り替える</h3>
-        <p>本システムには、利用者のブラウザからリバースプロキシまでの<strong>外部通信</strong>と、SchedulerからCalendarへJSONを送る<strong>Docker内部通信</strong>があります。別々に設定します。</p>
-        <h4>外部通信をHTTPからHTTPSへ変更する場合</h4>
-        <p><code>/etc/kptc/scheduler.env</code>を次のように変更します。</p>
-        <table>
-          <thead><tr><th>変数</th><th>変更前：HTTP試験</th><th>変更後：HTTPS本番</th></tr></thead>
-          <tbody>
-            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_PAGE_URL</code></td><td><code>http://origin.example.jp/Calendar/</code></td><td><code>https://origin.example.jp/Calendar/</code></td></tr>
-            <tr><td><code>KPTC_SESSION_COOKIE_SECURE</code></td><td><code>0</code></td><td><code>1</code></td></tr>
-            <tr><td><code>KPTC_SESSION_COOKIE_PATH</code></td><td>直接ルートURLなら<code>/</code></td><td>公開URLが<code>/Scheduler/</code>なら<code>/Scheduler/</code></td></tr>
-          </tbody>
-        </table>
-        <p>既存社内システムまたは検証用renkonの<code>KPTC_RENKON_SCHEDULER_URL</code>も、直接接続の<code>http://origin:8080/</code>またはプロキシ経由の<code>https://origin.example.jp/Scheduler/</code>のうち、実際にブラウザが開くURLへ合わせます。</p>
-        <p>env変更後はOriginサーバーでコンテナを再作成します。envだけの変更ではイメージの再ビルドは不要です。</p>
-        <pre><code>cd /opt/kptc/260725_GW_WEB
-sudo docker compose -f compose.origin-single.yaml config --quiet
-sudo docker compose -f compose.origin-single.yaml \
-  up -d --force-recreate
-sudo docker compose -f compose.origin-single.yaml ps
-sudo docker compose -f compose.origin-single.yaml \
-  logs --since 10m --tail 200</code></pre>
-        <p>リバースプロキシ管理者は、正式なホスト名のサーバー証明書と秘密鍵をリバースプロキシへ配置し、443番ポートでTLSを終端します。80番ポートは443番への転送専用にするか閉じます。<code>Host</code>、<code>X-Forwarded-For</code>、<code>X-Forwarded-Proto: https</code>、クエリ文字列を保持してください。証明書と秘密鍵をScheduler・Calendarコンテナへコピーする必要はありません。Originの8080番・8081番は内部IPで待受し、Origin側ファイアウォールでプロキシのIPだけを許可します。</p>
-        <h4>外部通信をHTTPSからHTTPへ戻す場合（閉じた試験環境のみ）</h4>
-        <p>上表を逆に変更し、リバースプロキシで80番のHTTPを受けます。<code>KPTC_SESSION_COOKIE_SECURE=0</code>にしないとHTTPではセッションCookieが送られません。tokenとCookieを暗号化せず送るため、本番・社内LAN・VPNを含む実運用では使用しません。</p>
-        <h4>Docker内部のJSON通信を切り替える場合</h4>
-        <table>
-          <thead><tr><th>変数</th><th>推奨：内部HTTP</th><th>リバースプロキシ経由HTTPS</th></tr></thead>
-          <tbody>
-            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_MODE</code></td><td><code>https</code></td><td><code>https</code></td></tr>
-            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_ENDPOINT</code></td><td><code>http://kptc-calendar/receive-availability.php</code></td><td><code>https://origin.example.jp/Calendar/receive-availability.php</code></td></tr>
-            <tr><td><code>KPTC_PUBLIC_AVAILABILITY_ALLOW_HTTP</code></td><td><code>1</code></td><td><code>0</code>または行を削除</td></tr>
-          </tbody>
-        </table>
-        <p>HTTPSへ変更する場合は、Schedulerコンテナから正式ホスト名を名前解決でき、証明書を検証できること、リバースプロキシが<code>/Calendar/receive-availability.php</code>へのPOSTを許可することが必要です。内部HTTPでもHMAC署名・送信時刻・JSON形式を検証し、通信は外部へ公開されないDockerネットワークだけを通るため、同一Originサーバーでは内部HTTPを推奨します。</p>
-        <p>再作成後、JSON連携を確認します。</p>
-        <pre><code>sudo docker exec kptc-scheduler \
-  php /var/www/html/publish-availability-cli.php
-curl -i https://origin.example.jp/Calendar/health-availability.php</code></pre>
-        <p class="checkpoint">送信結果が<code>"ok":true</code>、Calendarのヘルス確認がHTTP 200、ブラウザのSchedulerとCalendarがHTTPSで表示されれば切替完了です。</p>
+        <h3>5-4. HTTPとHTTPSの切替</h3>
+        <table><thead><tr><th>設定</th><th>直接HTTP</th><th>プロキシ経由HTTPS</th></tr></thead><tbody>
+          <tr><td>入口のScheduler URL</td><td><code>http://origin:8080/</code></td><td><code>https://公開名/Scheduler/</code></td></tr>
+          <tr><td>Cookie Path</td><td><code>/</code></td><td><code>/Scheduler/</code></td></tr>
+          <tr><td>Cookie Secure</td><td><code>0</code></td><td><code>1</code></td></tr>
+          <tr><td>カレンダーリンク</td><td><code>http://origin:8081/</code></td><td><code>https://公開名/Calendar/</code></td></tr>
+        </tbody></table>
+        <p>env変更後はコンテナの再作成が必要です。envだけなら再ビルドは不要です。</p>
+        <pre><code>sudo docker compose -f compose.origin-single.yaml config --quiet
+sudo docker compose -f compose.origin-single.yaml up -d --force-recreate</code></pre>
+        <p>HTTPSは管理者のリバースプロキシで証明書を配置して終端します。443番の許可、必要に応じた80番から443番への転送、tokenのクエリ文字列・Cookie・<code>X-CSRF-Token</code>の保持が必要です。<code>X-Forwarded-Proto: https</code>を渡します。ブラウザ側がHTTPSなら、プロキシからOriginがHTTPでもSecureは<code>1</code>です。</p>
+        <p>直接HTTPでもプログラムは動作しますが、token・Cookieの盗聴リスクが残ります。管理者がネットワークの許可範囲を確認し、実運用ではHTTPS化を推奨します。</p>
       </section>
 
       <section id="start">
-        <h2>6. 構築と起動</h2>
-        <p>リポジトリ最上位で、同梱のCompose定義を使います。</p>
+        <h2>6. 同一サーバーで構築・起動</h2>
         <pre><code>cd /opt/kptc/260725_GW_WEB
 sudo docker compose -f compose.origin-single.yaml config --quiet
-sudo docker compose -f compose.origin-single.yaml up -d --build
+sudo docker compose -f compose.origin-single.yaml build --pull
+sudo docker compose -f compose.origin-single.yaml up -d
 sudo docker compose -f compose.origin-single.yaml ps</code></pre>
-        <p><code>kptc-scheduler</code>と<code>kptc-calendar</code>の2行が表示され、しばらく待って<code>healthy</code>になれば起動成功です。</p>
+        <p>3コンテナが起動します。CalendarのhealthyはWeb配信プロセスの正常性だけを示します。初回はJSONがないため画面が準備中になります。8章の手順で初回生成・配信を確認します。</p>
         <pre><code>curl -i http://Origin内部IP:8080/
-curl -i http://Origin内部IP:8081/health-availability.php
+curl -i http://Origin内部IP:8081/healthz
 sudo docker compose -f compose.origin-single.yaml logs --tail 100</code></pre>
-        <p class="small">Schedulerのトップは正しいトークンがないとHTTP 403になる設計です。8080番の403はコンテナ異常を意味しません。Calendarのヘルス確認はHTTP 200が正常です。</p>
-        <div class="callout warning"><strong>個別の<code>docker run</code>との併用禁止：</strong>同じポート、コンテナ名、保存領域が競合するため、この手順ではCompose方式だけを使います。<code>docker compose down -v</code>は保存領域も削除するため、本番では実行しません。</div>
+        <p class="checkpoint">tokenなしSchedulerがHTTP 403、Calendarの<code>/healthz</code>がHTTP 200なら入口は正常です。データの正常性は別途監視します。</p>
+        <div class="callout danger"><strong>データ保持：</strong><code>docker compose down -v</code>はDB等のVolumeを削除します。更新や切替で実行しません。</div>
       </section>
 
       <section id="proxy">
         <h2>7. リバースプロキシ管理者への特記事項</h2>
-        <p>リバースプロキシの導入・設定変更はサーバー管理者が別途実施します。本手順では仮想リバースプロキシを作りません。管理者へ次の要件を伝えてください。</p>
-        <table>
-          <thead><tr><th>項目</th><th>Scheduler</th><th>Calendar</th></tr></thead>
-          <tbody>
-            <tr><td>外側のパス</td><td><code>/Scheduler/</code></td><td><code>/Calendar/</code></td></tr>
-            <tr><td>中継先</td><td><code>http://Origin内部IP:8080/</code></td><td><code>http://Origin内部IP:8081/</code></td></tr>
-            <tr><td>IP制御</td><td>指定された特定IPだけ許可</td><td>全IPを許可</td></tr>
-            <tr><td>公開方式</td><td colspan="2">HTTPS。8080・8081番はファイアウォールでプロキシと許可済み社内端末だけに制限</td></tr>
-          </tbody>
-        </table>
-        <h3>7-1. パスと転送</h3>
+        <p>リバースプロキシの導入・設定変更はサーバー管理者が別途実施します。本作業で仮想リバースプロキシは構築しません。</p>
+        <table><thead><tr><th>外部パス</th><th>初期運用の中継先</th><th>アクセス制御</th></tr></thead><tbody>
+          <tr><td><code>/Scheduler/</code></td><td><code>http://Origin内部IP:8080/</code></td><td>許可された社内IPのみ。</td></tr>
+          <tr><td><code>/Calendar/</code></td><td><code>http://Origin内部IP:8081/</code></td><td>一般公開。分離後はTamanegiの静的配信ポートへ変更。</td></tr>
+        </tbody></table>
         <ul>
-          <li>外側の<code>/Scheduler/</code>または<code>/Calendar/</code>を取り除き、各コンテナのルート<code>/</code>へ渡す構成</li>
-          <li><code>/Scheduler</code>から<code>/Scheduler/</code>、<code>/Calendar</code>から<code>/Calendar/</code>へ転送する場合もクエリ文字列を保持</li>
-          <li>特に<code>/Scheduler/?token=...</code>の<code>token</code>をリダイレクトや書換えで消さない設定</li>
-          <li><code>api.php</code>へのGET・POST、<code>receive-availability.php</code>へのPOST、静的ファイルへのGETを通す設定</li>
+          <li>上記接頭辞を取り除いて各コンテナのルートへ中継。末尾スラッシュへの転送でもtokenを保持。</li>
+          <li>SchedulerはGET・POSTとCookie、<code>X-CSRF-Token</code>を保持し、APIをキャッシュしない。</li>
+          <li>CalendarはGET・HEADだけ。PHPやWordPressへフォールバックさせない。</li>
+          <li><code>/Calendar/data/public-availability.json</code>は<code>/data/public-availability.json</code>へ転送。JSON・index.htmlをキャッシュしない。現行の静的コンテナは全ファイルへ<code>Cache-Control: no-store</code>を設定。</li>
+          <li><code>/healthz</code>は静的Webサーバーの稼働確認であり、JSON鮮度の保証ではない。</li>
+          <li><code>Host</code>、<code>X-Forwarded-For</code>、<code>X-Forwarded-Proto</code>を保持。SchedulerのPOST上限は少なくとも2MB。</li>
+          <li>CalendarコンテナにはPHPハンドラーなし。<code>.php</code>・隠しファイル・任意のdataファイルは404。ディレクトリ一覧も無効。</li>
+          <li>既存HPへiframeで組み込む場合、標準の<code>frame-ancestors 'self'</code>は別ドメインを拒否するため、管理者が必要な親サイトだけをCSPへ追加。</li>
         </ul>
-        <h3>7-2. ヘッダー、Cookie、キャッシュ</h3>
-        <ul>
-          <li><code>Host</code>、<code>X-Forwarded-For</code>、<code>X-Forwarded-Proto</code>の転送</li>
-          <li><code>X-Forwarded-Proto: https</code>となる構成</li>
-          <li>プロキシ経由のブラウザURLが<code>/Scheduler/</code>ならSchedulerのCookieパスも<code>/Scheduler/</code>、Originルートへ直接接続するなら<code>/</code>とする設定</li>
-          <li><code>api.php</code>、<code>receive-availability.php</code>、<code>public-availability.php</code>、<code>health-availability.php</code>、JSON応答はキャッシュしない設定</li>
-          <li>ファイル名にハッシュを含むJS・CSS・画像だけを長期キャッシュできる設定</li>
-          <li>POST本文の上限は少なくとも2MB</li>
-        </ul>
-        <div class="callout danger"><strong>IP制御の位置：</strong><code>/Scheduler/</code>の利用者制限は外部リバースプロキシに設定します。加えてOrigin側ファイアウォールで8080・8081番の接続元を制限し、プロキシを迂回した接続を防ぎます。直接接続を許可する社内端末がある場合は、その範囲だけを追加します。</div>
+        <p>Originの8080・8081番はプロキシと許可端末だけに制限します。分離後はTamanegiからOriginへの新規接続を禁止し、Originの配信担当からTamanegiのSFTPポートだけを許可します。SFTPの応答通信は必要です。</p>
       </section>
 
       <section id="initial">
-        <h2>8. 初期設定と内部通信確認</h2>
-        <h3>8-1. Schedulerの管理者パスワード</h3>
+        <h2>8. 初期設定と動作確認</h2>
+        <h3>8-1. 初期DBと管理者パスワード</h3>
+        <p>SQLite用DBサーバーの導入は不要です。社内入口から最初にアクセスすると、PHPがVolume内へSQLiteのファイルと表を自動作成します。正しいtokenを付けて社内入口から1回開いた後に実行します。</p>
         <pre><code>sudo docker exec -it kptc-scheduler \
   php /var/www/html/manage-auth-user-cli.php set-admin-mode-password</code></pre>
-        <p>表示される案内に従って管理者モード用パスワードを設定します。</p>
-        <h3>8-2. 公開JSONを手動送信</h3>
-        <pre><code>sudo docker exec kptc-scheduler \
-  php /var/www/html/publish-availability-cli.php
-
-curl -i http://Origin内部IP:8081/health-availability.php
-sudo docker logs --since 10m kptc-scheduler
-sudo docker logs --since 10m kptc-calendar</code></pre>
-        <p class="checkpoint">送信が成功し、Calendarのヘルス確認がHTTP 200になれば、同一サーバー内の署名付きJSON連携は正常です。</p>
+        <p>8〜128文字のパスワードを入力します。文字は表示されません。実値をチャットやコマンド引数へ書きません。</p>
+        <h3>8-2. JSONの生成と配信は別々に確認</h3>
+        <pre><code>sudo docker exec kptc-scheduler php /var/www/html/publish-availability-cli.php
+sudo docker compose -f compose.origin-single.yaml logs --since 5m kptc-publisher
+curl -i http://Origin内部IP:8081/data/public-availability.json
+sudo docker exec kptc-scheduler php /var/www/html/monitor-availability-cli.php</code></pre>
+        <p><code>queued:true</code>は「生成済み」であり「公開済み」ではありません。配信担当が30秒以内に検証・配信します。配信ログの<code>ok:true</code>、JSONのHTTP 200、内部監視の終了コード0を確認してからブラウザを再読み込みします。</p>
+        <p>配信確認を待たずすぐ実行する場合は、常駐プロセスと同じ鍵・Volumeを使う次のコマンドを実行します。二重処理はロックで防ぎます。</p>
+        <pre><code>sudo docker compose -f compose.origin-single.yaml exec kptc-publisher \
+  python /opt/kptc/delivery.py --once</code></pre>
+        <p class="checkpoint">予定の保存後に共有済みとなる、再読み込み後も予定が残る、管理者切替後も保存できる、室の予定変更が公開JSONへ反映されることを確認します。何も操作しない間に<code>save-delta</code>が繰り返されないことも確認します。</p>
       </section>
 
       <section id="migration">
-        <h2>9. 既存データの移行</h2>
-        <p>新規構築では、初回起動時にSQLiteが自動作成されます。既存SQLiteを引き継ぐ場合だけ次を行います。</p>
-        <pre><code>sudo docker compose -f compose.origin-single.yaml stop kptc-scheduler
-sudo docker run --rm \
-  -v kptc-scheduler-data:/target \
-  -v /移行元フォルダ:/source:ro \
-  alpine sh -c 'cp /source/group-watcher.sqlite /target/group-watcher.sqlite &amp;&amp; chown 33:33 /target/group-watcher.sqlite'
-sudo docker compose -f compose.origin-single.yaml start kptc-scheduler</code></pre>
-        <p>公開JSONはSchedulerから再生成できるため、Calendarの過去ファイルを移す必要はありません。</p>
-        <h3>JSONバックアップからの復元</h3>
-        <p>SQLite破損時は、コンテナ内の復元ツールに最新版バックアップを指定します。実行前に対象SQLiteを別名コピーしてください。</p>
-        <pre><code>sudo docker exec kptc-scheduler \
-  cp /var/lib/kptc-scheduler/group-watcher.sqlite \
-     /var/lib/kptc-scheduler/pre-restore.sqlite
+        <h2>9. 旧版の移行とTamanegiへの分離</h2>
+        <h3>9-1. PHPカレンダー版から同一サーバー静的版へ</h3>
+        <ol>
+          <li>10章の方法でDBとenvのバックアップを非公開領域へ確保。公開ファイルの上書き前に戻し方を確認。</li>
+          <li>最新版を取得。手動変更がある場合は<code>git status</code>で確認し、強制リセットせず差分を整理。</li>
+          <li>既存<code>scheduler.env</code>のtoken鍵・Cookie・DB設定を維持し、5章の出力JSONと状態JSONのパスを追加。</li>
+          <li><code>publisher.env</code>を新規作成し<code>local</code>を設定。新しい公開専用VolumeはJSONを再生成するため、旧公開JSONの移植は不要。</li>
+          <li>6章で3コンテナを再ビルド・再作成。8章の生成・配信確認を実施。</li>
+          <li>プロキシの公開JSON URL・PHPキャッシュ設定を7章へ合わせる。利用者は古いタブを閉じ、入口から開き直す。</li>
+        </ol>
+        <p>旧設定の<code>KPTC_PUBLIC_AVAILABILITY_MODE</code>・<code>ENDPOINT</code>・<code>SECRET</code>・<code>ALLOW_HTTP</code>・<code>TIMEOUT</code>（いずれも同じ接頭辞）は静的版で使いません。旧<code>calendar.env</code>、PHP受信APIとヘルスAPIも廃止です。旧Volume<code>kptc-calendar-data</code>は参照しませんが、自動削除はしません。<code>kptc-scheduler-data</code>は同名のまま引き継ぎます。</p>
+        <p>Dockerを使わず配布ファイルを直接配置する場合も、PHP版フォルダへそのまま重ねず、新しい静的フォルダを準備して切り替えます。旧<code>.php</code>・<code>.user.ini</code>を新しい公開フォルダへ持ち込みません。公開JSONを<code>data/public-availability.json</code>へ配置します。</p>
+        <p>さくら共有サーバーにはDocker・Pythonがないため、非公開領域の<code>01_source/publisher/delivery-local-cli.php</code>を使います。PHPを実行するのは内部の配信処理だけであり、Calendarは静的ファイルのみです。生成5分・配信1分・監視10分の定期実行を設定し、配信先・生成先・状態ファイルを別々に指定します。詳細はREADMEの「さくらインターネットへの配置」を参照してください。この共有サーバー用補助処理は、UbuntuのPython配信コンテナや将来のSFTP構成を置き換えるものではありません。</p>
 
-sudo docker exec -it kptc-scheduler \
-  php /var/www/html/tools/restore-schedule-backup.php \
-  /var/lib/kptc-scheduler/backups/schedule-backup-latest.json</code></pre>
+        <h3>9-2. Tamanegiに静的カレンダーを準備</h3>
+        <p>ここからは将来分離するときだけ行います。Tamanegiにも3章のリポジトリを<code>/opt/kptc/260725_GW_WEB</code>へ取得します。Originとは別のコンピューター上にある同名パスです。Tamanegiで使用するのは静的Calendar・設定だけで、Schedulerを起動しません。</p>
+        <p>Tamanegiで実行します。既存HPと重ならない名前・ポート・フォルダであることを先に確認します。</p>
+        <pre><code>sudo apt update
+sudo apt install -y openssh-server
+sudo useradd --system --user-group --home-dir /data --shell /usr/sbin/nologin kptc-upload
+sudo install -d -o root -g root -m 755 /srv/kptc-calendar
+sudo install -d -o kptc-upload -g kptc-upload -m 755 /srv/kptc-calendar/data
+sudo install -d -o root -g root -m 755 /etc/ssh/authorized_keys
+cd /opt/kptc/260725_GW_WEB
+cp compose.env.example .env
+nano .env</code></pre>
+        <p>Tamanegiの<code>.env</code>へ待受IPを設定します。プロキシがTamanegi内なら<code>127.0.0.1</code>、別ホストならTamanegi内部IPを使います。</p>
+        <pre><code>KPTC_CALENDAR_BIND_ADDRESS=127.0.0.1</code></pre>
+        <pre><code>sudo docker compose -f compose.tamanegi.yaml config --quiet
+sudo docker compose -f compose.tamanegi.yaml build --pull
+sudo docker compose -f compose.tamanegi.yaml up -d
+sudo docker compose -f compose.tamanegi.yaml ps</code></pre>
+        <p>既存HPのPHP実行ユーザーには<code>/srv/kptc-calendar/data</code>への書込み権限を与えません。公開コンテナは同フォルダを読取り専用で参照します。カレンダー用の公開URLを、既存HPのWordPress書換えから独立してプロキシへ設定します。</p>
+
+        <h3>9-3. Originで転送専用鍵を作る</h3>
+        <pre><code>sudo install -d -m 700 /etc/kptc/sftp
+sudo ssh-keygen -t ed25519 -f /etc/kptc/sftp/id_ed25519 -N '' -C kptc-calendar-delivery
+sudo chown -R 1000:1000 /etc/kptc/sftp
+sudo chmod 700 /etc/kptc/sftp
+sudo chmod 600 /etc/kptc/sftp/id_ed25519</code></pre>
+        <p>自動処理用なので鍵にパスフレーズは設定しません。その代わりに専用ユーザー・接続元制限・最小権限を必ず組み合わせます。UID1000は配信コンテナの実行ユーザーです。鍵をScheduler・Calendar・GitHubへコピーしません。</p>
+        <p>公開鍵<code>id_ed25519.pub</code>だけを管理者経由でTamanegiへ渡し、次の固定パスへ所有者root・権限644で保存します。公開鍵は秘密情報ではなく、SSHが転送ユーザーとして読める必要があります。秘密鍵は渡しません。</p>
+        <pre><code># Tamanegiで実行。/tmp/kptc-delivery.pub は受け取った公開鍵。
+sudo install -o root -g root -m 644 /tmp/kptc-delivery.pub /etc/ssh/authorized_keys/kptc-upload
+sudo cp docker/tamanegi/60-kptc-upload.conf.example /etc/ssh/sshd_config.d/60-kptc-upload.conf
+sudo sshd -t
+sudo systemctl reload ssh</code></pre>
+        <p>この設定は転送専用ユーザーだけを<code>/srv/kptc-calendar</code>へ隔離し、通常のシェル・ポート転送を禁止します。chrootから見える<code>/data</code>が実際の<code>/srv/kptc-calendar/data</code>です。既存の管理者SSH接続を開いたまま、別接続で確認してから終了してください。</p>
+
+        <h3>9-4. 接続先ホスト鍵を確認する</h3>
+        <p>Originで候補を取得します。<code>tamanegi.example.jp</code>は実ホスト名へ変更します。</p>
+        <pre><code>sudo sh -c 'ssh-keyscan -t ed25519 -p 22 tamanegi.example.jp &gt; /etc/kptc/sftp/known_hosts'
+sudo ssh-keygen -lf /etc/kptc/sftp/known_hosts</code></pre>
+        <p>Tamanegi側で次を実行した結果の指紋と、別経路で一致を確認してください。<code>ssh-keyscan</code>だけでは相手が本物か確認できません。</p>
+        <pre><code>sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code></pre>
+        <p>一致確認後、Originで権限を設定します。ホスト鍵が変更された場合は原因確認後に更新し、確認機能を無効にしません。</p>
+        <pre><code>sudo chown 1000:1000 /etc/kptc/sftp/known_hosts
+sudo chmod 600 /etc/kptc/sftp/known_hosts</code></pre>
+
+        <h3>9-5. localからsftpへ切り替える</h3>
+        <p>管理者が、OriginからTamanegiのSFTPポートだけを許可し、TamanegiからOriginへの新規接続を禁止します。TamanegiのSSH受付は既存管理者の接続を維持しつつ、転送についてはOriginのIPだけに限定します。</p>
+        <p>Originの<code>/etc/kptc/publisher.env</code>を変更します。</p>
+        <pre><code>KPTC_AVAILABILITY_DELIVERY_MODE=sftp
+KPTC_AVAILABILITY_INTERVAL=30
+KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800
+KPTC_AVAILABILITY_SFTP_HOST=tamanegi.example.jp
+KPTC_AVAILABILITY_SFTP_PORT=22
+KPTC_AVAILABILITY_SFTP_USER=kptc-upload
+KPTC_AVAILABILITY_SFTP_DIRECTORY=/data</code></pre>
+        <p>カレンダーリンクを切り替える前に、配信担当だけをsftp版へ切り替えて試験します。旧Calendarはこの時点では停止しません。</p>
+        <pre><code>cd /opt/kptc/260725_GW_WEB
+sudo docker compose -f compose.origin-single.yaml stop kptc-publisher
+sudo docker compose -f compose.origin-split.yaml config --quiet
+sudo docker compose -f compose.origin-split.yaml up -d --build kptc-publisher
+sudo docker exec kptc-scheduler php /var/www/html/publish-availability-cli.php
+sudo docker compose -f compose.origin-split.yaml exec kptc-publisher python /opt/kptc/delivery.py --once
+sudo docker exec kptc-scheduler php /var/www/html/monitor-availability-cli.php</code></pre>
+        <p>Tamanegiの公開URLで<code>/Calendar/data/public-availability.json</code>がHTTP 200になり、室名・期間・更新日時が正しいことを確認します。成功後、<code>scheduler.env</code>のリンク先を変更します。</p>
+        <pre><code>KPTC_PUBLIC_AVAILABILITY_PAGE_URL=https://tamanegi.example.jp/Calendar/</code></pre>
+        <pre><code>sudo docker compose -f compose.origin-split.yaml up -d --force-recreate kptc-scheduler
+sudo docker compose -f compose.origin-split.yaml ps
+# Tamanegi側で表示を確認した後にだけ、Originの旧Calendarを停止
+sudo docker compose -f compose.origin-single.yaml stop kptc-calendar</code></pre>
+        <p>以後、Originは<code>compose.origin-split.yaml</code>、Tamanegiは<code>compose.tamanegi.yaml</code>を使います。両サーバーで同じ配信先へ複数の配信担当を起動しないでください。将来部屋を追加する際の画像は、静的Calendarの配布物にも追加します。</p>
+        <p><strong>localへ戻す場合：</strong>Originのpublisher.envを<code>local</code>へ戻し、公開リンクもOriginへ戻します。<code>compose.origin-single.yaml up -d --force-recreate</code>で3コンテナを再作成し、8章で確認します。DBとJSON出力Volumeは共通で保持されます。</p>
       </section>
 
       <section id="update">
-        <h2>10. 更新・復旧・バックアップ</h2>
+        <h2>10. 更新・復元・バックアップ</h2>
         <h3>10-1. 通常更新</h3>
-        <p>基本の流れは、<strong>開発用PCで修正 → 試験 → ビルド → GitHubのmainへ反映 → Originサーバーで再構築</strong>です。サーバー上で<code>01_source</code>を直接編集しません。</p>
+        <p>基本は<strong>開発用PCで修正 → 試験 → ビルド → GitHubのmainへ反映 → サーバーで再構築</strong>です。サーバー上で<code>01_source</code>や配布JSを直接修正しません。手動修正がある場合は先に<code>git status</code>・<code>git diff</code>で整理し、envは作り直さず維持します。</p>
+        <p>初期構成ではOriginで実行します。<code>YYYYMMDD-HHMM</code>は更新日時に置き換えます。</p>
         <pre><code>cd /opt/kptc/260725_GW_WEB
+git status
 git fetch origin
 git switch main
 git pull --ff-only origin main
-
-sudo docker image tag kptc-scheduler:latest \
-  kptc-scheduler:rollback-YYYYMMDD-HHMM
-sudo docker image tag kptc-calendar:latest \
-  kptc-calendar:rollback-YYYYMMDD-HHMM
-
-sudo docker compose -f compose.origin-single.yaml up -d --build
+sudo docker image tag kptc-scheduler:latest kptc-scheduler:rollback-YYYYMMDD-HHMM
+sudo docker image tag kptc-publisher:latest kptc-publisher:rollback-YYYYMMDD-HHMM
+sudo docker image tag kptc-calendar:latest kptc-calendar:rollback-YYYYMMDD-HHMM
+sudo docker compose -f compose.origin-single.yaml build --pull
+sudo docker compose -f compose.origin-single.yaml up -d --force-recreate
 sudo docker compose -f compose.origin-single.yaml ps
 sudo docker compose -f compose.origin-single.yaml logs --since 10m</code></pre>
-        <p><code>01_source</code>は開発用、<code>02_release</code>はビルド後のサーバー実行用です。配布ファイルを変更する更新では、両コンテナを同じコミットから再構築します。</p>
+        <p>分離後はOriginで<code>compose.origin-split.yaml</code>、Tamanegiで<code>compose.tamanegi.yaml</code>を使い、それぞれ同じ版のリポジトリを取得して更新します。Tamanegiへ内部の実環境ファイルを転送しません。PHP・Python・Nginx・OpenSSHの更新確認も必要で、単なる再起動ではランタイムは更新されません。</p>
+
         <h3>10-2. 更新前のSQLite退避</h3>
-        <pre><code>sudo docker exec kptc-scheduler cp \
-  /var/lib/kptc-scheduler/group-watcher.sqlite \
-  /var/lib/kptc-scheduler/pre-update-YYYYMMDD-HHMM.sqlite</code></pre>
-        <h3>10-3. イメージを戻す場合</h3>
+        <p>更新操作の前に実行してください。SQLiteのバックアップAPIで、使用中でも整合したファイルを作成します。</p>
+        <pre><code>sudo docker exec kptc-scheduler php -r '
+$source = new SQLite3("/var/lib/kptc-scheduler/group-watcher.sqlite", SQLITE3_OPEN_READONLY);
+$target = new SQLite3("/var/lib/kptc-scheduler/pre-update-YYYYMMDD-HHMM.sqlite");
+if (!$source-&gt;backup($target)) exit(1);
+$target-&gt;close(); $source-&gt;close();
+'</code></pre>
+        <p>envとSFTP鍵も管理者の非公開バックアップ先へ退避します。公開フォルダやGitHubへ保存しません。</p>
+
+        <h3>10-3. JSONバックアップからSQLiteへ復元</h3>
+        <p>毎日22時に、当日以降に終了する予定を<code>scheduler-latest.json</code>へ上書きします。過去版は残しません。復元ツールは新しいSQLiteを作成し、本番DBを直接上書きしません。</p>
+        <pre><code>sudo docker exec kptc-scheduler php /var/www/html/restore-scheduler-cli.php \
+  /var/lib/kptc-scheduler/backups/scheduler-latest.json \
+  /var/lib/kptc-scheduler/restored-YYYYMMDD-HHMM.sqlite</code></pre>
+        <p>復元成功後、利用者の操作を停止し、Schedulerを停止して切り替えます。分離後はCompose名を変更します。対象日付をすべて同じ値へ置き換え、既存の同名退避がないことを確認します。</p>
+        <pre><code>sudo docker compose -f compose.origin-single.yaml stop kptc-scheduler
+sudo docker run --rm -v kptc-scheduler-data:/data alpine sh -c '
+set -eu
+for file in group-watcher.sqlite group-watcher.sqlite-wal group-watcher.sqlite-shm; do
+  if [ -f "/data/$file" ]; then mv "/data/$file" "/data/pre-restore-YYYYMMDD-HHMM-$file"; fi
+done
+mv /data/restored-YYYYMMDD-HHMM.sqlite /data/group-watcher.sqlite
+chown 33:33 /data/group-watcher.sqlite
+chmod 600 /data/group-watcher.sqlite
+'
+sudo docker compose -f compose.origin-single.yaml start kptc-scheduler
+sudo docker exec kptc-scheduler php /var/www/html/publish-availability-cli.php</code></pre>
+        <p>公開JSONはDBから再生成できます。復元DBの版番号が配信済みより小さくなる場合は、上記の再開・生成コマンドを実行する前に管理者が復元内容を確認します。Schedulerと配信担当を停止した状態で、outboxの<code>public-availability.json</code>・状態Volumeの<code>status.json</code>・公開先の旧JSONを非公開領域へ退避してから再開し、生成・配信してください。これは正常な情報への意図的な復旧時だけの手順です。通常運用では古い世代を自動で受け入れません。</p>
+
+        <h3>10-4. プログラムのロールバック</h3>
+        <p>DBを自動で戻す操作ではありません。同じ静的構成内の正常版へ戻す場合、3イメージのタグを戻します。</p>
         <pre><code>sudo docker compose -f compose.origin-single.yaml stop
 sudo docker image tag kptc-scheduler:rollback-YYYYMMDD-HHMM kptc-scheduler:latest
+sudo docker image tag kptc-publisher:rollback-YYYYMMDD-HHMM kptc-publisher:latest
 sudo docker image tag kptc-calendar:rollback-YYYYMMDD-HHMM kptc-calendar:latest
-sudo docker compose -f compose.origin-single.yaml \
-  up -d --no-build --force-recreate</code></pre>
-        <h3>10-4. 定期バックアップ</h3>
-        <p>Schedulerコンテナでは毎日22時に当日以降の予定をJSONへ上書き保存します。保存先は<code>kptc-scheduler-data</code>内です。過去版を増やさない設計ですが、サーバー障害にも備える場合は管理者のバックアップ製品でDockerボリューム自体を別媒体へ複製します。</p>
+sudo docker compose -f compose.origin-single.yaml up -d --no-build --force-recreate</code></pre>
+        <p>PHPカレンダー旧版へ戻す場合は、Compose定義・旧envも同じ旧版に揃える必要があります。旧公開JSONは必要に応じて再生成します。日次JSONバックアップだけではサーバー全損に備えられないため、DB Volume・env・鍵は別媒体のバックアップも検討してください。</p>
       </section>
 
       <section id="browser-ready">
         <h2>11. Webブラウザで閲覧・操作できるまで</h2>
-        <p>ブラウザ側の接続方式を混在させず、次のどちらかを選びます。</p>
-        <table>
-          <thead><tr><th>接続方式</th><th>Scheduler URL</th><th>Cookie Path</th><th>Cookie Secure</th></tr></thead>
-          <tbody>
-            <tr><td>Originへ直接HTTP</td><td><code>http://origin:8080/</code></td><td><code>/</code></td><td><code>0</code></td></tr>
-            <tr><td>別サーバーのプロキシ経由HTTPS</td><td><code>https://origin.example.jp/Scheduler/</code></td><td><code>/Scheduler/</code></td><td><code>1</code></td></tr>
-          </tbody>
-        </table>
-        <ol>
-          <li>直接接続はOrigin側ファイアウォール、プロキシ経由はHTTPSと7章の設定を完了</li>
-          <li>社内の許可端末から、選択したScheduler URLへアクセス</li>
-          <li>既存社内システムがログイン済み利用者について保持しているIDから、CBC方式の<code>Base64(IV＋暗号文)</code>トークンを付けてSchedulerへ移動</li>
-          <li>予定の表示、追加、編集、移動、コピー、貼り付け、削除を確認</li>
-          <li>社外回線から<code>https://origin.example.jp/Calendar/</code>へアクセス</li>
-          <li>公開カレンダーに直近3か月の空き状況が表示されることを確認</li>
-          <li>許可外端末からSchedulerへアクセスし、プロキシまたはOrigin側ファイアウォールで拒否されることを確認</li>
+        <ol><li>管理者が待受IP、許可IP、必要な公開URLとHTTPSを設定。</li>
+          <li>既存社内システムがログイン済み利用者について保持しているIDを<code>user_xxx</code>とし、CBC方式の<code>Base64(IV＋暗号文)</code>token付きURLでSchedulerへ移動。</li>
+          <li>予定の新規・編集・移動・コピー・削除、再読み込み後の保持、管理者切替を確認。</li>
+          <li>無操作で保存通信が繰り返されないこと、保存失敗時に再試行できることを確認。</li>
+          <li>公開JSONの配信確認後にCalendarを開く。3か月表示、土日祝、午前・午後・メンテナンス、画像と凡例を確認。</li>
+          <li>未許可端末のScheduler拒否、CalendarでPHPや任意のdataファイルが404となることを確認。</li>
         </ol>
-        <h3>利用開始の合格表</h3>
-        <table>
-          <thead><tr><th>確認項目</th><th>合格条件</th></tr></thead>
-          <tbody>
-            <tr><td>Scheduler</td><td>許可IP＋正しいトークンで表示・保存可能</td></tr>
-            <tr><td>Schedulerの拒否</td><td>許可外IPまたは不正トークンで利用不可</td></tr>
-            <tr><td>Calendar</td><td>全IPからHTTPSで表示可能</td></tr>
-            <tr><td>JSON連携</td><td>試験室予定の変更がCalendarへ反映</td></tr>
-            <tr><td>永続化</td><td>コンテナ再起動後も予定と公開JSONが残存</td></tr>
-            <tr><td>秘密情報</td><td>GitHub、HTML、ブラウザ応答に実値なし</td></tr>
-          </tbody>
-        </table>
+        <table><thead><tr><th>確認対象</th><th>合格条件</th></tr></thead><tbody>
+          <tr><td>内部予定</td><td>共有済みになり、再読み込み後も予定を保持。</td></tr>
+          <tr><td>公開JSON</td><td>当月を含む3か月・公開項目だけ。転送完了を監視で確認。</td></tr>
+          <tr><td>分離</td><td>Calendarと配信担当にSQLiteなし。Calendarに鍵なし。</td></tr>
+          <tr><td>停止時</td><td>転送障害でも内部保存は成功。古い情報に注意を表示。</td></tr>
+        </tbody></table>
       </section>
 
-      <section id="trouble">
-        <h2>12. 困ったときの確認</h2>
-        <h3>Q1. Dockerの構築中に「sqlite3」のインストールでエラーが出る。</h3>
-        <p><strong>A.</strong> 原因は旧Dockerfileの不備です。使用するPHP 8.4 Apache基本イメージに対して、<code>sqlite3</code>を<code>docker-php-ext-install</code>の対象として指定していました。修正版Dockerfileではこの指定を外し、必要な拡張が有効かをビルド中に確認します。修正版を取得し、6章の手順で再ビルドしてください。</p>
-        <p>起動後は次のコマンドで確認し、両方が<code>yes</code>なら正常です。</p>
+      <section id="trouble" class="qa">
+        <h2>12. 困ったときのQ＆A</h2>
+        <h3>Q1. 初期構築で「sqlite3」のインストールエラーが出る。</h3>
+        <p><strong>A.</strong> 旧Dockerfileの不備です。修正版では<code>sqlite3</code>の重複インストールを外し、ビルド中に拡張の有効性を確認します。最新版を取得して再ビルドし、次で両方<code>yes</code>になることを確認します。</p>
         <pre><code>sudo docker exec kptc-scheduler php -r '
-foreach (["pdo_sqlite", "sqlite3"] as $name) {
-    echo $name . "=" . (extension_loaded($name) ? "yes" : "no") . PHP_EOL;
-}'</code></pre>
-
-        <h3>Q2. 別サーバーのリバースプロキシからOriginへ接続できない。</h3>
-        <p><strong>A.</strong> 原因は想定環境と実環境の相違です。旧設定の<code>127.0.0.1</code>はOrigin自身からの接続だけを受け付けるため、外部リバースプロキシから接続できません。5-1節に従い、リポジトリ直下の<code>.env</code>にある<code>KPTC_ORIGIN_BIND_ADDRESS</code>をOriginの内部IPへ変更し、コンテナを再作成してください。Origin側ファイアウォールではプロキシと許可済み社内端末だけを通します。</p>
-        <pre><code>sudo docker compose -f compose.origin-single.yaml up -d --force-recreate
-sudo docker compose -f compose.origin-single.yaml port kptc-scheduler 80
-sudo docker compose -f compose.origin-single.yaml port kptc-calendar 80</code></pre>
-        <p>指定したOrigin内部IPの8080番・8081番が表示されることを確認します。</p>
-
-        <h3>Q3. 「内部サーバーへ接続できません」と表示され、bootstrap通信が403になる。</h3>
-        <p><strong>A.</strong> 確認済みの原因は、想定したURLと実際のURLに対するCookieパスの不一致です。<code>http://origin:8080/</code>へ接続する場合、<code>/etc/kptc/scheduler.env</code>を次の値にしてください。</p>
-        <pre><code>KPTC_SESSION_COOKIE_PATH=/
-KPTC_SESSION_COOKIE_SECURE=0</code></pre>
-        <p><code>https://公開名/Scheduler/</code>へ接続する場合は、それぞれ<code>/Scheduler/</code>と<code>1</code>にします。設定変更後はコンテナを再作成し、ブラウザでOriginの古いCookieを削除してから、社内入口またはrenkonから入り直してください。</p>
-        <pre><code>sudo docker compose -f compose.origin-single.yaml \
-  up -d --force-recreate kptc-scheduler
-sudo docker exec kptc-scheduler php -r '
-echo "COOKIE_PATH=" . var_export(getenv("KPTC_SESSION_COOKIE_PATH"), true) . PHP_EOL;
-echo "COOKIE_SECURE=" . var_export(getenv("KPTC_SESSION_COOKIE_SECURE"), true) . PHP_EOL;
+foreach (["pdo_sqlite", "sqlite3"] as $name) echo $name."=".(extension_loaded($name) ? "yes" : "no").PHP_EOL;
 '</code></pre>
-        <p>Cookie設定が正しくても403が続く場合は、サーバーログでセッションの保存失敗がないか確認してください。</p>
-
-        <h3>Q4. SchedulerとCalendarの両方が開かない。</h3>
-        <p><strong>A.</strong> コンテナの停止、待受IPの誤り、ファイアウォールやプロキシの設定が原因として考えられます。次のコマンドで起動状態とログを確認し、停止している場合はエラー内容を修正して6章の手順で起動してください。直接URLでは開けてプロキシ側URLでは開けない場合は、管理者に中継先とHTTPS証明書の確認を依頼してください。</p>
-        <pre><code>cd /opt/kptc/260725_GW_WEB
-sudo docker compose -f compose.origin-single.yaml ps
-sudo docker compose -f compose.origin-single.yaml logs --tail 150</code></pre>
-
-        <h3>Q5. Schedulerの最初の画面で「Forbidden」が表示される。</h3>
-        <p><strong>A.</strong> tokenなしの直接アクセスは仕様により403になります。社内入口またはrenkonから新しいURLを発行して入り直してください。それでも拒否される場合は、入口とSchedulerの共有鍵が一致しているか、双方のUTC日付が正しいか、プロキシがtokenのクエリ文字列を保持しているかを確認します。プロキシが返す403の場合は、管理者に接続元IPの許可設定を確認してもらってください。</p>
-
-        <h3>Q6. 予定の保存時に403エラーが出る。</h3>
-        <p><strong>A.</strong> セッションの失効やCookieの不一致などが考えられます。Q3の設定を確認し、古いタブを閉じて社内入口から入り直してください。開発者ツールの応答がJSONならアプリの応答内容とログを、HTMLならプロキシやWebサーバー側のアクセス制限を確認します。Cookieやtokenの値を作業記録へ掲載しないでください。</p>
-
-        <h3>Q7. Calendarが「準備中」のままになる。</h3>
-        <p><strong>A.</strong> 公開JSONがまだ届いていない、または連携に失敗している可能性があります。<code>scheduler.env</code>と<code>calendar.env</code>の<code>KPTC_PUBLIC_AVAILABILITY_SECRET</code>が一致するか確認し、8-2節の手動送信を実行してください。失敗する場合は両コンテナのログで送信先URLや認証エラーを確認し、設定修正後にコンテナを再作成します。</p>
-
-        <h3>Q8. Calendarに予定の変更が反映されない。</h3>
-        <p><strong>A.</strong> JSON送信の失敗や古い表示のキャッシュが考えられます。8-2節の手動送信とヘルス確認を行い、最終更新時刻を確認してください。送信が正常ならブラウザを再読み込みし、改善しなければ7-2節に従ってプロキシのPHP・JSONキャッシュを無効にします。</p>
-
-        <h3>Q9. コンテナを作り直した後、予定や公開JSONが消えたように見える。</h3>
-        <p><strong>A.</strong> 別のDockerボリュームを接続している可能性があります。ComposeのVolume設定が<code>kptc-scheduler-data</code>と<code>kptc-calendar-data</code>になっているか確認してください。元のボリュームが残っていれば接続を戻します。削除済みの場合、Schedulerは9章のバックアップ復元、Calendarは8-2節の再送で復旧します。<code>docker compose down -v</code>は保存領域も削除するため実行しないでください。</p>
+        <h3>Q2. Origin外のプロキシから接続できない。</h3>
+        <p><strong>A.</strong> 同一ホストの<code>127.0.0.1</code>待受を想定した設定と実環境の相違が考えられます。5-1節の待受IPをOrigin内部IPへ変更してコンテナを再作成し、ファイアウォール・中継先も確認します。</p>
+        <h3>Q3. 「内部サーバーへ接続できません」と表示され、bootstrapが403になる。</h3>
+        <p><strong>A.</strong> 確認済みの原因はCookieパスの不一致です。ブラウザURLが<code>http://origin:8080/</code>ならPathは<code>/</code>、Secureは<code>0</code>。HTTPSの<code>/Scheduler/</code>ならPathも<code>/Scheduler/</code>、Secureは<code>1</code>。env変更後にSchedulerを再作成し、古いCookieを削除して入口から入り直します。</p>
+        <h3>Q4. 無操作でも保存中と共有済みが交互になり、管理者切替後に403になる。</h3>
+        <p><strong>A.</strong> 旧画面の比較処理と、待機中の保存が古いCSRFを使用する不備です。修正版は項目順を無視して比較し、保存と管理操作を直列実行して最新トークンを使います。10章で再ビルドし、古いタブを閉じて入口から入り直してください。</p>
+        <h3>Q5. 予定の登録通知が出ても再読み込みで消える。</h3>
+        <p><strong>A.</strong> サーバー保存前に通知する旧版、または保存失敗が考えられます。修正版は成功後に通知し、失敗時は未保存データを保持して「再試行」を表示します。未保存のまま再読み込みせず、エラー文・<code>save-delta</code>の状態コードを確認してください。</p>
+        <h3>Q6. Calendarが準備中になる。</h3>
+        <p><strong>A.</strong> 初回JSONがない、配信が失敗、または当月から3か月の期間が揃っていません。8-2節で生成・配信を実行し、配信担当ログと<code>/data/public-availability.json</code>を確認します。CalendarのhealthyだけではJSONの正常性は分かりません。</p>
+        <h3>Q7. 更新が遅れていると表示される。</h3>
+        <p><strong>A.</strong> 最終生成から30分を超えた、または再取得に失敗しています。Schedulerの5分ごとの生成cron、配信担当の状態、転送先の空き容量・権限を確認してください。失敗時も最後の正常データを残しますが、古い情報を予約なしとは扱いません。</p>
+        <h3>Q8. SFTP転送が失敗する。</h3>
+        <p><strong>A.</strong> ホスト名・接続許可・公開鍵・ホスト鍵・保存先権限を確認します。秘密鍵はUID1000が読める権限600、chroot親はroot所有・書込み不可、<code>data</code>だけ転送ユーザー所有にします。ホスト鍵不一致時に検証を無効にせず、管理者に指紋確認を依頼します。</p>
+        <h3>Q9. 配信担当のVolumeに書き込めない。</h3>
+        <p><strong>A.</strong> 独自の既存Volumeやbind mountを流用して権限が違う可能性があります。標準は配信担当がUID1000、公開用・状態Volumeの所有者も1000です。新しい専用Volumeを使用し、<code>chmod 777</code>や内部DBの共有で回避しません。</p>
+        <h3>Q10. Tamanegiに既存のPHP・WordPressがある。</h3>
+        <p><strong>A.</strong> 静的カレンダーはPHPハンドラーなしの専用コンテナへ配置し、既存HPからそのファイルへ書込みできない権限にします。共有OSのリスクは残るため既存サイトの更新も必要です。Originへの新規接続は禁止し、転送先はJSON専用領域に限定します。</p>
+        <h3>Q11. コンテナの再作成後に予定が見えない。</h3>
+        <p><strong>A.</strong> 別のDB Volumeを参照していないか確認します。標準の<code>kptc-scheduler-data</code>を両Origin方式で共通使用します。Volumeを削除せず、元のデータを特定し、必要なら10-3節で復元してください。</p>
+        <h3>Q12. JSON更新の成功表示と公開画面が一致しない。</h3>
+        <p><strong>A.</strong> <code>queued:true</code>は出力完了で、配信完了ではありません。配信担当の<code>ok:true</code>、内部監視、公開URLの更新日時を確認します。画面は60秒ごとにJSONを再取得します。プロキシがJSONをキャッシュしていないことも確認してください。</p>
       </section>
 
       <section id="glossary">
         <h2>13. 用語集</h2>
-        <table class="glossary-table">
-          <colgroup><col><col></colgroup>
-          <thead><tr><th>用語</th><th>解説</th></tr></thead>
-          <tbody>
-            <tr><td>Originサーバー</td><td>SchedulerとCalendarを置く1台のLinuxコンピューター。</td></tr>
-            <tr><td>Linux</td><td>サーバーで広く使われる、コンピューターを動かす基本ソフトウェア。</td></tr>
-            <tr><td>Ubuntu</td><td>Linuxを利用しやすい形にまとめた種類の一つ。</td></tr>
-            <tr><td>PHP</td><td>サーバー側で予定の保存やJSON連携などを処理するプログラム言語。</td></tr>
-            <tr><td>Apache</td><td>ブラウザや別プログラムからのHTTP通信を受け取るWebサーバーソフトウェア。</td></tr>
-            <tr><td>Scheduler</td><td>社内で予定を登録・編集する画面と処理のまとまり。</td></tr>
-            <tr><td>Calendar</td><td>公開可能な試験室の空き状況だけを表示する画面と処理のまとまり。</td></tr>
-            <tr><td>Docker</td><td>必要なプログラムと設定を箱のようにまとめて動かす仕組み。</td></tr>
-            <tr><td>コンテナ</td><td>Dockerが動かす、ほかと区切られたプログラムの箱。</td></tr>
-            <tr><td>イメージ（Dockerイメージ）</td><td>コンテナを作るために、プログラムや設定をひとまとめにしたひな型。</td></tr>
-            <tr><td>Dockerfile</td><td>Dockerイメージの材料と組み立て方を書いた手順書。</td></tr>
-            <tr><td>Docker Compose</td><td>複数の箱を1枚の設定表でまとめて起動・停止する仕組み。</td></tr>
-            <tr><td>Compose定義</td><td>起動するコンテナ、通信路、保存場所などをまとめた設定表。</td></tr>
-            <tr><td>Dockerボリューム</td><td>箱を作り直してもデータを残すための専用保存場所。</td></tr>
-            <tr><td>ビルド</td><td>ソースファイルから配布用ファイルやDockerイメージを作る作業。</td></tr>
-            <tr><td>タグ</td><td>Dockerイメージの版や用途を見分けるために付ける名前札。</td></tr>
-            <tr><td>ロールバック</td><td>更新後に問題が起きたとき、以前の正常な状態へ戻す作業。</td></tr>
-            <tr><td>内部ネットワーク</td><td>同じサーバー内のコンテナ同士だけが話すための閉じた通信路。</td></tr>
-            <tr><td>リバースプロキシ</td><td>外から来た通信を、URLの道筋に合わせて内側の処理へ渡す受付。</td></tr>
-            <tr><td>IP制御</td><td>接続元の番号を見て、通す相手と拒む相手を分ける決まり。</td></tr>
-            <tr><td>ポート</td><td>1台のコンピューター内で通信の行き先を分ける受付番号。</td></tr>
-            <tr><td>ファイアウォール</td><td>通信の入口を見張り、許可した通信だけを通す仕組み。</td></tr>
-            <tr><td>ホスト名</td><td>ネットワーク上のコンピューターを人が読みやすい名前で示したもの。</td></tr>
-            <tr><td>IPアドレス</td><td>ネットワーク上のコンピューターや通信相手を見分けるための番号。</td></tr>
-            <tr><td>127.0.0.1</td><td>同じコンピューター自身だけを指し、外部から直接接続できない特別なIPアドレス。</td></tr>
-            <tr><td>0.0.0.0（待受設定）</td><td>そのコンピューターが持つすべてのネットワーク入口で通信を待つ指定。</td></tr>
-            <tr><td>待受IP</td><td>サーバーが通信を受け付ける自分側のIPアドレス。</td></tr>
-            <tr><td>名前解決</td><td>ホスト名から、通信に必要なIPアドレスを調べる処理。</td></tr>
-            <tr><td>URL</td><td>WebページやAPIの場所を示す住所。</td></tr>
-            <tr><td>ディレクトリ</td><td>ファイルを目的別にまとめる入れ物で、一般的な「フォルダ」と同じ意味。</td></tr>
-            <tr><td>SQLite</td><td>予定や利用者を1つのファイルへ整理して保存するデータベース。</td></tr>
-            <tr><td>JSON</td><td>名前と値の組を文字で表す、機械が読みやすいデータ形式。</td></tr>
-            <tr><td>envファイル</td><td>環境変数を「名前＝値」の形でまとめて保存する設定ファイル。</td></tr>
-            <tr><td>環境変数</td><td>秘密値やURLなどをプログラム本体の外から渡す設定値。</td></tr>
-            <tr><td>HTTP</td><td>ブラウザやプログラムがWebサーバーと情報をやり取りする通信方式。</td></tr>
-            <tr><td>HTTPS</td><td>ブラウザとサーバーの間を暗号化する通信方式。</td></tr>
-            <tr><td>HTTPヘッダー</td><td>通信するデータに添える、送信元や通信方法などの付加情報。</td></tr>
-            <tr><td>クエリ文字列</td><td>URLの末尾に「?」から続けて付ける、Webサーバーへ渡す追加情報。</td></tr>
-            <tr><td>リダイレクト</td><td>アクセスしたURLから別のURLへ自動的に案内する処理。</td></tr>
-            <tr><td>TLS</td><td>HTTPSで通信内容を暗号化し、接続先が正しいことを確かめる仕組み。</td></tr>
-            <tr><td>サーバー証明書</td><td>接続先のWebサーバーが本物であることを示す電子的な証明書。</td></tr>
-            <tr><td>秘密鍵</td><td>暗号化や本人確認に使う、外部へ見せてはいけない文字列やデータ。</td></tr>
-            <tr><td>API</td><td>別のプログラムから決められた方法で機能やデータを利用するための窓口。</td></tr>
-            <tr><td>HMAC-SHA256署名</td><td>共有した秘密値を使い、JSONが正しい送信元から届き、途中で書き換えられていないことを確かめる印。</td></tr>
-            <tr><td>トークン</td><td>利用者やアクセスの正しさを確認するため、通信時に渡す一時的な証明情報。</td></tr>
-            <tr><td>CBC方式</td><td>前の暗号化結果を次の処理へつなげながら、データを順番に暗号化する方法。</td></tr>
-            <tr><td>Base64</td><td>文字以外を含むデータを、通信しやすい英数字の並びに変える表し方。</td></tr>
-            <tr><td>IV</td><td>同じ内容を暗号化しても毎回違う結果にするため、暗号化の最初に加える値。</td></tr>
-            <tr><td>UTC</td><td>国や地域の時差に左右されない、世界共通の基準時刻。</td></tr>
-            <tr><td>Cookie</td><td>同じ利用者からの続きの操作だと見分けるため、ブラウザが一時保存する小さな情報。</td></tr>
-            <tr><td>セッション</td><td>利用者がページへ入ってから操作を終えるまでの一連の利用状態。</td></tr>
-            <tr><td>HTTP 403</td><td>サーバーへ到達したものの、アクセスを許可できないことを示す応答番号。</td></tr>
-            <tr><td>ヘルスチェック</td><td>コンテナや連携処理が正常に動いているかを定期的に確かめる確認。</td></tr>
-            <tr><td>ログ</td><td>プログラムの動作やエラーを時刻とともに残した記録。</td></tr>
-            <tr><td>キャッシュ</td><td>表示や処理を速くするため、以前の結果を一時的に保存したもの。</td></tr>
-            <tr><td>コマンド</td><td>文字を入力してコンピューターへ処理を指示する命令。</td></tr>
-            <tr><td>sudo</td><td>管理者だけに許された処理を、一時的な管理者権限で実行する命令。</td></tr>
-            <tr><td>cron</td><td>決めた時刻や間隔でコマンドを自動実行する仕組み。</td></tr>
-            <tr><td>チェックサム</td><td>ファイルが壊れたり書き換わったりしていないかを照合するための短い計算値。</td></tr>
-            <tr><td>リポジトリ</td><td>ソースファイルとその変更履歴をひとまとめに管理する保管場所。</td></tr>
-            <tr><td>Git</td><td>ファイルの変更内容と履歴を記録し、以前の状態も確認できる仕組み。</td></tr>
-            <tr><td>GitHub</td><td>Gitで管理するファイルと変更履歴を、ネットワーク上で共有するサービス。</td></tr>
-            <tr><td>コミット</td><td>ひとまとまりの変更を、説明とともにGitの履歴へ記録したもの。</td></tr>
-            <tr><td>main</td><td>本番へ反映する基準として使うGitの中心的な変更系列。</td></tr>
-          </tbody>
-        </table>
+        <table class="glossary-table"><colgroup><col><col></colgroup><thead><tr><th>用語</th><th>解説</th></tr></thead><tbody>
+          <tr><td>Origin</td><td>内部スケジューラと予定データを置くサーバー。</td></tr>
+          <tr><td>Ubuntu・Linux</td><td>サーバーを動かす基本ソフトの種類と、その仲間の総称。</td></tr>
+          <tr><td>sudo・root</td><td>管理者の権限で命令を実行する方法と、OS全体を管理する特別な利用者。</td></tr>
+          <tr><td>Tamanegi</td><td>分離後に公開カレンダーを置く外向けサーバー。</td></tr>
+          <tr><td>静的配信</td><td>サーバーでPHP等を動かさず、保存されたファイルを閲覧者へ渡す方式。</td></tr>
+          <tr><td>HTML・CSS・JavaScript</td><td>Web画面の内容・見た目・動きをそれぞれ作るファイル。</td></tr>
+          <tr><td>JSON</td><td>項目名と値を組み合わせて情報を表す文字形式。</td></tr>
+          <tr><td>SQLite</td><td>予定等を1つのファイルへ整理して保存するデータベース。</td></tr>
+          <tr><td>PHP・Python</td><td>内部処理やファイルの配信処理を記述するプログラム言語。</td></tr>
+          <tr><td>Apache・Nginx</td><td>ブラウザからの通信へ応答するWebサーバーソフト。</td></tr>
+          <tr><td>Docker・コンテナ</td><td>プログラムや設定を箱のような区画に分けて動かす仕組みと、その区画。</td></tr>
+          <tr><td>イメージ（Dockerイメージ）</td><td>コンテナを作るためにプログラムや設定をまとめたひな型。</td></tr>
+          <tr><td>Dockerfile・ビルド</td><td>ひな型の組立手順を記したファイルと、組み立てる作業。</td></tr>
+          <tr><td>Compose</td><td>複数コンテナの設定・起動・停止をまとめて管理する道具。</td></tr>
+          <tr><td>Volume・bind mount</td><td>箱の外へデータを残す専用領域と、OS上のフォルダを箱へ見せる方法。</td></tr>
+          <tr><td>読取り専用・UID</td><td>内容を見るだけで変更できない設定と、OSが利用者を区別する番号。</td></tr>
+          <tr><td>env・環境変数</td><td>URLや秘密値などをプログラムへ外から渡す設定ファイルと、その設定項目。</td></tr>
+          <tr><td>リバースプロキシ</td><td>外から来た通信をURLに応じて内側の処理へ渡す受付。</td></tr>
+          <tr><td>HTTP・HTTPS</td><td>Webの通信方式と、その内容を暗号化する通信方式。</td></tr>
+          <tr><td>TLS・証明書</td><td>通信の暗号化と接続先確認の仕組み、および相手を確かめる電子的な証明。</td></tr>
+          <tr><td>ホスト名・IPアドレス・ポート</td><td>通信先の名前、機器を示す番号、その機器内の受付番号。</td></tr>
+          <tr><td>127.0.0.1・0.0.0.0</td><td>自分自身だけを指す番号と、待受設定で全ネットワーク入口を指す指定。</td></tr>
+          <tr><td>ファイアウォール・IP制御</td><td>通信相手や受付番号に応じて通す通信を制限する仕組み。</td></tr>
+          <tr><td>SFTP・SSH</td><td>暗号化した通信によるファイル転送方式と、その基礎となる接続方式。</td></tr>
+          <tr><td>公開鍵・秘密鍵</td><td>接続確認に使う一対の情報のうち、相手へ渡すものと、手元だけで保管するもの。</td></tr>
+          <tr><td>ホスト鍵・known_hosts・指紋</td><td>接続先を確認する鍵、確認済み接続先の記録、鍵を見比べるための短い計算値。</td></tr>
+          <tr><td>chroot・シェル・ポート転送</td><td>見えるフォルダの範囲を限定する仕組み、命令を受け付ける道具、別の通信を中継する機能。</td></tr>
+          <tr><td>token・CBC・IV・Base64</td><td>入口の確認情報、暗号化方式、毎回変える暗号用の初期値、バイナリを文字で表す方法。</td></tr>
+          <tr><td>Cookie・セッション・CSRF</td><td>ブラウザが持つ識別情報、サーバーの利用状態、不正な操作要求を防ぐ確認の仕組み。</td></tr>
+          <tr><td>UTC・JST</td><td>世界共通の基準時刻と、日本で使うUTCより9時間進んだ時刻。</td></tr>
+          <tr><td>API・ヘルスチェック</td><td>プログラムの機能を呼び出す窓口と、稼働状態を確かめる検査。</td></tr>
+          <tr><td>cron・再送・監視</td><td>決まった時刻の自動処理、失敗後のやり直し、異常がないか確かめる作業。</td></tr>
+          <tr><td>一括置換・世代・ロック</td><td>完成したファイルを一度で入れ替える処理、情報の新旧を示す番号、同時処理を防ぐ仕組み。</td></tr>
+          <tr><td>キャッシュ・CSP</td><td>以前の情報を一時保存する仕組みと、ブラウザが実行・参照できる内容を制限する方針。</td></tr>
+          <tr><td>Git・GitHub・main・コミット</td><td>変更履歴を管理する道具、その共有場所、中心の変更系列、ひとまとまりの変更記録。</td></tr>
+          <tr><td>タグ・ロールバック・チェックサム</td><td>版を示す名前札、以前の正常版へ戻す作業、ファイルの一致を確かめる計算値。</td></tr>
+        </tbody></table>
       </section>
 
       <section id="changes">
         <h2>14. 変更履歴</h2>
         <p>主要な変更を古い順に記載します。</p>
-        <table class="history-table">
-          <colgroup><col><col></colgroup>
-          <thead><tr><th>日付</th><th>変更内容</th></tr></thead>
-          <tbody>
-            <tr><td>2026-09-08</td><td>内部用・外部用の別サーバー構成を前提としたDocker構築手順を作成。</td></tr>
-            <tr><td>2026-09-09</td><td>Docker Composeによる構築と、ブラウザで利用開始するまでの確認手順を追加。</td></tr>
-            <tr><td>2026-10-03</td><td>本番環境の更新、動作確認、問題発生時の復旧手順を追加。</td></tr>
-            <tr><td>2026-10-08</td><td>SchedulerとCalendarをOriginサーバー1台の別コンテナで動かす構成へ変更。</td></tr>
-            <tr><td>2026-10-08</td><td>詳細論理構成図、保存領域の分離、公開パスとCalendar表記を更新。</td></tr>
-            <tr><td>2026-10-08</td><td>env変数の設定一覧と、HTTP／HTTPSの切替手順を追加。</td></tr>
-            <tr><td>2026-10-08</td><td>Docker、通信、暗号、Gitなどの専門用語を用語集へ追加。</td></tr>
-            <tr><td>2026-10-08</td><td>使用を終了したPDF資料、専用画像、PDF生成処理を削除し、資料を本HTMLへ一本化。</td></tr>
-            <tr><td>2026-10-20</td><td>PHP 8.4のSQLite拡張構築、別サーバーのリバースプロキシ、直接HTTP接続時のCookie設定に関する対策と確認手順を追加。</td></tr>
-          </tbody>
-        </table>
+        <table class="history-table"><colgroup><col><col></colgroup><thead><tr><th>日付</th><th>変更内容</th></tr></thead><tbody>
+          <tr><td>2026-09-08</td><td>内部用・外部用の別サーバー構成のDocker構築手順を作成。</td></tr>
+          <tr><td>2026-09-09</td><td>Compose構築とブラウザで利用開始するまでの確認手順を追加。</td></tr>
+          <tr><td>2026-10-03</td><td>本番更新・動作確認・復旧手順を追加。</td></tr>
+          <tr><td>2026-10-08</td><td>Origin単一サーバー構成、詳細論理構成図、env・HTTP／HTTPS切替へ更新。PDF資料の使用を終了。</td></tr>
+          <tr><td>2026-10-20</td><td>SQLite拡張構築・外部プロキシ・直接HTTPのCookie設定対策を追記。対処法をQ＆A化。</td></tr>
+          <tr><td>2026-11-06</td><td>公開Calendarを静的化。local配信からTamanegiへのSFTP配信へ段階移行する構成・権限・監視・手順を追加。</td></tr>
+        </tbody></table>
       </section>
     </article>
   </main>
-
-  <footer>
-    <p>文書名：KPTC Scheduler Docker構築手順書（HTML）／対象：Ubuntu 24.04、PHP 8.4、Origin単一サーバー構成／更新：2026年10月20日</p>
-  </footer>
+  <footer><p>KPTC Scheduler Docker構築手順書（HTML）／Ubuntu 24.04／同一サーバー→別サーバー段階移行／更新：2026年11月6日</p></footer>
 </body>
 </html>

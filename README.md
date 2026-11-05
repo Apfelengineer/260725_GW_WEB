@@ -2,7 +2,7 @@
 
 Group Watcher 3.65 の主要機能を、PC・タブレット・スマートフォンから利用できるよう「KPTC Scheduler」として再設計したWEBブラウザ版です。
 
-PHP APIと内部用SQLiteへデータを保存するため、別端末・別ブラウザ間でも編集内容が共有されます。試験室の空き状況は個人情報を含まない3か月分の公開用JSONへ変換し、同じOriginサーバー内のCalendarへ署名付きで送信します。スケジューラーはrenkon（社内ポータル）が発行するCBC暗号化トークンを検証して一般モードで開き、パスワード確認後だけ管理者モードへ切り替わります。セッションとCSRF対策はサーバー側で管理します。
+PHP APIと内部用SQLiteへデータを保存するため、別端末・別ブラウザ間でも編集内容が共有されます。試験室の空き状況は個人情報を含まない3か月分の公開用JSONへ変換し、専用配信担当がlocal書込みまたはSFTP転送で静的Calendarへ配信します。スケジューラーはrenkon（社内ポータル）が発行するCBC暗号化トークンを検証して一般モードで開き、パスワード確認後だけ管理者モードへ切り替わります。セッションとCSRF対策はサーバー側で管理します。
 
 ## GitHubのフォルダ構成
 
@@ -13,7 +13,7 @@ PHP APIと内部用SQLiteへデータを保存するため、別端末・別ブ�
 - `02_release/origin/Calendar/`: OriginサーバーのCalendar配下へ配置する完成物
 - `02_release/renkon/`: 社内システムからの接続を試す模擬サイト（開発・確認専用）
 - `docs/`: 専門外の方向けDocker構築手順書（HTML）
-- `docker/origin/Scheduler/`・`docker/origin/Calendar/`: Origin上の2コンテナ用Dockerfileと設定例
+- `docker/origin/Scheduler/`・`docker/origin/Calendar/`: Scheduler・静的CalendarのDockerfileと設定例。配信担当は`docker/publisher/`
 
 ビルド前とビルド後を明確に分離しています。`02_release`にはデータベース、実環境設定、秘密鍵、公開JSON、ログを含めません。
 
@@ -44,16 +44,16 @@ DockerでOrigin単一サーバーへ構築する場合は、[Docker構築手順]
 - 「試験室」グループと3つの試験室ユーザー
 - 電波暗室・電磁波妨害評価装置(G-TEM)・パルスサージシステムそれぞれの直近3か月空き状況ページ
 - 土日祝日の色分け、午前／午後予約、メンテナンス、満室時のキャンセル待ち表示
-- 内部スケジュールDBと3か月分の公開空き状況JSONの分離、およびHMAC署名付きHTTPS連携
-- 外部受信時の署名・時刻・JSONスキーマ・世代検証と原子的なファイル置換
-- 5分間隔の自動再送、送信状態記録、監視用終了コード
+- PHPなしの静的カレンダーと、内部DB・公開JSON・転送鍵の分離
+- 当月を含む3か月分のJSON検証、世代確認、一時ファイルからの一括置換
+- local配信からSFTP配信への設定切替、30秒間隔の再試行と監視
 - Scheduler用／Calendar用の配布ファイル完全分離
 - PC／スマートフォン対応のレスポンシブ表示
 - Open Graph共有画像と日本語メタ情報
 
 ## 開発
 
-Node.js 22.13以上と pnpm を使用します。構成は、画面を生成するVite＋Reactと、共有保存・公開JSON連携を担うPHPに一本化しています。
+Node.js 22.13以上とpnpmを使用します。画面はVite＋React、内部保存・公開JSON生成はPHP、配信担当はPython＋OpenSSHで動作します。
 
 ```bash
 cd 01_source
@@ -73,7 +73,7 @@ pnpm test
 `pnpm run build` は次の3つを生成します。
 
 - `02_release/origin/Scheduler`: スケジューラー画面、内部API、認証、送信・再送・監視コマンド
-- `02_release/origin/Calendar`: 空き状況画面、署名付きJSON受信API、公開JSON読取API
+- `02_release/origin/Calendar`: 静的HTML・CSS・JavaScript・画像（PHPなし）
 - `02_release/renkon`: 3桁のユーザーID入力欄、暗号化トークン発行入口、カレンダーリンクを備える社内ポータル模擬画面
 
 `renkon`は連携確認用であり、本番のOrigin構築には不要です。実運用では既存の社内システムが同じ役割を担うため、`02_release/renkon`を配置しません。
@@ -136,22 +136,20 @@ Ubuntu 24.04では`01_source/deploy/kptc-scheduler-backup.service`と`.timer`を
 
 ## 共有APIの処理
 
-`01_source/origin/shared/public/api.php` が内部の共有データ、一般／管理者モード、操作履歴、変更取り消しを提供します。予定を保存・削除・取り消した後、試験室3室の当月を含む3か月分を公開可能な空き状態へ変換し、`01_source/origin/shared/public/availability-publisher.php` が同じOriginサーバー内のCalendarへ送ります。連携に失敗しても予定の保存は取り消さず、内部DBへ再送待ち、連続失敗回数、最終試行・成功日時、エラー概要を記録します。
+`01_source/origin/shared/public/api.php` が内部の共有データ、一般／管理者モード、操作履歴、変更取り消しを提供します。予定を保存・削除・取り消した後、試験室3室の当月を含む3か月分を公開可能な空き状態へ変換し、`01_source/origin/shared/public/availability-publisher.php` が公開JSON専用出力領域へ保存します。連携に失敗しても予定の保存は取り消さず、内部DBへ再送待ち、連続失敗回数、最終試行・成功日時、エラー概要を記録します。
 
-`01_source/origin/shared/public/public-availability.php` は公開ページ専用です。公開用JSONに保存された室ID・日付・状態（午前空き、午後空き、予約済み、メンテナンス）だけを返し、利用者名、予定件名、メモ、操作履歴は返しません。空き状況ページは内部APIや内部DBを直接参照しません。
+公開画面は`./data/public-availability.json`を直接読み、内部API・SQLiteに接続しません。公開側のPHP受信API・共有HMAC秘密値は廃止しています。
 
-外部の `receive-availability.php` は、共有秘密鍵によるHMAC-SHA256署名、送信時刻、最大128KiB、3室だけの固定スキーマ、許可した4状態、3か月以内の期間、更新世代を検証します。検証後は一時ファイルから同じJSONへ置き換えるため、月別ファイルや過去データの履歴は作成しません。
+- `kptc-scheduler-data`：内部SQLiteと非公開バックアップ。
+- `kptc-outbox`：公開JSONの生成先。配信担当は読取り専用。
+- `kptc-publish-status`：配信担当が書く監視結果。内部画面は読取り専用。
+- `kptc-calendar-static-data`：localの公開JSON。Calendarは読取り専用。
 
-- 内部スケジュールDB: `/home/apfelrunner/GW/group-watcher.sqlite`
-- 公開空き状況JSON（Origin内のCalendar用）: `/var/lib/kptc-availability/public-availability.json`
+`01_source/publisher/delivery.py`はSQLiteをマウントしない専用コンテナで動きます。`KPTC_AVAILABILITY_DELIVERY_MODE=local`なら同一サーバーの専用Volumeへ書込み、`sftp`なら限定した転送アカウントでTamanegiへ送ります。SFTP鍵は配信担当だけへread-onlyで渡し、ホスト鍵検証・シェル転送禁止・接続先制限を適用します。JSONは最大128KiB・許可項目・日付・状態・当月3か月・世代を確認します。
 
-設定例は `01_source/deploy/Scheduler.env.example` と `01_source/deploy/Calendar.env.example` にあります。共有秘密鍵は `openssl rand -hex 32` などで生成し、両方のPHP環境へ同じ値を設定します。リポジトリやWeb公開フォルダへ秘密鍵を保存しないでください。
+予定保存時と5分ごとのCLIでJSONを生成し、配信担当が30秒ごとに配信・再試行します。生成の`queued:true`と配信の`ok:true`を区別してください。`monitor-availability-cli.php`はDB版番号と配信結果・鮮度を照合します。Calendarの`/healthz`はWebプロセスだけの確認です。公開画面は60秒ごとに再取得し、30分以上古い情報に注意を表示します。
 
-共有レンタルサーバーなどでWeb用PHPへ環境変数を設定できない場合は、内部側・外部側それぞれのホームディレクトリに `GW/config/internal-env.php` または `GW/config/public-env.php` を置けます。`runtime-config.php` が公開領域外のこのファイルを自動的に読み込みます。別の場所を使う場合は `KPTC_INTERNAL_CONFIG_FILE` または `KPTC_PUBLIC_CONFIG_FILE` で絶対パスを指定します。
-
-内部側の `publish-availability-cli.php` を5分間隔で実行すると、障害復旧後に自動再送されます。`monitor-availability-cli.php` は正常時0、再送待ち・連続失敗・30分超の未成功時1、DB等の設定異常時2を返します。外部側の `health-availability.php` は最終受信から30分以内かつ当月を含むJSONならHTTP 200、それ以外は503を返すため、一般的なURL監視から確認できます。systemdのサービス／タイマー例は `01_source/deploy/` に同梱しています。
-
-同一サーバー上で内部・外部を模擬する場合も、別の公開ディレクトリとURLへそれぞれ配置し、内部側の送信先を外部側の `receive-availability.php` にします。HTTPしか使えないローカル検証時だけ `KPTC_PUBLIC_AVAILABILITY_ALLOW_HTTP=1` を設定できます。本番では必ずHTTPSを使用してください。
+構築・旧版移行・Tamanegiへの分離は[HTML手順書](docs/KPTC_Scheduler_Docker構築手順書.html)を参照してください。Schedulerは`docker/origin/Scheduler/scheduler.env.example`、配信担当は`docker/publisher/publisher.env.example`からenvを作成します。既存envを例で上書きしません。
 
 将来、組織の認証基盤が確定した場合に差し替える項目:
 
@@ -160,23 +158,18 @@ Ubuntu 24.04では`01_source/deploy/kptc-scheduler-backup.service`と`.timer`を
 
 ## さくらインターネットへの配置
 
-現行のさくら環境では、本番のOrigin単一サーバー構成を模し、内部用を `/home/apfelrunner/www/GW/Scheduler/`、外部用を `/home/apfelrunner/www/GW/Calendar/` へ分けて配置します。公開URLはそれぞれ次のとおりです。
+さくら共有サーバーではDocker・Pythonを使わず、非公開領域の`01_source/publisher/delivery-local-cli.php`を定期実行して静的CalendarへJSONを配信します。PHPは内部処理だけに使用し、公開Calendarフォルダには置きません。通常のUbuntu構成はPython配信コンテナを使用します。
 
-- 内部スケジューラー: `https://apfelrunner.sakura.ne.jp/GW/Scheduler/`
-- 外部向け試験室空き状況: `https://apfelrunner.sakura.ne.jp/GW/Calendar/`
+共有サーバーのPHP配信処理には`KPTC_AVAILABILITY_SOURCE_JSON`（非公開の生成先）、`KPTC_AVAILABILITY_LOCAL_JSON`（公開先）、`KPTC_AVAILABILITY_STATUS_JSON`（非公開の結果）を絶対パスで渡し、引数に内部側の`availability-contract.php`のパスを指定します。生成5分・配信1分・監視10分の定期実行を使います。スケジューラのSQLiteと毎日22時のバックアップは既存の非公開領域を引き継ぎます。
 
-画面の公開フォルダを同じ `GW` 配下に置いても、内部用SQLiteは `/home/apfelrunner/GW/`、外部用JSONは `/home/apfelrunner/GW-public/` に分離し、外部画面から内部DBを直接参照しません。
+従来の公開URL：
+- 内部：`https://apfelrunner.sakura.ne.jp/GW/Scheduler/`
+- 外部：`https://apfelrunner.sakura.ne.jp/GW/Calendar/`
 
-再送は、内部サーバーの定期実行へ次の1行を登録します。
-
-```cron
-*/5 * * * * /usr/local/bin/php /home/apfelrunner/www/GW/Scheduler/publish-availability-cli.php
-```
-
-試験室空き状況ページは `/GW/Calendar/?room=m6`（電波暗室）、`room=m7`（電磁波妨害評価装置(G-TEM)）、`room=m8`（パルスサージシステム）で切り替えます。`02_release/origin/Calendar/index.html` を生成するため、ファイル名なしのディレクトリURLで表示できます。
+静的画面の部屋切替URLは従来どおり`?room=m6`・`?room=m7`・`?room=m8`です。URLパスを維持することは可能ですが、JSON取得先は`data/public-availability.json`へ変わります。
 
 ### 試験室を追加する場合
 
-公開画面の試験室一覧は、`01_source/origin/shared/public/availability-room-config.php`の許可リストに登録した「試験室」ユーザーから生成し、署名付き公開JSONへ名称・画像ファイル名・表示順を含めます。新しい試験室は、管理画面で試験室ユーザーを追加し、同ファイルの`kptc_public_room_ids()`へユーザーIDを追記して、Calendarの公開フォルダへ`<ユーザーID>.png`を配置すると、次回のJSON送信後に画面へ追加されます。画面のTypeScript修正や再ビルドは不要です。許可リストにない試験室ユーザーは外部公開されません。
+公開画面の試験室一覧は、`01_source/origin/shared/public/availability-room-config.php`の許可リストに登録した「試験室」ユーザーから生成し、公開JSONへ名称・画像ファイル名・表示順を含めます。新しい試験室は、管理画面で試験室ユーザーを追加し、同ファイルの`kptc_public_room_ids()`へユーザーIDを追記して、Calendarの公開フォルダへ`<ユーザーID>.png`を配置すると、次回のJSON送信後に画面へ追加されます。画面のTypeScript修正は不要です。静的コンテナへ画像を組み込む場合は画像追加後に再ビルドします。許可リストにない試験室ユーザーは外部公開されません。
 
 既存3室の公開名称・説明は`01_source/origin/shared/public/availability-room-config.php`で上書きしています。スケジューラー上の名称と公開名称を変える場合だけ、この設定を変更してください。画像が未配置の場合は、試験室名の先頭2文字を代替表示します。

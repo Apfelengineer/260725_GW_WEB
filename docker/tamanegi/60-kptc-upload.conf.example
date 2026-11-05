@@ -1,0 +1,10 @@
+# /etc/ssh/sshd_config.d/60-kptc-upload.conf へ配置。既存の管理者SSH設定は保持します。
+Match User kptc-upload
+    ChrootDirectory /srv/kptc-calendar
+    ForceCommand internal-sftp -u 0022
+    AuthorizedKeysFile /etc/ssh/authorized_keys/%u
+    AuthenticationMethods publickey
+    PasswordAuthentication no
+    DisableForwarding yes
+    PermitTTY no
+Match All
