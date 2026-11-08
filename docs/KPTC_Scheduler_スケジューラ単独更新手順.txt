@@ -1,0 +1,184 @@
+KPTC Scheduler：スケジューラだけを更新する手順
+作成日：2026年11月6日
+
+【対象】
+OriginサーバーでDocker版の旧スケジューラを試運転しており、
+カレンダーとJSON配信担当は起動せず、スケジューラだけを更新する場合。
+さくら共有サーバー向けの手順ではありません。
+
+【作業前の注意】
+・利用者にスケジューラの操作を止めてもらってください。
+・以下は同じ端末画面で順番に実行してください。
+・途中でエラーが出た場合は、その先へ進まず管理者へ確認してください。
+・既存の暗号鍵、DB、認証設定は維持します。
+・docker compose down -v や、Volumeの削除は実行しないでください。
+・以下のパスは構築手順書の標準構成です。独自変更がある場合は管理者が調整してください。
+
+======================================================================
+1．既存DBの保存先を確認
+======================================================================
+
+cd /opt/kptc/260725_GW_WEB
+
+sudo docker inspect kptc-scheduler \
+  --format '{{range .Mounts}}{{println .Name "->" .Destination}}{{end}}'
+
+標準構成では次の対応になっています。
+
+kptc-scheduler-data -> /var/lib/kptc-scheduler
+
+異なる保存先の場合は、そのまま進めず、管理者に既存DBを引き継ぐ設定を
+確認してもらってください。
+DBファイルの標準パスは次のとおりです。
+
+/var/lib/kptc-scheduler/group-watcher.sqlite
+
+======================================================================
+2．更新前のバックアップ
+======================================================================
+
+更新日時を設定します。この変数は以降の手順でも使用します。
+
+kptc_update_stamp=$(date +%Y%m%d-%H%M%S)
+
+環境設定を退避します。
+
+sudo install -d -m 700 "/var/backups/kptc/$kptc_update_stamp"
+
+sudo cp -p /etc/kptc/scheduler.env \
+  "/var/backups/kptc/$kptc_update_stamp/scheduler.env"
+
+sudo cp -p .env "/var/backups/kptc/$kptc_update_stamp/compose.env"
+
+現在動いているプログラムのイメージを、戻すための名前で保存します。
+
+sudo docker image tag \
+  "$(sudo docker inspect --format '{{.Image}}' kptc-scheduler)" \
+  "kptc-scheduler:rollback-$kptc_update_stamp"
+
+SQLiteも、整合性を保つ方法で退避します。
+
+sudo docker exec kptc-scheduler php -r '
+$path = $argv[1];
+if (file_exists($path)) exit(1);
+$source = new SQLite3("/var/lib/kptc-scheduler/group-watcher.sqlite", SQLITE3_OPEN_READONLY);
+$target = new SQLite3($path);
+if (!$source->backup($target)) exit(1);
+$target->close();
+$source->close();
+chmod($path, 0600);
+' "/var/lib/kptc-scheduler/pre-update-$kptc_update_stamp.sqlite"
+
+エラーが出た場合は、更新へ進まず原因を確認してください。
+設定ファイルやDBのバックアップは秘密情報を含むため、GitHubや公開フォルダへ
+アップロードしないでください。
+
+======================================================================
+3．GitHubから最新版を取得
+======================================================================
+
+git status
+git fetch origin
+git switch main
+git pull --ff-only origin main
+
+git statusで独自の変更が表示された場合は、強制的に消さず、
+管理者に差分を確認してもらってください。
+
+======================================================================
+4．既存の環境設定を調整
+======================================================================
+
+sudo nano /etc/kptc/scheduler.env
+
+既存の暗号鍵・DB・認証設定は維持し、次の項目を追加または変更します。
+同じ変数を重複して記載せず、既存の行がある場合はその行を修正してください。
+
+KPTC_PUBLIC_AVAILABILITY_JSON=/var/lib/kptc-outbox/public-availability.json
+KPTC_AVAILABILITY_STATUS_JSON=/var/lib/kptc-publish-status/status.json
+KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800
+
+引き続き http://origin:8080/ へアクセスする場合は、以下を維持します。
+
+KPTC_SESSION_COOKIE_PATH=/
+KPTC_SESSION_COOKIE_SECURE=0
+
+ブラウザからHTTPSでアクセスする構成では、Cookie Secureは1です。
+Cookie Pathは実際のアクセス先に合わせてください。
+現在正常に動いている値を、理由なく変更しないでください。
+
+KPTC_PORTAL_TOKEN_KEYは、既存の社内入口と共通の値を維持してください。
+KPTC_PUBLIC_AVAILABILITY_PAGE_URLも起動に必要なので削除しないでください。
+カレンダー未起動でも値は残します。
+envファイルをひな形で丸ごと上書きしないでください。
+
+また、Composeが設定ファイルを読み込む際のエラーを避けるため、
+配信担当を起動しなくてもpublisher.envを用意します。
+次のコマンドは既存ファイルがある場合には上書きしません。
+
+if ! sudo test -f /etc/kptc/publisher.env; then
+  sudo install -m 600 docker/publisher/publisher.env.example \
+    /etc/kptc/publisher.env
+fi
+
+リポジトリ直下の.envでは、KPTC_ORIGIN_BIND_ADDRESSがOriginの実際の内部IPに
+なっていることも確認してください。説明用IPをそのまま使用しないでください。
+リバースプロキシが別サーバーにある場合、127.0.0.1では到達できません。
+公開する8080番ポートへの接続元制限は管理者が維持してください。
+
+======================================================================
+5．スケジューラだけを再構築・起動
+======================================================================
+
+まず設定を確認します。
+
+sudo docker compose -f compose.origin-single.yaml config --quiet
+
+エラーがなければ、スケジューラだけをビルドします。
+
+sudo docker compose -f compose.origin-single.yaml \
+  build --pull kptc-scheduler
+
+ビルドに成功したら、スケジューラだけを再作成します。
+この段階でスケジューラへの接続が一時的に切れます。
+
+sudo docker compose -f compose.origin-single.yaml \
+  up -d --no-deps --force-recreate kptc-scheduler
+
+重要：末尾のkptc-schedulerを省略しないでください。
+省略すると、カレンダーなども起動対象になります。
+この手順は、停止しているカレンダーや配信担当を起動しません。
+すでに稼働している別サービスを停止するコマンドではありません。
+
+======================================================================
+6．動作確認
+======================================================================
+
+sudo docker compose -f compose.origin-single.yaml ps
+
+sudo docker compose -f compose.origin-single.yaml \
+  logs --since 10m kptc-scheduler
+
+起動直後は健康状態の判定に時間がかかることがあります。
+停止・再起動を繰り返す場合やエラーが出る場合は、ログを管理者が確認してください。
+ログに秘密情報が含まれていないか確認してから、調査担当へ共有してください。
+
+その後、古いブラウザのタブを閉じ、renkonなど既存の社内入口から入り直します。
+次の項目を確認してください。
+
+□ 既存の予定が表示される。
+□ 新しい予定を登録でき、再読み込みしても残る。
+□ 予定の編集・削除ができる。
+□ 管理者モードへ切り替えられる。
+□ 管理者モード切り替え後も予定を保存できる。
+□ 無操作時に「共有中」と「共有済み」を繰り返さない。
+
+カレンダー配信の監視では、未配信の警告が出る場合があります。
+これはスケジューラの予定保存とは別の状態です。
+カレンダーの表示やJSON連携の試験は、カレンダーを起動してから実施します。
+
+【最後の注意】
+予定の保存失敗や、再読み込みで予定が消える状態は正常ではありません。
+その場合は試運転を中断し、ログや通信結果を確認してください。
+この更新手順は、DBの復元やロールバックを自動実行するものではありません。
+バックアップの削除やDBの入れ替えは、管理者が必要性を確認してから行ってください。

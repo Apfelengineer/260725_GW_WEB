@@ -6,6 +6,7 @@ kptc_load_runtime_config('internal');
 require_once __DIR__ . '/availability-publisher.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/portal-access.php';
+require_once __DIR__ . '/schedule-import.php';
 
 /*
  * 内部Linuxサーバー上で動作する共有APIです。
@@ -534,6 +535,55 @@ if ($action === 'member-account') {
         if ((string)$error->getCode() === '23000') respond(['error'=>'このアカウントIDは既に使用されています'], 409);
         error_log('Member account update failed: ' . $error->getMessage());
         respond(['error'=>'ユーザー情報を保存できませんでした'], 500);
+    }
+}
+
+if ($action === 'import-schedules') {
+    require_post();
+    $editor = require_admin();
+    if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 2 * 1024 * 1024) respond(['error'=>'送信データが大きすぎます'], 413);
+    $file = $_FILES['file'] ?? null;
+    $operation = $_POST['operation'] ?? '';
+    if (!in_array($operation, ['preview','apply'], true) || !is_array($file) || ($file['error'] ?? -1) !== UPLOAD_ERR_OK
+        || !is_string($file['tmp_name'] ?? null) || !is_uploaded_file($file['tmp_name'])) respond(['error'=>'JSONファイルを選択してください（最大1MiB）'], 422);
+    if ((int)$file['size'] > 1048576) respond(['error'=>'JSONは1MiB以下にしてください'], 413);
+    $importCommitted = false;
+    try {
+        $raw = file_get_contents($file['tmp_name'], false, null, 0, 1048577);
+        if ($raw === false) throw new InvalidArgumentException('ファイルを読み込めません');
+        $items = kptc_import_document($raw);
+        $pdo->beginTransaction();
+        $record = current_record($pdo);
+        if ((string)($record['version']) !== (string)($_POST['version'] ?? '')) {
+            $pdo->rollBack(); respond(bootstrap_payload($pdo) + ['error'=>'他の変更がありました。再試行後に内容確認をやり直してください'], 409);
+        }
+        $plan = kptc_import_plan($items, $record['state']);
+        $summary = array_diff_key($plan, ['schedules'=>true]);
+        if ($operation === 'preview' || $plan['added'] === 0) {
+            $pdo->rollBack(); respond(bootstrap_payload($pdo) + ['importResult'=>$summary]);
+        }
+        $state = $record['state'];
+        $state['schedules'] = array_merge($state['schedules'], $plan['schedules']);
+        $nextVersion = $record['version'] + 1;
+        $now = date(DATE_ATOM);
+        $before = json_encode($record['state'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $after = json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $pdo->prepare('UPDATE app_state SET payload=?,version=?,updated_at=? WHERE id=1')->execute([$after,$nextVersion,$now]);
+        $actorId = (string)$editor['member_id'];
+        $pdo->prepare('INSERT INTO audit_logs(actor_id,actor_name,action,summary,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?)')
+            ->execute([$actorId,member_name($state,$actorId),'JSON取込','予定をJSONから'.$plan['added'].'件登録',$before,$after,$now]);
+        mark_availability_publish_pending($pdo);
+        $pdo->commit();
+        $importCommitted = true;
+        attempt_availability_publish($pdo, $state, $nextVersion);
+        respond(bootstrap_payload($pdo) + ['importResult'=>$summary]);
+    } catch (InvalidArgumentException $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        respond(['error'=>$error->getMessage()], 422);
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('Schedule import failed');
+        respond(['error'=>$importCommitted ? '予定の保存後に応答処理が失敗しました。ページを再読み込みして登録結果を確認してください' : '取込を保存できませんでした。予定は一括登録されていません'], 500);
     }
 }
 

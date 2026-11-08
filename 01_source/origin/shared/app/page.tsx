@@ -16,6 +16,7 @@ import {
   type Member,
   type ScheduleCategory,
   type ScheduleItem,
+  type ScheduleImportPreview,
   type SharedState,
   type SessionRole,
 } from "./lib/group-watcher-api";
@@ -193,6 +194,7 @@ export default function Home() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("saving");
   const [syncError, setSyncError] = useState("");
   const [commandPending, setCommandPending] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const mutationRef = useRef<Mutation>({ action: "更新", summary: "共有データを更新" });
   const syncRef = useRef<SchedulerSync | null>(null);
   if (syncRef.current === null) {
@@ -288,7 +290,7 @@ export default function Home() {
 
   const currentMember = members.find((member) => member.id === currentUserId);
   const defaultTargetMember = currentMember ?? members[0];
-  const canEditSchedule = serverAvailable && syncStatus !== "offline" && !commandPending && (currentRole === "admin" || currentRole === "user");
+  const canEditSchedule = serverAvailable && syncStatus !== "offline" && !commandPending && !importOpen && (currentRole === "admin" || currentRole === "user");
   const canManageUsers = canEditSchedule && currentRole === "admin";
   const selectedSchedules = selectedScheduleIds.map((id) => schedules.find((item) => item.id === id)).filter((item): item is ScheduleItem => Boolean(item));
   const selectedSchedule = selectedSchedules.length === 1 ? selectedSchedules[0] : null;
@@ -322,6 +324,28 @@ export default function Home() {
       await sync.command(payload => groupWatcherApi.changeAdminPassword(currentPassword, newPassword, payload.csrfToken));
       setAdminModal(null);
       setToast("管理者パスワードを変更しました");
+    } finally { setCommandPending(false); }
+  }
+
+  async function previewScheduleImport(file: File): Promise<ScheduleImportPreview> {
+    setCommandPending(true);
+    let preview!: ScheduleImportPreview;
+    try {
+      await sync.command(async payload => {
+        const response = await groupWatcherApi.importSchedules(file, "preview", payload.version, payload.csrfToken);
+        preview = { ...response.importResult, version: response.version };
+        return response;
+      });
+      return preview;
+    } finally { setCommandPending(false); }
+  }
+
+  async function applyScheduleImport(file: File, preview: ScheduleImportPreview) {
+    setCommandPending(true);
+    try {
+      await sync.command(payload => groupWatcherApi.importSchedules(file, "apply", preview.version, payload.csrfToken));
+      setImportOpen(false);
+      setToast(`JSONから予定を${preview.added}件登録しました（登録済み${preview.skipped}件）`);
     } finally { setCommandPending(false); }
   }
 
@@ -766,6 +790,7 @@ export default function Home() {
             <button className="secondary-button mode-switch-button" disabled={commandPending || syncStatus === "offline"} onClick={currentRole === "admin" ? exitAdminMode : () => setAdminModal("enter")}>{currentRole === "admin" ? "一般モードへ" : "管理者モード"}</button>
             {canManageUsers && availabilityPublish && <span className={`publish-badge ${availabilityPublish.pending ? "pending" : "ok"}`} title={availabilityPublish.lastSuccessAt ? `最終送信: ${new Date(availabilityPublish.lastSuccessAt).toLocaleString("ja-JP")}` : "送信実績なし"}>{availabilityPublish.pending ? `△ 公開JSON再送待ち${availabilityPublish.consecutiveFailures ? ` (${availabilityPublish.consecutiveFailures})` : ""}` : "● 公開JSON送信済み"}</span>}
             <span className={`sync-badge ${syncStatus}`}>{syncStatus === "saved" ? "● 共有済み" : syncStatus === "saving" ? "○ 保存中" : "△ 保存失敗"}</span>
+            {canManageUsers && <button className="secondary-button" onClick={() => setImportOpen(true)}>JSONから予定を取込</button>}
             {canEditSchedule && <button className="primary-button" onClick={() => openCreateSchedule()}><span>＋</span> 予定を登録</button>}
           </div>
         </header>
@@ -830,6 +855,7 @@ export default function Home() {
       </nav>
 
       {pendingMove && <MoveConfirmationModal move={pendingMove} onCancel={cancelScheduleMove} onConfirm={confirmScheduleMove} />}
+      {importOpen && currentRole === "admin" && <ScheduleImportModal members={members} categories={categories} onClose={() => setImportOpen(false)} onPreview={previewScheduleImport} onImport={applyScheduleImport} />}
       {adminModal === "enter" && <AdminModeModal configured={adminModePasswordConfigured} onClose={() => setAdminModal(null)} onSubmit={enterAdminMode} />}
       {adminModal === "password" && currentRole === "admin" && <AdminPasswordModal onClose={() => setAdminModal(null)} onSubmit={changeAdminPassword} />}
       {scheduleEditor && canEditSchedule && <ScheduleModal editor={scheduleEditor} members={members} categories={categories} onClose={() => setScheduleEditor(null)} onSubmit={saveSchedule} onDelete={scheduleEditor.mode === "edit" ? () => deleteSchedules([scheduleEditor.item.id]) : undefined} />}
@@ -1099,6 +1125,47 @@ function ManagementPage({ tab, setTab, members, categories, schedules, auditLogs
 
 function ModalShell({ title, eyebrow, onClose, children }: { title: string; eyebrow: string; onClose: () => void; children: React.ReactNode }) {
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="modal" role="dialog" aria-modal="true" aria-label={title}><header><div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2></div><button onClick={onClose} aria-label="閉じる">×</button></header>{children}</section></div>;
+}
+
+function ScheduleImportModal({ members, categories, onClose, onPreview, onImport }: {
+  members: Member[];
+  categories: ScheduleCategory[];
+  onClose: () => void;
+  onPreview: (file: File) => Promise<ScheduleImportPreview>;
+  onImport: (file: File, preview: ScheduleImportPreview) => Promise<void>;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<ScheduleImportPreview | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!file || busy) return;
+    if (file.size > 1048576) { setError("JSONは1MiB以下にしてください"); return; }
+    setBusy(true); setError("");
+    try {
+      if (preview) await onImport(file, preview);
+      else setPreview(await onPreview(file));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "取込に失敗しました");
+      setPreview(null);
+    } finally { setBusy(false); }
+  }
+  return <ModalShell title="JSONから予定を一括登録" eyebrow="SCHEDULE IMPORT" onClose={() => { if (!busy) onClose(); }}>
+    <form className="modal-form" onSubmit={submit}>
+      <p className="modal-guidance full">既存の予定を残し、ファイル内の予定を追加します。ユーザー・試験室・予定種別は先に登録してください。アカウントやパスワードは変更しません。</p>
+      <label className="field full"><span>JSONファイル（最大1MiB・5000件）</span><input type="file" accept=".json,application/json" disabled={busy} onChange={event => { setFile(event.target.files?.[0] ?? null); setPreview(null); setError(""); }} required /></label>
+      <p className="modal-guidance full">形式：予定の配列、&#123;"schedules": [...]&#125;、または本システムのバックアップJSON。予定IDを省略した場合は自動生成します。同じID・同じ内容は登録済みとして除外し、内容が異なる場合は全件を中止します。</p>
+      <details className="modal-guidance full"><summary>取込に使うユーザーID・予定種別を確認</summary><p>memberIdは社内入口の3桁IDではなく、次の内部IDを指定します。</p><ul>{members.map(member => <li key={member.id}>{member.id}：{member.name}</li>)}</ul><p>category：{categories.map(category => category.name).join("、")}</p></details>
+      {preview && <div className="import-preview full" aria-live="polite">
+        <p>全{preview.count}件：新規登録 {preview.added}件 ／ 登録済み {preview.skipped}件</p>
+        <p>以下は先頭{preview.items.length}件です。「登録する」を押すまでDBは変更されません。</p>
+        <div className="import-preview-scroll"><table><thead><tr><th>ユーザー・試験室</th><th>日付・時間</th><th>予定名・種別</th></tr></thead><tbody>{preview.items.map(item => <tr key={item.id}><td>{item.memberName}</td><td>{item.date}〜{item.endDate}<br />{item.start}〜{item.end}</td><td>{item.title}<br />{item.category}</td></tr>)}</tbody></table></div>
+      </div>}
+      {error && <p className="form-notice error full" role="alert">{error}</p>}
+      <footer><button type="button" className="secondary-button" disabled={busy} onClick={onClose}>閉じる</button><button type="submit" className="primary-button" disabled={!file || busy || preview?.added === 0}>{busy ? "処理中…" : preview ? `${preview.added}件を登録する` : "内容を確認する"}</button></footer>
+    </form>
+  </ModalShell>;
 }
 
 function AdminModeModal({ configured, onClose, onSubmit }: { configured: boolean; onClose: () => void; onSubmit: (password: string) => Promise<void> }) {

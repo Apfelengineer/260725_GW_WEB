@@ -96,6 +96,14 @@ export type AuthenticatedBootstrapResponse = {
 
 export type BootstrapResponse = AuthenticatedBootstrapResponse;
 
+export type ScheduleImportPreview = {
+  count: number;
+  added: number;
+  skipped: number;
+  items: Array<ScheduleItem & { memberName: string }>;
+  version: number;
+};
+
 export const groups = ["すべてのグループ", "電気通信係", "試験室"] as const;
 
 export const japaneseHolidays: Holiday[] = [
@@ -129,7 +137,7 @@ export const groupWatcherApi = {
     const response = await fetch(`./api.php?action=${encodeURIComponent(action)}`, {
       credentials: "same-origin",
       ...options,
-      headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
+      headers: { ...(options?.body instanceof FormData ? {} : { "Content-Type": "application/json" }), ...(options?.headers ?? {}) },
     });
     const responseText = await response.text();
     let payload: Record<string, unknown> = {};
@@ -152,6 +160,16 @@ export const groupWatcherApi = {
   },
   bootstrap() {
     return this.request<BootstrapResponse>("bootstrap");
+  },
+  importSchedules(file: File, operation: "preview" | "apply", version: number, csrfToken: string) {
+    // ファイルとして送信し、巨大なJSON配列をWAFがフォーム項目として誤認するのを避けます。
+    const body = new FormData();
+    body.append("file", file);
+    body.append("operation", operation);
+    body.append("version", String(version));
+    return this.request<AuthenticatedBootstrapResponse & { importResult: Omit<ScheduleImportPreview, "version"> }>("import-schedules", {
+      method: "POST", headers: { "X-CSRF-Token": csrfToken }, body,
+    });
   },
   enterAdminMode(password: string, csrfToken: string) {
     return this.request<AuthenticatedBootstrapResponse>("admin-mode-enter", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ password }) });

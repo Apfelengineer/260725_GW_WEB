@@ -99,7 +99,49 @@ try {
   assert.equal((await fetch(base+'/origin/Scheduler/api.php?action=bootstrap',{headers:{cookie}})).status,200);
   assert.equal((await fetch(base+'/origin/Scheduler/',{headers:{cookie}})).status,403);
   assert.equal((await fetch(base+'/origin/Scheduler/?token=invalid')).status,403);
-  console.log('CBC HTTP: entry/API, delta save, empty delta, admin enter/exit, CSRF rotation, stale token rejection, persistence after reload: OK');
+  // JSONファイル取込：一般モード不可、確認のみでは書込まず、全件成功か全件中止。
+  const fresh = await (await fetch(base+'/origin/Scheduler/api.php?action=bootstrap', { headers: { cookie } })).json();
+  const importItems = [{ id:'import-test-past', memberId:fresh.state.members[0].id, date:'2001-01-01', start:'09:00', end:'12:00', title:'JSON移行試験', category:fresh.state.categories[0].name },
+    { id:'import-test-future', memberId:fresh.state.members[0].id, date:'2100-01-01', start:'13:00', end:'17:00', title:'JSON未来試験', category:fresh.state.categories[0].name }];
+  async function upload(items, operation, payload, token=payload.csrfToken) {
+    const form = new FormData();
+    form.append('file', new Blob([JSON.stringify({ schedules:items })], { type:'application/json' }), 'schedules.json');
+    form.append('operation',operation); form.append('version',String(payload.version));
+    return fetch(base+'/origin/Scheduler/api.php?action=import-schedules', { method:'POST', headers:{cookie,'X-CSRF-Token':token},body:form });
+  }
+  assert.equal((await upload(importItems,'preview',fresh)).status,403,'General user cannot import');
+  const adminAgain = await post('admin-mode-enter',fresh,{password:testPassword});
+  cookie = adminAgain.headers.getSetCookie().map(value=>value.split(';')[0]).join('; ') || cookie;
+  const importAdmin = await adminAgain.json();
+  assert.equal((await upload(importItems,'apply',importAdmin,'wrong-token')).status,403);
+  const checkedResponse = await upload(importItems,'preview',importAdmin);
+  assert.equal(checkedResponse.status,200);
+  const checked = await checkedResponse.json();
+  assert.equal(checked.importResult.added,2);
+  assert.equal(checked.version,importAdmin.version);
+  assert.equal(checked.state.schedules.some(item=>item.id==='import-test-past'),false);
+  const invalid = await upload([...importItems,{...importItems[0],id:'invalid',date:'2026-02-30'}],'apply',checked);
+  assert.equal(invalid.status,422);
+  const afterInvalid = await (await fetch(base+'/origin/Scheduler/api.php?action=bootstrap',{headers:{cookie}})).json();
+  assert.equal(afterInvalid.version,checked.version);
+  assert.equal(afterInvalid.state.schedules.some(item=>item.id==='import-test-past'),false);
+  assert.equal((await upload(importItems,'apply',{...checked,version:checked.version-1})).status,409);
+  const importedResponse = await upload(importItems,'apply',checked);
+  assert.equal(importedResponse.status,200);
+  const imported = await importedResponse.json();
+  assert.equal(imported.version,checked.version+1);
+  assert.equal(imported.state.schedules.filter(item=>item.id.startsWith('import-test-')).length,2);
+  assert.equal(imported.state.schedules.some(item=>item.id===createdSchedule.id),true,'Existing schedules retained');
+  assert.deepEqual(imported.state.members,checked.state.members);
+  assert.deepEqual(imported.authAccounts,checked.authAccounts);
+  const repeated = await (await upload(importItems,'apply',imported)).json();
+  assert.equal(repeated.importResult.added,0);
+  assert.equal(repeated.importResult.skipped,2);
+  assert.equal(repeated.version,imported.version);
+  assert.equal((await upload([{...importItems[0],title:'異なる内容'}],'apply',repeated)).status,422);
+  const persisted = await (await fetch(base+'/origin/Scheduler/api.php?action=bootstrap',{headers:{cookie}})).json();
+  assert.equal(persisted.state.schedules.filter(item=>item.id.startsWith('import-test-')).length,2);
+  console.log('CBC HTTP: entry/API, delta save, admin/CSRF rotation, persistence; JSON import permission, preview, atomicity, version conflict, duplicates, past/future: OK');
 } finally {
   server.kill('SIGTERM');
   if (server.exitCode === null) await once(server,'exit');

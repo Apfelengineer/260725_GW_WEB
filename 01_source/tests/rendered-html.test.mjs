@@ -272,6 +272,21 @@ test("renkonの暗号化トークンがないスケジューラ要求を拒否�
   assert.match(auth, /portal_user_id/);
 });
 
+test("JSON予定取込を管理者専用で提供し、確認と一括登録を分ける", async () => {
+  const [page, api, client] = await Promise.all([
+    readFile(new URL("origin/shared/app/page.tsx", root), "utf8"),
+    readFile(new URL("origin/shared/public/api.php", root), "utf8"),
+    readFile(new URL("origin/shared/app/lib/group-watcher-api.ts", root), "utf8"),
+  ]);
+  assert.match(page, /canManageUsers && <button[^\n]+JSONから予定を取込/);
+  assert.match(page, /内容を確認する/);
+  assert.match(page, /importSchedules\(file, "apply", preview.version/);
+  assert.match(api, /\$action === 'import-schedules'/);
+  assert.match(api, /kptc_import_plan\(\$items, \$record\['state'\]\)/);
+  assert.match(client, /body.append\("file", file\)/);
+  await access(new URL("../docs/KPTC_Scheduler_JSON予定取込.md", root));
+});
+
 test("内部用と外部用の配布ファイルを許可リストで分離する", async () => {
   const copier = await readFile(new URL("scripts/copy-distribution-files.mjs", root), "utf8");
   const internalSection = copier.slice(copier.indexOf("scheduler:"), copier.indexOf("calendar:"));
@@ -286,6 +301,7 @@ test("内部用と外部用の配布ファイルを許可リストで分離す�
   assert.doesNotMatch(publicSection, /scheduler-backup\.php|backup-scheduler-cli\.php|restore-scheduler-cli\.php/);
   assert.match(internalSection, /publish-availability-cli\.php/);
   assert.match(internalSection, /availability-room-config\.php/);
+  assert.match(internalSection, /schedule-import\.php/);
   assert.doesNotMatch(publicSection, /\.php/);
   assert.match(copier, /directory: "origin\/Calendar"/);
   assert.doesNotMatch(publicSection, /availability-json\.php/);

@@ -299,6 +299,11 @@ button, select { cursor: pointer; }
 .check-field { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid #e3e8eb; border-radius: 10px; background: #fafbfc; }.check-field input { width: 15px; height: 15px; accent-color: var(--teal); }.check-field span { display: flex; flex-direction: column; }.check-field b { font-size: 9px; }.check-field small { margin-top: 3px; color: #89949e; font-size: 7.5px; }
 .modal-form footer { display: flex; justify-content: flex-end; gap: 9px; padding-top: 5px; }
 .modal-guidance { margin: 0; color: #60717e; font-size: 10px; line-height: 1.7; }
+.modal-form .full { grid-column: 1/-1; }
+.import-preview { min-width: 0; font-size: 11px; line-height: 1.6; }
+.import-preview-scroll { max-height: 220px; overflow: auto; }
+.import-preview table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.import-preview th,.import-preview td { border-bottom: 1px solid #dde3e7; padding: 6px; text-align: left; overflow-wrap: anywhere; }
 .form-notice { margin: 0; padding: 9px 11px; border-radius: 8px; font-size: 9px; line-height: 1.6; }
 .form-notice.error { border: 1px solid #efc2b8; color: #a43e2d; background: #fff2ef; }
 .move-confirmation { display: grid; gap: 18px; padding: 22px 24px 24px; }
