@@ -21,6 +21,7 @@
       "end": "12:00",
       "timePreset": "morning",
       "title": "機器利用予約",
+      "location": "電波暗室",
       "category": "機器利用",
       "memo": "移行した予定",
       "private": false
@@ -41,6 +42,7 @@
 | `end` | 必須 | 終了時刻。`00:00`〜`24:00`。同日予定では開始時刻より後。 |
 | `timePreset` | 任意 | `custom`（省略時）、`all-day`、`morning`、`afternoon`。 |
 | `title` | 必須 | 空ではない予定名。最大1000バイト。 |
+| `location` | 任意 | 場所。省略時は空文字。最大1000バイト。メモとは別に保存。 |
 | `category` | 必須 | 登録済みの予定種別の名称と完全一致する文字列。 |
 | `memo` | 任意 | メモ。省略時は空文字。最大20000バイト。 |
 | `private` | 任意 | `true`または`false`。省略時は`false`。文字列の`"false"`は不可。 |

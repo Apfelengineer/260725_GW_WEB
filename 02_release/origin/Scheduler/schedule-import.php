@@ -25,7 +25,7 @@ function kptc_import_document(string $raw): array {
 }
 
 function kptc_import_normalize(array $item): array {
-    $allowed = ['id','memberId','date','endDate','start','end','timePreset','title','category','memo','private'];
+    $allowed = ['id','memberId','date','endDate','start','end','timePreset','title','location','category','memo','private'];
     if (array_diff(array_keys($item), $allowed)) throw new InvalidArgumentException('未対応の項目が含まれています');
     foreach (['memberId','date','start','end','title','category'] as $key) {
         if (!isset($item[$key]) || !is_string($item[$key]) || trim($item[$key]) === '') throw new InvalidArgumentException($key . 'を文字列で指定してください');
@@ -34,10 +34,12 @@ function kptc_import_normalize(array $item): array {
         if (isset($item[$key]) && !is_string($item[$key])) throw new InvalidArgumentException($key . 'を文字列で指定してください');
     }
     if (array_key_exists('private', $item) && !is_bool($item['private'])) throw new InvalidArgumentException('privateはtrueまたはfalseで指定してください');
+    if (array_key_exists('location', $item) && (!is_string($item['location']) || strlen($item['location']) > 1000)) throw new InvalidArgumentException('locationは1000バイト以下の文字列で指定してください');
     $schedule = [
         'memberId'=>$item['memberId'], 'date'=>$item['date'], 'endDate'=>$item['endDate'] ?? $item['date'],
         'start'=>$item['start'], 'end'=>$item['end'], 'timePreset'=>$item['timePreset'] ?? 'custom',
         'title'=>$item['title'], 'category'=>$item['category'], 'memo'=>$item['memo'] ?? '', 'private'=>$item['private'] ?? false,
+        'location'=>$item['location'] ?? '',
     ];
     foreach (['date','endDate'] as $key) {
         if (!preg_match('/^([0-9]{4})-([0-9]{2})-([0-9]{2})$/D', $schedule[$key], $m) || !checkdate((int)$m[2], (int)$m[3], (int)$m[1])) throw new InvalidArgumentException($key . 'に実在する日付をYYYY-MM-DDで指定してください');
@@ -51,7 +53,9 @@ function kptc_import_normalize(array $item): array {
     if (isset($presetTimes[$schedule['timePreset']]) && [$schedule['start'],$schedule['end']] !== $presetTimes[$schedule['timePreset']]) throw new InvalidArgumentException('時間帯設定と開始・終了時刻が一致しません');
     if (strlen($schedule['title']) > 1000 || strlen($schedule['memo']) > 20000) throw new InvalidArgumentException('予定名またはメモが長すぎます');
     // IDなしは内容から安定したIDを作り、同じファイルの再取込で重複を増やしません。
-    $id = $item['id'] ?? ('import-' . hash('sha256', json_encode($schedule, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)));
+    $identity = $schedule;
+    if ($identity['location'] === '') unset($identity['location']); // 場所のない旧ファイルの自動IDを維持します。
+    $id = $item['id'] ?? ('import-' . hash('sha256', json_encode($identity, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)));
     if ($id === '' || strlen($id) > 120 || preg_match('/[\x00-\x20\x7F]/', $id)) throw new InvalidArgumentException('予定IDが不正です');
     return ['id'=>$id] + $schedule;
 }

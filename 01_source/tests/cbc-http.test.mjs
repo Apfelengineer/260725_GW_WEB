@@ -48,7 +48,7 @@ try {
   const createdSchedule = {
     id:'delta-test-schedule', memberId:payload.state.members[0].id,
     date:'2027-12-01', endDate:'2027-12-01', start:'09:00', end:'10:00',
-    timePreset:'custom', title:'差分保存試験', category:payload.state.categories[0].name, memo:'', private:false,
+    timePreset:'custom', title:'差分保存試験', location:'第一会議室', category:payload.state.categories[0].name, memo:'', private:false,
   };
   const deltaSave = await fetch(base+'/origin/Scheduler/api.php?action=save-delta',{
     method:'POST', headers:{cookie,'Content-Type':'application/json','X-CSRF-Token':payload.csrfToken},
@@ -58,6 +58,7 @@ try {
   const savedPayload = await deltaSave.json();
   assert.equal(savedPayload.version,payload.version+1);
   assert.equal(savedPayload.state.schedules.filter(item => item.id===createdSchedule.id).length,1);
+  assert.equal(savedPayload.state.schedules.find(item=>item.id===createdSchedule.id).location,'第一会議室');
   assert.equal(savedPayload.availabilityPublish.pending, true, 'Generation is not delivery');
   const delivery = spawnSync('python3', [fileURLToPath(new URL('../publisher/delivery.py', import.meta.url)), '--once'], {
     env: { ...process.env, KPTC_AVAILABILITY_DELIVERY_MODE: 'local', KPTC_AVAILABILITY_SOURCE_JSON: join(temporary, 'public.json'), KPTC_AVAILABILITY_STATUS_JSON: join(temporary, 'status.json'), KPTC_AVAILABILITY_LOCAL_JSON: join(temporary, 'calendar', 'public-availability.json') },
@@ -95,13 +96,15 @@ try {
   const afterSwitch = await post('save-delta', generalPayload, { version: generalPayload.version, delta: { scheduleUpserts: [updatedSchedule], scheduleDeleteIds: [] } });
   assert.equal(afterSwitch.status, 200);
   const reloaded = await fetch(base+'/origin/Scheduler/api.php?action=bootstrap', { headers: { cookie } });
-  assert.equal((await reloaded.json()).state.schedules.find(item => item.id === createdSchedule.id).title, updatedSchedule.title);
+  const reloadedSchedule = (await reloaded.json()).state.schedules.find(item => item.id === createdSchedule.id);
+  assert.equal(reloadedSchedule.title, updatedSchedule.title);
+  assert.equal(reloadedSchedule.location, '第一会議室');
   assert.equal((await fetch(base+'/origin/Scheduler/api.php?action=bootstrap',{headers:{cookie}})).status,200);
   assert.equal((await fetch(base+'/origin/Scheduler/',{headers:{cookie}})).status,403);
   assert.equal((await fetch(base+'/origin/Scheduler/?token=invalid')).status,403);
   // JSONファイル取込：一般モード不可、確認のみでは書込まず、全件成功か全件中止。
   const fresh = await (await fetch(base+'/origin/Scheduler/api.php?action=bootstrap', { headers: { cookie } })).json();
-  const importItems = [{ id:'import-test-past', memberId:fresh.state.members[0].id, date:'2001-01-01', start:'09:00', end:'12:00', title:'JSON移行試験', category:fresh.state.categories[0].name },
+  const importItems = [{ id:'import-test-past', memberId:fresh.state.members[0].id, date:'2001-01-01', start:'09:00', end:'12:00', title:'JSON移行試験', location:'移行元の会議室', category:fresh.state.categories[0].name },
     { id:'import-test-future', memberId:fresh.state.members[0].id, date:'2100-01-01', start:'13:00', end:'17:00', title:'JSON未来試験', category:fresh.state.categories[0].name }];
   async function upload(items, operation, payload, token=payload.csrfToken) {
     const form = new FormData();
@@ -131,6 +134,7 @@ try {
   const imported = await importedResponse.json();
   assert.equal(imported.version,checked.version+1);
   assert.equal(imported.state.schedules.filter(item=>item.id.startsWith('import-test-')).length,2);
+  assert.equal(imported.state.schedules.find(item=>item.id==='import-test-past').location,'移行元の会議室');
   assert.equal(imported.state.schedules.some(item=>item.id===createdSchedule.id),true,'Existing schedules retained');
   assert.deepEqual(imported.state.members,checked.state.members);
   assert.deepEqual(imported.authAccounts,checked.authAccounts);

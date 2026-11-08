@@ -10,7 +10,7 @@ function mustFail(callable $action): void {
 $dir = sys_get_temp_dir() . '/kptc-backup-test-' . bin2hex(random_bytes(8));
 mkdir($dir,0700);
 try {
-    $schedule = static fn($id,$date,$endDate) => ['id'=>$id,'memberId'=>'m1','date'=>$date,'endDate'=>$endDate,'start'=>'09:00','end'=>'17:00','title'=>"試験\nメモ付き",'category'=>'機器利用','memo'=>'日本語・引用符"を保存','private'=>true];
+    $schedule = static fn($id,$date,$endDate) => ['id'=>$id,'memberId'=>'m1','date'=>$date,'endDate'=>$endDate,'start'=>'09:00','end'=>'17:00','title'=>"試験\nメモ付き",'location'=>'試験室・第一会議室','category'=>'機器利用','memo'=>'日本語・引用符"を保存','private'=>true];
     $hash = password_hash('TestPassword123',PASSWORD_DEFAULT);
     $payload = [
         'schemaVersion'=>1,'kind'=>'kptc-scheduler-future','createdAt'=>'2026-09-04T22:00:00+09:00','fromDate'=>'2000-01-01','sourceVersion'=>10,
@@ -31,6 +31,7 @@ try {
     $saved = kptc_backup_read($backup);
     check(array_column($saved['state']['schedules'],'id')===['today','span','future'],'Date filtering failed');
     check($saved['state']['schedules'][0]['memo']===$payload['state']['schedules'][0]['memo'],'Text changed');
+    check($saved['state']['schedules'][0]['location']==='試験室・第一会議室','Location lost in backup');
     check((fileperms($backup)&0777)===0600,'Backup permissions not private');
     check(!isset($saved['audit_logs']),'Audit data included');
 
@@ -38,6 +39,7 @@ try {
     kptc_backup_restore($backup,$restored);
     $db = new PDO('sqlite:'.$restored);
     check($db->query('PRAGMA integrity_check')->fetchColumn()==='ok','Restore integrity failed');
+    check(json_decode($db->query('SELECT payload FROM app_state WHERE id=1')->fetchColumn(),true)['schedules'][0]['location']==='試験室・第一会議室','Location lost during restore');
     check((int)$db->query('SELECT COUNT(*) FROM audit_logs')->fetchColumn()===0,'History not empty');
     check($db->query('SELECT password_hash FROM auth_users')->fetchColumn()===$hash,'Account settings lost');
     check(password_verify('TestPassword123',$db->query("SELECT value FROM app_meta WHERE key='admin_mode_password_hash'")->fetchColumn()),'Admin password lost');

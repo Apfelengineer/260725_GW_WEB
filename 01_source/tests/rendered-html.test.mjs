@@ -20,7 +20,7 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.match(page, /スケジュール/);
   assert.match(page, /ユーザー・予定種別/);
   assert.match(page, /予定を登録/);
-  assert.match(page, /非公開にする/);
+  assert.match(page, /name="private" type="checkbox"/);
   assert.match(page, /月曜始まり/);
   assert.match(page, /Ctrl\+C/);
   assert.match(page, /useState<string\[\]>\(\[\]\)/);
@@ -64,8 +64,13 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   const startDateField = scheduleForm.indexOf('name="date"');
   const endDateField = scheduleForm.indexOf('name="endDate"');
   const timePresetField = scheduleForm.indexOf('name="timePreset"');
-  assert.ok([userField, categoryField, startDateField, endDateField, timePresetField].every((index) => index >= 0));
-  assert.ok(userField < categoryField && categoryField < startDateField && startDateField < endDateField && endDateField < timePresetField);
+  const titleField = scheduleForm.indexOf('name="title"');
+  const locationField = scheduleForm.indexOf('name="location"');
+  assert.ok([userField, categoryField, startDateField, endDateField, timePresetField, titleField, locationField].every((index) => index >= 0));
+  assert.ok(userField < startDateField && startDateField < endDateField && endDateField < timePresetField && timePresetField < titleField && titleField < locationField && locationField < categoryField);
+  assert.match(scheduleForm, /schedule-date-time/);
+  assert.doesNotMatch(scheduleForm, /member.group/);
+  assert.match(page, /location: String\(form.get\("location"\)/);
   assert.match(page, /午前（9:00–12:00）/);
   assert.match(page, /午後（13:00–17:00）/);
   assert.match(page, /終日/);

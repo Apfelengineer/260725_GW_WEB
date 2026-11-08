@@ -639,6 +639,9 @@ if ($action === 'save-delta') {
     foreach ($upserts as $schedule) {
         if (!is_array($schedule)) { $pdo->rollBack(); respond(['error'=>'予定データが不正です'], 422); }
         unset($schedule['repeat'], $schedule['repeatUntil'], $schedule['reminderMinutes']);
+        if (array_key_exists('location', $schedule) && (!is_string($schedule['location']) || strlen($schedule['location']) > 1000)) {
+            $pdo->rollBack(); respond(['error'=>'場所は1000バイト以下の文字列で指定してください'], 422);
+        }
         $id = trim((string)($schedule['id'] ?? ''));
         $memberId = (string)($schedule['memberId'] ?? '');
         $category = (string)($schedule['category'] ?? '');
@@ -683,6 +686,9 @@ if ($action === 'save') {
     $state = $input['state'] ?? null;
     if (!is_array($state) || !isset($state['members'],$state['schedules'],$state['categories'])) respond(['error'=>'保存データが不正です'], 422);
     $state = strip_schedule_automation_fields($state);
+    foreach ($state['schedules'] as $schedule) {
+        if (is_array($schedule) && array_key_exists('location', $schedule) && (!is_string($schedule['location']) || strlen($schedule['location']) > 1000)) respond(['error'=>'場所は1000バイト以下の文字列で指定してください'], 422);
+    }
     $nextMemberIds = array_column($state['members'], 'id');
     $linkedMemberIds = $pdo->query('SELECT member_id FROM auth_users')->fetchAll(PDO::FETCH_COLUMN);
     foreach ($linkedMemberIds as $linkedMemberId) {

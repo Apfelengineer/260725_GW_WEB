@@ -36,6 +36,7 @@ function kptc_backup_validate_state(array $state): void {
                 kptc_backup_assert(isset($members[$item['memberId']]), '予定の所属ユーザーが存在しません');
                 if (isset($item['private'])) kptc_backup_assert(is_bool($item['private']), '非公開設定が不正です');
                 if (isset($item['memo'])) kptc_backup_assert(is_string($item['memo']), '予定メモが不正です');
+                if (array_key_exists('location', $item)) kptc_backup_assert(is_string($item['location']) && strlen($item['location']) <= 1000, '予定の場所が不正です');
             }
         }
     }

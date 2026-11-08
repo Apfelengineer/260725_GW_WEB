@@ -300,6 +300,13 @@ button, select { cursor: pointer; }
 .modal-form footer { display: flex; justify-content: flex-end; gap: 9px; padding-top: 5px; }
 .modal-guidance { margin: 0; color: #60717e; font-size: 10px; line-height: 1.7; }
 .modal-form .full { grid-column: 1/-1; }
+.schedule-entry-form { gap: 10px; }
+.schedule-entry-form .schedule-entry-row { display: grid; grid-template-columns: 48px minmax(0,1fr); align-items: center; gap: 8px; }
+.schedule-entry-row > label { color: #5b6a77; font-size: 10px; font-weight: 700; }
+.schedule-date-time { display: grid; grid-template-columns: minmax(0,1fr) minmax(88px,.65fr); gap: 8px; min-width: 0; }
+.schedule-date-time input { min-width: 0; }
+.schedule-classification { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; align-items: center; }
+.schedule-classification .check-field { margin: 0; white-space: nowrap; }
 .import-preview { min-width: 0; font-size: 11px; line-height: 1.6; }
 .import-preview-scroll { max-height: 220px; overflow: auto; }
 .import-preview table { width: 100%; table-layout: fixed; border-collapse: collapse; }

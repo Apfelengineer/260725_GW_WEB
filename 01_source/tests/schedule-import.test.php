@@ -14,6 +14,10 @@ $plan = kptc_import_plan($items,$state);
 expect($plan['added'] === 1 && $plan['skipped'] === 0, 'Past schedule must be imported');
 expect($plan['schedules'][0]['endDate'] === '2001-01-01', 'End date defaults to start date');
 expect(str_starts_with($plan['schedules'][0]['id'],'import-'), 'Missing ID generated');
+$oldIdentity = $plan['schedules'][0]; unset($oldIdentity['id'], $oldIdentity['location']);
+expect($plan['schedules'][0]['id'] === 'import-'.hash('sha256',json_encode($oldIdentity,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)), 'Old ID-less files retain stable IDs');
+expect(kptc_import_normalize($item)['location'] === '', 'Old schedules without location remain supported');
+expect(kptc_import_normalize($item+['location'=>'第一会議室'])['location'] === '第一会議室', 'Location retained');
 $state['schedules'] = $plan['schedules'];
 $again = kptc_import_plan($items,$state);
 expect($again['added'] === 0 && $again['skipped'] === 1, 'Repeated import must not duplicate');
@@ -22,7 +26,7 @@ expect(kptc_import_plan([array_merge($item,['date'=>'2100-01-01','endDate'=>'210
 foreach ([
     ['date'=>'2026-02-30'], ['endDate'=>'2000-12-31'], ['start'=>'25:00'], ['end'=>'09:00'],
     ['private'=>'false'], ['memberId'=>'unknown'], ['category'=>'unknown'], ['title'=>' '],
-    ['timePreset'=>'invalid'], ['unexpected'=>'private payload'], ['id'=>"bad\nid"], ['memo'=>123],
+    ['timePreset'=>'invalid'], ['unexpected'=>'private payload'], ['id'=>"bad\nid"], ['memo'=>123], ['location'=>123], ['location'=>str_repeat('a',1001)],
 ] as $change) rejects(fn()=>kptc_import_plan([array_merge($item,$change)],$state), 'Invalid field must fail: '.json_encode($change));
 rejects(fn()=>kptc_import_plan([$item,$item],$state), 'Duplicate ID/content inside file');
 $conflict = array_merge($plan['schedules'][0],['title'=>'別内容']);

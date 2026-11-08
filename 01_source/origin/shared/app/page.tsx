@@ -409,6 +409,7 @@ export default function Home() {
       end: presetTimes[1],
       timePreset,
       title,
+      location: String(form.get("location") ?? "").trim(),
       category: String(form.get("category")),
       memo: String(form.get("memo") ?? ""),
       private: form.get("private") === "on",
@@ -972,7 +973,7 @@ function ScheduleEventButton({ item, categories, selected, cutting, editable, co
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(item, event.shiftKey); } }}
       onDoubleClick={(event) => { if (editable) { event.stopPropagation(); onEdit(item); } }}
       onContextMenu={(event) => { if (editable) onContextMenu(event, item); }}
-      title={`${item.timePreset === "all-day" ? "終日" : `${item.start}–${item.end}`} ${item.title}${editable ? "（ダブルクリックで編集）" : ""}`}
+      title={`${item.timePreset === "all-day" ? "終日" : `${item.start}–${item.end}`} ${item.title}${item.location ? `／場所：${item.location}` : ""}${editable ? "（ダブルクリックで編集）" : ""}`}
     >
       {compact ? <><i />{scheduleTimeLabel(item)} {item.private ? "【非】" : ""}{item.title}</> : <><time>{scheduleTimeLabel(item)}{item.endDate && item.endDate !== item.date ? "・複数日" : ""}</time><strong>{item.private ? "【非】" : ""}{item.title}</strong>{item.memo && <span className="memo-mark">◆</span>}</>}
     </div>
@@ -1253,17 +1254,15 @@ function ScheduleModal({ editor, members, categories, onClose, onSubmit, onDelet
   }
   return (
     <ModalShell title={item ? "予定を編集" : "予定を登録"} eyebrow={item ? "EDIT SCHEDULE" : "NEW SCHEDULE"} onClose={onClose}>
-      <form onSubmit={onSubmit} className="modal-form">
-        <label className="field full"><span>件名</span><input name="title" autoFocus placeholder="例：プロジェクト定例会" defaultValue={item?.title ?? ""} required /></label>
-        <label className="field full"><span>ユーザー</span><select name="memberId" defaultValue={item?.memberId ?? (editor.mode === "create" ? editor.memberId : members[0]?.id)}>{members.map((member) => <option value={member.id} key={member.id}>{member.name}（{member.group}）</option>)}</select><small className="field-note">誰の予定でも変更できます</small></label>
-        <label className="field full"><span>予定種別</span><select name="category" defaultValue={item?.category ?? categories[0]?.name}>{categories.map((category) => <option key={category.id}>{category.name}</option>)}</select></label>
-        <label className="field"><span>開始日</span><input name="date" type="date" defaultValue={item?.date ?? (editor.mode === "create" ? editor.date : "")} required /></label>
-        <label className="field"><span>終了日</span><input name="endDate" type="date" defaultValue={item?.endDate ?? item?.date ?? (editor.mode === "create" ? editor.date : "")} required /></label>
-        <label className="field full"><span>時間帯</span><select name="timePreset" value={timePreset} onChange={(event) => changeTimePreset(event.target.value as NonNullable<ScheduleItem["timePreset"]>)}><option value="custom">時間を指定</option><option value="all-day">終日</option><option value="morning">午前（9:00–12:00）</option><option value="afternoon">午後（13:00–17:00）</option></select><small className="field-note">午前・午後・終日を選ぶと時刻が自動入力されます</small></label>
-        <label className="field"><span>開始</span><input name="start" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} readOnly={timePreset !== "custom"} required /></label>
-        <label className="field"><span>終了</span><input name="end" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} readOnly={timePreset !== "custom"} required /></label>
-        <label className="field full"><span>メモ</span><textarea name="memo" placeholder="場所、持ち物、共有事項など" rows={3} defaultValue={item?.memo ?? ""} /></label>
-        <label className="check-field full"><input name="private" type="checkbox" defaultChecked={item?.private ?? false} /><span><b>非公開にする</b><small>他のメンバーには予定があることだけを表示します</small></span></label>
+      <form onSubmit={onSubmit} className="modal-form schedule-entry-form">
+        <label className="field full schedule-entry-row"><span>ユーザー</span><select name="memberId" autoFocus defaultValue={item?.memberId ?? (editor.mode === "create" ? editor.memberId : members[0]?.id)}>{members.map((member) => <option value={member.id} key={member.id}>{member.name}</option>)}</select></label>
+        <div className="field full schedule-entry-row"><label htmlFor="schedule-start-date">開始</label><div className="schedule-date-time"><input id="schedule-start-date" aria-label="開始日" name="date" type="date" defaultValue={item?.date ?? (editor.mode === "create" ? editor.date : "")} required /><input aria-label="開始時刻" name="start" type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} readOnly={timePreset !== "custom"} required /></div></div>
+        <div className="field full schedule-entry-row"><label htmlFor="schedule-end-date">終了</label><div className="schedule-date-time"><input id="schedule-end-date" aria-label="終了日" name="endDate" type="date" defaultValue={item?.endDate ?? item?.date ?? (editor.mode === "create" ? editor.date : "")} required /><input aria-label="終了時刻" name="end" type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} readOnly={timePreset !== "custom"} required /></div></div>
+        <label className="field full schedule-entry-row"><span>時間帯</span><select name="timePreset" value={timePreset} onChange={(event) => changeTimePreset(event.target.value as NonNullable<ScheduleItem["timePreset"]>)}><option value="custom">時間を指定</option><option value="all-day">終日</option><option value="morning">午前（9:00–12:00）</option><option value="afternoon">午後（13:00–17:00）</option></select></label>
+        <label className="field full schedule-entry-row"><span>件名</span><input name="title" placeholder="例：プロジェクト定例会" defaultValue={item?.title ?? ""} required /></label>
+        <label className="field full schedule-entry-row"><span>場所</span><input name="location" placeholder="例：会議室、訪問先" defaultValue={item?.location ?? ""} /></label>
+        <div className="full schedule-classification"><label className="field schedule-entry-row"><span>分類</span><select aria-label="予定種別" name="category" defaultValue={item?.category ?? categories[0]?.name}>{categories.map((category) => <option key={category.id}>{category.name}</option>)}</select></label><label className="check-field"><input name="private" type="checkbox" defaultChecked={item?.private ?? false} /><span>非公開</span></label></div>
+        <label className="field full"><span>メモ</span><textarea name="memo" placeholder="持ち物、共有事項など" rows={5} defaultValue={item?.memo ?? ""} /></label>
         <footer>{onDelete && <button type="button" className="secondary-button danger-button" onClick={onDelete}>削除</button>}<span className="footer-spacer" /><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button className="primary-button" type="submit">{item ? "変更を保存" : "予定を登録"}</button></footer>
       </form>
     </ModalShell>

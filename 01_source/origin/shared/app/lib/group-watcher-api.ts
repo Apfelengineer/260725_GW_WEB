@@ -21,6 +21,7 @@ export type ScheduleItem = {
   end: string;
   timePreset?: "custom" | "all-day" | "morning" | "afternoon";
   title: string;
+  location?: string;
   category: string;
   private?: boolean;
   memo?: string;
