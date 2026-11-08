@@ -3,6 +3,7 @@
 - `origin/Scheduler/`：内部PHP API、画面、認証、公開JSON生成、バックアップ・監視コマンド。
 - `origin/Calendar/`：静的HTML・CSS・JavaScript・画像。PHPなし。同一Originでも別Tamanegiでも同じ配布物。
 - `renkon/`：検証用社内入口。本番配置は不要。
+- `converter/`：PC上で開く、独立したオフライン既存データJSON変換ツール。HTML1個で動作し、サーバーへの配置は不要。
 - `SHA256SUMS`：配布物のSHA-256一覧。
 
 公開JSON、SQLite、秘密鍵、実env、ログは含みません。静的カレンダーは固定相対URL`./data/public-availability.json`を読みます。実際の公開JSONは専用VolumeまたはTamanegiの専用フォルダから配信します。

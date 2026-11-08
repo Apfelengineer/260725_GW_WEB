@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<title>既存スケジューラ → KPTC JSON変換</title><style>:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#20313d;background:#edf3f5;font-size:15px;line-height:1.7}*{box-sizing:border-box}body{margin:0}main{max-width:1050px;margin:32px auto;padding:0 22px}header{padding:30px 12px}h1{font-size:clamp(24px,4vw,36px);line-height:1.35;letter-spacing:-.04em;margin:14px 0}h2{font-size:20px;margin:0 0 12px}p{margin:10px 0}.tag{font-size:12px;font-weight:700;letter-spacing:.12em;color:#15796f}.privacy{color:#146758;background:#dff2e9;padding:12px 16px;border-radius:9px}section{background:white;border:1px solid #d9e4e7;border-radius:14px;padding:24px;margin:18px 0;box-shadow:0 3px 10px #142c3b04}fieldset{border:0;margin:0;padding:0;min-width:0}legend{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}label{display:block;font-weight:600;font-size:14px;margin:14px 0}input:not([type=checkbox]),select{display:block;width:100%;padding:10px;border:1px solid #bbcbd1;border-radius:7px;font:inherit;font-size:14px;background:white;color:#20313d;margin-top:6px;min-width:0}input:focus,select:focus,button:focus{outline:3px solid #94d4c9;outline-offset:2px}input[type=file]{font-size:13px}.pickers{display:grid;grid-template-columns:1fr 1fr;gap:20px}.hint{font-size:13px;color:#596d78}.scroll{overflow:auto;max-width:100%}table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:560px;font-size:13px}th,td{padding:12px 10px;border-bottom:1px solid #dbe4e7;text-align:left;vertical-align:top;overflow-wrap:anywhere}th{color:#566d79;background:#f3f7f8}th:first-child{width:30%}#members input{margin:0}.check{display:flex;align-items:flex-start;gap:8px}.check input{margin-top:6px}.action{display:flex;align-items:center;gap:16px;margin:25px 0}button{border:1px solid #b6c9ce;border-radius:9px;padding:11px 18px;background:white;color:#176d63;font:inherit;font-weight:650;cursor:pointer}.primary{background:#177f71;color:white;border-color:#177f71}button:disabled{opacity:.5;cursor:default}.downloads{display:flex;gap:10px;flex-wrap:wrap}.preview{max-height:420px;margin-top:20px}.error{color:#a22737;background:#fff1f1;padding:12px;border-radius:8px}.warning{background:#fff7df;padding:12px;border-radius:8px}.success{color:#11664b}#issues ul{max-height:230px;overflow:auto}#issues li{overflow-wrap:anywhere}.notes{font-size:13px;color:#566d79}.notes h2{font-size:17px}footer{font-size:12px;text-align:center;color:#60747f;padding:22px}small{display:block;font-weight:400;color:#657784}[hidden]{display:none!important}@media(max-width:600px){main{margin:10px auto;padding:0 12px}section{padding:18px}header{padding:20px 3px}.pickers{grid-template-columns:1fr;gap:0}.action{align-items:stretch;flex-direction:column}}
+</style></head>
+<body><main><header><span class="tag">OFFLINE / STANDALONE</span><h1>既存データを、KPTCの予定へ。</h1><p>ユーザー別・月別の .sch / .dtl をまとめて読み込み、予定登録用JSONへ変換します。</p><p class="privacy">通信なし・元ファイルの変更なし・自動登録なし。処理はこのPCのブラウザ内だけで完結します。</p></header>
+<section><h2>1　データを読み込む</h2><p>全ユーザーの親フォルダ、または1人分のフォルダを選択できます。ファイル選択では1人分の複数月をまとめて選んでください。</p>
+<div class="pickers"><label>フォルダをまとめて選択<input id="directory" type="file" webkitdirectory multiple></label><label>ファイルをまとめて選択<input id="files" type="file" accept=".sch,.dtl" multiple></label></div>
+<p class="hint">選び直すと入力データを置き換えます。schと対応するdtlを一緒に選択してください。上限：1000ファイル・合計50MiB。</p><p id="inventory" role="status">データ未選択</p></section>
+<fieldset id="settings"><legend>変換設定</legend><section><h2>2　登録先ユーザーを指定</h2>
+<p><strong>memberIdはKPTCの内部ユーザーIDです。社内入口の3桁IDとは異なります。</strong> KPTCのJSON取込画面でも内部IDを確認できます。</p>
+<label>任意：KPTCバックアップJSONなどからユーザー・予定種別一覧を読み込む<input id="reference" type="file" accept=".json,application/json"></label><p id="reference-status" class="hint">参照なし：登録先ID・予定種別名を手入力します。実際に登録済みかどうかはKPTC取込時に確認されます。</p>
+<datalist id="member-options"></datalist><datalist id="category-options"></datalist>
+<div class="scroll"><table><thead><tr><th>元のユーザーフォルダ</th><th>対象月</th><th>登録先ユーザー</th></tr></thead><tbody id="members"><tr><td colspan="3">データ選択後に表示します。</td></tr></tbody></table></div></section>
+<section><h2>3　予定種別とメモの扱いを確認</h2><p>旧アプリの分類を、KPTCで登録済みの予定種別名へ対応付けます。</p><div class="scroll"><table><thead><tr><th>元の分類</th><th>KPTCの予定種別名</th></tr></thead><tbody id="categories"></tbody></table></div>
+<label>dtl本文のカンマ区切りの扱い<select id="memo-mode"><option value="comma">カンマを保持（既定・改行規則が未確定の場合）</option><option value="newline">区切りを改行へ変換（複数行のメモだった場合）</option></select></label>
+<p class="hint">引用符で囲まれたカンマは本文として扱います。実際の改行規則は少数の予定で確認してください。</p>
+<label class="check"><input id="zero-duration" type="checkbox">期間欄「00」を単日として扱う（警告をレポートに記録）</label>
+<p class="hint">時刻が両方空欄なら終日（00:00〜23:59）。期間欄が省略されていれば単日、02なら開始日を含め2日間。表示・通知・色コードは無視します。</p></section></fieldset>
+<div class="action"><button id="convert" class="primary" disabled>JSONへ変換して内容を確認</button><span id="progress" role="status"></span></div>
+<section id="results" hidden><h2>4　結果を保存する</h2><p id="summary" role="status"></p><div id="downloads" class="downloads"></div><div id="issues" role="alert"></div><div class="scroll preview"><table><thead><tr><th>ユーザーID</th><th>期間・時刻</th><th>件名・分類</th><th>場所・メモ</th></tr></thead><tbody id="preview"></tbody></table></div></section>
+<section class="notes"><h2>登録前の確認事項</h2><ul><li>変換エラーが1件でもあれば予定JSONは出力しません。確認レポートで原因を修正してください。</li><li>JSONはKPTCの取込上限（1MiB・5000件）以下に自動分割します。複数の場合は番号順に取り込んでください。</li><li>予定IDは登録先ユーザー・年月・元の行位置から生成します。同じ元データ・同じユーザー指定での再変換では同じIDになります。元ファイルの行順変更後の再取込は競合する可能性があります。</li><li>月またぎで元アプリが同じ予定を別ファイルへ重ねて保存しているかは未確認です。同じ内容の候補をレポートで確認してください。自動削除はしません。</li><li>JSONに含めるのは予定のみです。ユーザー・予定種別・アカウント・パスワードは登録しません。非公開指定は引き継がずfalseにします。</li><li>日時は元データどおりで、過去・未来とも変換対象です。KPTC側のバックアップを取ったうえで、少数から移行試験を行ってください。</li><li>JSONとレポートには予定名・場所・メモなどが含まれます。GitHubや公開フォルダへ置かないでください。</li></ul></section>
+<footer>このツールはKPTC Schedulerと独立して動作します。閉じるとメモリ内の読込データは失われます。</footer>
+</main><script>/* オフライン変換専用。通信・元ファイルの書換え・ブラウザへの永続保存は行いません。 */
+(function (root) {
+  "use strict";
+  const utf8 = new TextEncoder();
+  const decoder = new TextDecoder("shift_jis", { fatal: true });
+  const byteLength = text => utf8.encode(text).length;
+
+  // file://でも利用できる同期SHA-256。IDは対象ユーザー・年月・元の行位置から固定します。
+  function sha256(text) {
+    const k = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+    const input = typeof text === "string" ? utf8.encode(text) : text, bytes = new Uint8Array(Math.ceil((input.length + 9) / 64) * 64);
+    bytes.set(input); bytes[input.length] = 128;
+    const view = new DataView(bytes.buffer);
+    view.setUint32(bytes.length-8, Math.floor(input.length / 0x20000000)); view.setUint32(bytes.length-4, input.length * 8);
+    const h = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+    const r = (x,n) => (x>>>n)|(x<<(32-n)), w = new Uint32Array(64);
+    for (let offset=0;offset<bytes.length;offset+=64) {
+      for(let i=0;i<16;i++) w[i]=view.getUint32(offset+i*4);
+      for(let i=16;i<64;i++) w[i]=(w[i-16]+(r(w[i-15],7)^r(w[i-15],18)^(w[i-15]>>>3))+w[i-7]+(r(w[i-2],17)^r(w[i-2],19)^(w[i-2]>>>10)))>>>0;
+      let [a,b,c,d,e,f,g,j]=h;
+      for(let i=0;i<64;i++) {
+        const t1=(j+(r(e,6)^r(e,11)^r(e,25))+((e&f)^(~e&g))+k[i]+w[i])>>>0;
+        const t2=((r(a,2)^r(a,13)^r(a,22))+((a&b)^(a&c)^(b&c)))>>>0;
+        j=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;
+      }
+      [a,b,c,d,e,f,g,j].forEach((x,i)=>h[i]=(h[i]+x)>>>0);
+    }
+    return h.map(x=>x.toString(16).padStart(8,"0")).join("");
+  }
+
+  function lines(bytes) {
+    if ((bytes[0]===0xef&&bytes[1]===0xbb&&bytes[2]===0xbf)||(bytes[0]===0xff&&bytes[1]===0xfe)||(bytes[0]===0xfe&&bytes[1]===0xff)) throw new Error("CP932ではないBOM付きファイルです。文字コードを確認してください");
+    const result=[];let start=0;
+    for(let i=0;i<bytes.length;i++) if(bytes[i]===10||bytes[i]===13){result.push(bytes.slice(start,i));if(result.length>100001)throw new Error("1ファイルの行数が多すぎます。分割してください");if(bytes[i]===13&&bytes[i+1]===10)i++;start=i+1;}
+    if(start<bytes.length) result.push(bytes.slice(start));
+    return result;
+  }
+  const field=(line,start,end)=>decoder.decode(line.slice(start,end)).replace(/ +$/g,"");
+  function csv(text) {
+    const parts=[];let value="", quoted=false, closed=false;
+    for(let i=0;i<text.length;i++) {
+      const c=text[i];
+      if(quoted){if(c==='"'){if(text[i+1]==='"'){value+='"';i++;}else{quoted=false;closed=true;}}else value+=c;}
+      else if(c===","){parts.push(value);value="";closed=false;}
+      else if(c==='"'&&value===""&&!closed) quoted=true;
+      else {if(closed) throw new Error("引用符の後に未対応の文字があります"); value+=c;}
+    }
+    if(quoted) throw new Error("メモの引用符が閉じていません");
+    parts.push(value);return parts;
+  }
+  function details(bytes, mode="comma") {
+    const result=new Map();
+    lines(bytes).forEach((line,index)=>{
+      if(!line.length)return;
+      try {
+        const parts=csv(decoder.decode(line)), id=parts.shift();
+        if(!/^\d{3}$/.test(id)||id==="000"||parts.length===0||result.has(id)) throw new Error("メモ番号が不正、または重複しています");
+        result.set(id,parts.join(mode==="newline"?"\n":","));
+      }catch(error){throw new Error(`dtl ${index+1}行目：${error.message}`);}
+    });return result;
+  }
+  function dateKey(year,month,day) {
+    if(year<1000||year>9999||month<1||month>12||day<1||day>31) throw new Error("日付が不正です");
+    const date=new Date(Date.UTC(year,month-1,day,12));
+    if(date.getUTCFullYear()!==year||date.getUTCMonth()!==month-1||date.getUTCDate()!==day) throw new Error("存在しない日付です");
+    return date.toISOString().slice(0,10);
+  }
+  function schedule(line, month, memberId, number, memoMap, options={}) {
+    if(line.length<30||line.length>129||(line.length>110&&line.length<113)||line.length===114) throw new Error("予定行のバイト長が不正、または未対応です");
+    if(!/^[0-9]{6}$/.test(month)) throw new Error("ファイル名はYYYYMM.schにしてください");
+    const year=Number(month.slice(0,4)), m=Number(month.slice(4)), day=field(line,0,2);
+    if(!/^\d{2}$/.test(day)) throw new Error("日の指定が不正です");
+    const date=dateKey(year,m,Number(day));
+    let start=field(line,2,7).trim(),end=field(line,7,12).trim(),timePreset="custom";
+    if(!start&&!end){start="00:00";end="23:59";timePreset="all-day";}
+    else if(!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(start)||!/^(?:(?:[01]\d|2[0-3]):[0-5]\d|24:00)$/.test(end)) throw new Error("開始・終了時刻が不正です（片方だけ空欄も不可）");
+    const duration=field(line,113,115).trim();
+    let days=duration===""?1:Number(duration);const warnings=[];
+    if(duration&&!/^\d{2}$/.test(duration)) throw new Error("期間欄は2桁の日数で指定してください");
+    if(days===0&&options.zeroAsSingle){days=1;warnings.push("期間00を指定により単日として変換");}
+    if(!Number.isInteger(days)||days<1||days>99) throw new Error("期間00または不正な期間です。単日扱いの設定か元データを確認してください");
+    const endDay=new Date(`${date}T12:00:00Z`);endDay.setUTCDate(endDay.getUTCDate()+days-1);
+    if(endDay.getUTCFullYear()>9999) throw new Error("終了日が対応範囲を超えています");
+    if(days===1&&end<=start) throw new Error("終了時刻が開始時刻以前です");
+    const category=field(line,12,26).trim(), title=field(line,30,70).trim(),location=field(line,70,110).trim(),detailId=field(line,110,113).trim();
+    if(!category||!title) throw new Error("分類または件名が空です");
+    if(detailId&&!/^\d{3}$/.test(detailId)) throw new Error("詳細メモ番号が不正です");
+    if(detailId&&detailId!=="000"&&!memoMap.has(detailId)) throw new Error(`詳細メモ${detailId}がありません。対応するdtlを選択してください`);
+    const memo=memoMap.get(detailId)||"";
+    if(byteLength(memo)>20000) throw new Error("メモがKPTC上限の20000バイトを超えています");
+    return {item:{id:"legacy-"+sha256(JSON.stringify([memberId,month,number])),memberId,date,endDate:endDay.toISOString().slice(0,10),start,end,timePreset,title,location,category,memo,private:false},warnings,detailId};
+  }
+
+  // files: {path, bytes}。複数選択でもディレクトリ選択でも相対パスだけで対応付けます。
+  function inventory(files) {
+    const pairs=new Map(),ignored=[];
+    for(const file of files) {
+      const path=file.path.replace(/\\/g,"/"), parts=path.split("/"), name=parts.pop();
+      if(!/\.(sch|dtl)$/i.test(name)){ignored.push(path);continue;}
+      const match=/^(\d{6})\.(sch|dtl)$/i.exec(name);
+      if(!match) throw new Error(`${path}：ファイル名はYYYYMM.sch／YYYYMM.dtlにしてください`);
+      dateKey(Number(match[1].slice(0,4)),Number(match[1].slice(4)),1);
+      const group=parts.join("/")||"（直接選択）", key=JSON.stringify([group,match[1]]);
+      if(!pairs.has(key))pairs.set(key,{group,month:match[1]});
+      const pair=pairs.get(key), extension=match[2].toLowerCase();
+      if(pair[extension])throw new Error(`${path}：同じフォルダ・年月のファイルが重複しています`);
+      pair[extension]=file;
+    }
+    return {pairs:[...pairs.values()].sort((a,b)=>(a.group+"/"+a.month).localeCompare(b.group+"/"+b.month)),ignored};
+  }
+  function convert(files,members,categoryMap,options={}) {
+    const input=inventory(files),schedules=[],errors=[],warnings=[],sources=[],ids=new Set();
+    const knownMembers=options.knownMembers,knownCategories=options.knownCategories;
+    for(const pair of input.pairs){
+      const source=`${pair.group}/${pair.month}`,memberId=(members[pair.group]||"").trim();
+      if(!memberId||memberId.length>120||/[\x00-\x20\x7f]/.test(memberId)){errors.push(`${source}：登録先の内部ユーザーIDを指定してください`);continue;}
+      if(knownMembers&&!knownMembers.includes(memberId)){errors.push(`${source}：参照データにないユーザーIDです`);continue;}
+      if(!pair.sch){errors.push(`${source}：schがありません（dtlだけでは変換できません）`);continue;}
+      try{
+        const memoMap=pair.dtl?details(pair.dtl.bytes,options.memoMode):new Map(),used=new Set();let count=0;
+        lines(pair.sch.bytes).forEach((line,index)=>{
+          if(!line.length)return;
+          try{
+            if(schedules.length>=100000)throw new Error("一度に変換できる予定は100000件までです");
+            const converted=schedule(line,pair.month,memberId,index+1,memoMap,options),item=converted.item;
+            item.category=(categoryMap[item.category]||"").trim();
+            if(!item.category)throw new Error("登録先の予定種別を指定してください");
+            if(knownCategories&&!knownCategories.includes(item.category))throw new Error("参照データにない予定種別です");
+            if(ids.has(item.id))throw new Error("同じユーザー・年月・行位置への重複割当です。元フォルダと登録先を確認してください");
+            ids.add(item.id);schedules.push(item);count++;if(converted.detailId)used.add(converted.detailId);
+            converted.warnings.forEach(w=>warnings.push(`${source} ${index+1}行目：${w}`));
+          }catch(error){errors.push(`${source} ${index+1}行目：${error.message}`);}
+        });
+        for(const id of memoMap.keys())if(!used.has(id))warnings.push(`${source}：参照されていない詳細メモ${id}があります`);
+        sources.push({source,memberId,count});
+      }catch(error){errors.push(`${source}：${error.message}`);}
+    }
+    if(!input.pairs.length)errors.push("sch／dtlファイルを選択してください");
+    if(schedules.length>100000)errors.push("一度に変換できる予定は100000件までです");
+    if(!errors.length&&!schedules.length)errors.push("予定が0件です");
+    return {schedules:errors.length?[]:schedules,errors,warnings,sources,ignored:input.ignored};
+  }
+  function categories(files) {
+    const names=new Set();
+    for(const pair of inventory(files).pairs)if(pair.sch)for(const line of lines(pair.sch.bytes))if(line.length>=26){const name=field(line,12,26).trim();if(name)names.add(name);}
+    return [...names].sort();
+  }
+  function chunks(items,maxBytes=1048576,maxCount=5000) {
+    const result=[],overhead=byteLength('{"schedules":[]}');let current=[],size=overhead;
+    for(const item of items){const text=JSON.stringify(item),bytes=byteLength(text);if(bytes+overhead>maxBytes)throw new Error("1件がJSONファイルの上限を超えています");
+      if(current.length&&(current.length>=maxCount||size+bytes+1>maxBytes)){result.push('{"schedules":['+current.join(",")+']}');current=[];size=overhead;}
+      size+=bytes+(current.length?1:0);current.push(text);
+    }if(current.length)result.push('{"schedules":['+current.join(",")+']}');return result;
+  }
+  root.KptcLegacyConverter={sha256,lines,details,schedule,inventory,convert,categories,chunks,byteLength};
+})(globalThis);
+
+(function () {
+  "use strict";
+  const C=globalThis.KptcLegacyConverter,$=id=>document.getElementById(id);
+  let files=[], userInputs=new Map(), categoryInputs=new Map(), reference=null, serial=0, loading=false, referenceLoading=false, referenceSerial=0;
+  function element(tag,text,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;}
+  function resetResults(){ $("results").hidden=true;$("downloads").replaceChildren();$("preview").replaceChildren();$("issues").replaceChildren(); }
+  function invalidate(){resetResults();$("progress").textContent="設定変更後は再度変換してください。";}
+  function download(name,text,type="application/json;charset=utf-8") {
+    const url=URL.createObjectURL(new Blob([text],{type})),anchor=element("a");anchor.href=url;anchor.download=name;
+    document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }
+  function button(text,work){const b=element("button",text);b.type="button";b.addEventListener("click",work);return b;}
+  function renderMapping(){
+    const inventory=C.inventory(files), previousUsers=new Map([...userInputs].map(([k,v])=>[k,v.value])), previousCategories=new Map([...categoryInputs].map(([k,v])=>[k,v.value]));
+    userInputs=new Map();categoryInputs=new Map();$("members").replaceChildren();$("categories").replaceChildren();
+    const groups=new Map();for(const pair of inventory.pairs){if(!groups.has(pair.group))groups.set(pair.group,[]);groups.get(pair.group).push(pair.month);}
+    for(const [group,months] of groups){
+      const row=element("tr"),input=element("input");input.type="text";input.setAttribute("list","member-options");input.setAttribute("aria-label",`${group}の登録先ユーザーID`);input.placeholder="内部IDを入力／一覧から選択";input.value=previousUsers.get(group)||"";input.addEventListener("input",invalidate);userInputs.set(group,input);
+      row.append(element("td",group),element("td",months.join("、")));const cell=element("td");cell.append(input);row.append(cell);$("members").append(row);
+    }
+    for(const category of C.categories(files)){
+      const row=element("tr"),input=element("input");input.setAttribute("list","category-options");input.setAttribute("aria-label",`${category}の登録先予定種別`);input.value=previousCategories.get(category)||category;input.addEventListener("input",invalidate);categoryInputs.set(category,input);
+      row.append(element("td",category));const cell=element("td");cell.append(input);row.append(cell);$("categories").append(row);
+    }
+    $("inventory").textContent=`${files.length}ファイル／${groups.size}フォルダ／${inventory.pairs.length}か月分の組合せ（対象外ファイル${inventory.ignored.length}件）`;
+    $("convert").disabled=!groups.size||referenceLoading;
+  }
+  async function selectFiles(list){
+    const run=++serial;loading=true;resetResults();$("convert").disabled=true;$("progress").textContent="ファイルを読込中…";
+    try {
+      if(list.length>1000||Array.from(list).reduce((sum,file)=>sum+file.size,0)>50*1024*1024)throw new Error("上限は1000ファイル・合計50MiBです。分けて選択してください");
+      const selected=await Promise.all(Array.from(list,async file=>({path:file.webkitRelativePath||file.name,bytes:new Uint8Array(await file.arrayBuffer())})));
+      if(run!==serial)return;
+      files=selected;renderMapping();$("progress").textContent="登録先ユーザー・予定種別を指定してください。";
+    }catch(error){if(run!==serial)return;files=[];$("inventory").textContent=error.message;$("members").replaceChildren();$("categories").replaceChildren();$("progress").textContent="読込を中止しました。";}
+    finally{if(run===serial)loading=false;}
+  }
+  $("files").addEventListener("change",event=>selectFiles(event.target.files));
+  $("directory").addEventListener("change",event=>selectFiles(event.target.files));
+  $("reference").addEventListener("change",async event=>{
+    const run=++referenceSerial;
+    invalidate();reference=null;$("member-options").replaceChildren();$("category-options").replaceChildren();
+    const file=event.target.files[0];if(!file){referenceLoading=false;$("convert").disabled=loading||!files.length;$("reference-status").textContent="参照なし：登録先ID・予定種別名を手入力してください。";return;}
+    referenceLoading=true;$("convert").disabled=true;
+    try{
+      if(file.size>10*1024*1024)throw new Error("参照JSONは10MiB以下にしてください");
+      const raw=JSON.parse((await file.text()).replace(/^\uFEFF/,"")), state=raw.payload?.state||raw.state||raw;
+      if(run!==referenceSerial)return;
+      if(!Array.isArray(state.members)||!Array.isArray(state.categories)||!state.members.length||!state.categories.length||state.members.length>10000||state.categories.length>1000)throw new Error("members／categoriesを含むJSONを指定してください");
+      const members=state.members.map(m=>{if(typeof m.id!=="string"||!m.id||typeof m.name!=="string")throw new Error("ユーザーの形式が不正です");return{id:m.id,name:m.name};});
+      const categories=state.categories.map(c=>{if(typeof c.name!=="string"||!c.name)throw new Error("予定種別の形式が不正です");return c.name;});
+      if(new Set(members.map(m=>m.id)).size!==members.length)throw new Error("内部ユーザーIDが重複しています");
+      reference={members,categories};
+      for(const member of members){const option=element("option");option.value=member.id;option.label=member.name;$("member-options").append(option);}
+      for(const category of categories){const option=element("option");option.value=category;$("category-options").append(option);}
+      $("reference-status").textContent=`ユーザー${members.length}件・予定種別${categories.length}件を参照中。その他の項目（パスワード等）は使用しません。`;
+    }catch(error){if(run===referenceSerial)$("reference-status").textContent=`参照読込失敗：${error.message}。現在は手入力・未照合の状態です。`;}
+    finally{if(run===referenceSerial){referenceLoading=false;$("convert").disabled=loading||!files.length;event.target.value="";invalidate();}}
+  });
+  $("memo-mode").addEventListener("change",invalidate);$("zero-duration").addEventListener("change",invalidate);
+  $("convert").addEventListener("click",async()=>{
+    if(loading||referenceLoading)return;
+    $("settings").disabled=true;$("convert").disabled=true;$("directory").disabled=true;$("files").disabled=true;$("progress").textContent="変換・検証中…";resetResults();
+    await new Promise(resolve=>setTimeout(resolve,0));
+    try{
+      const members=Object.fromEntries([...userInputs].map(([key,input])=>[key,input.value.trim()])), categoryMap=Object.fromEntries([...categoryInputs].map(([key,input])=>[key,input.value.trim()]));
+      const options={memoMode:$("memo-mode").value,zeroAsSingle:$("zero-duration").checked,...(reference?{knownMembers:reference.members.map(m=>m.id),knownCategories:reference.categories}:{})};
+      const result=C.convert(files,members,categoryMap,options);
+      if(!reference)result.warnings.unshift("参照JSON未指定：登録先ユーザー・予定種別の存在は未照合です。KPTC取込時に確認してください。");
+      const duplicateContent=new Map();let candidates=0;
+      for(const item of result.schedules){const {id,...rest}=item,key=JSON.stringify(rest);if(duplicateContent.has(key)){candidates++;result.warnings.push(`同一内容候補：${item.memberId} ${item.date} ${item.title}（自動削除なし）`);}else duplicateContent.set(key,id);}
+      const jsons=result.errors.length?[]:C.chunks(result.schedules);
+      const report=["KPTC 既存スケジューラ変換レポート",`作成日時：${new Date().toISOString()}`,`結果：${result.errors.length?"エラーのためJSON出力なし":"成功"}`,`予定：${result.schedules.length}件／JSON：${jsons.length}ファイル／同一内容候補：${candidates}件`,"",`メモ区切り：${options.memoMode}`,`期間00を単日：${options.zeroAsSingle}`,"ユーザー対応：",...Object.entries(members).map(([from,to])=>`${from} → ${to}`),"予定種別対応：",...Object.entries(categoryMap).map(([from,to])=>`${from} → ${to}`),"", "入力ファイルSHA-256（同じ元データか確認するための値）：",...files.map(file=>`${file.path}  ${hashBytes(file.bytes)}`),"", "変換元：",...result.sources.map(s=>`${s.source} → ${s.memberId}：${s.count}件`),"", "エラー：",...result.errors,"", "警告：",...result.warnings,"", "対象外ファイル：",...result.ignored].join("\n");
+      $("results").hidden=false;$("summary").textContent=result.errors.length?`エラー${result.errors.length}件。予定JSONは出力していません。レポートを確認してください。`:`変換完了：${result.schedules.length}件／JSON ${jsons.length}ファイル。先頭20件を表示しています。`;
+      $("summary").className=result.errors.length?"error":"success";
+      $("downloads").append(button("確認レポートを保存",()=>download("kptc-conversion-report.txt",report,"text/plain;charset=utf-8")));
+      jsons.forEach((json,index)=>$("downloads").append(button(`予定JSON ${index+1}を保存`,()=>download(`kptc-schedules-${String(index+1).padStart(3,"0")}.json`,json))));
+      for(const [title,items,className] of [["エラー",result.errors,"error"],["警告",result.warnings,"warning"]])if(items.length){const box=element("details",undefined,className);box.append(element("summary",`${title} ${items.length}件`));const list=element("ul");for(const message of items.slice(0,200))list.append(element("li",message));box.append(list);if(items.length>200)box.append(element("p","全件はレポートを参照してください。"));$("issues").append(box);}
+      for(const item of result.schedules.slice(0,20)){const row=element("tr");row.append(element("td",item.memberId),element("td",`${item.date}〜${item.endDate} ${item.start}〜${item.end}`),element("td",`${item.title} ／ ${item.category}`),element("td",`${item.location} ／ ${item.memo}`));$("preview").append(row);}
+      $("progress").textContent=result.errors.length?"変換を中止しました。":"保存したJSONをKPTCの管理者モードから取り込んでください。";
+    }catch(error){$("results").hidden=false;$("summary").textContent=`変換失敗：${error.message}`;$("summary").className="error";$("progress").textContent="出力を中止しました。";$("downloads").replaceChildren(button("エラーレポートを保存",()=>download("kptc-conversion-report.txt",`変換失敗：${error.message}`,"text/plain;charset=utf-8")));}
+    finally{$("settings").disabled=false;$("convert").disabled=false;$("directory").disabled=false;$("files").disabled=false;}
+  });
+  function hashBytes(bytes){return C.sha256(bytes);}
+})();
+</script></body></html>

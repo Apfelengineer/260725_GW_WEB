@@ -7,7 +7,9 @@
   },
   "scripts": {
     "dev": "vite --config vite.dev.config.ts",
-    "build": "pnpm run build:origin && pnpm run build:renkon && node scripts/write-release-manifest.mjs",
+    "build": "pnpm run build:origin && pnpm run build:renkon && pnpm run build:converter && node scripts/write-release-manifest.mjs",
+    "build:converter": "node scripts/build-legacy-converter.mjs",
+    "test:converter": "node --test tests/legacy-converter.test.mjs",
     "build:origin": "pnpm run build:scheduler && pnpm run build:calendar",
     "build:scheduler": "vite build --config vite.scheduler.config.ts && node scripts/copy-distribution-files.mjs scheduler",
     "build:calendar": "vite build --config vite.calendar.config.ts && node scripts/copy-distribution-files.mjs calendar",

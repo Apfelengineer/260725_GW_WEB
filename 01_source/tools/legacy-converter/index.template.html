@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<title>既存スケジューラ → KPTC JSON変換</title><style>/*CONVERTER_STYLE*/</style></head>
+<body><main><header><span class="tag">OFFLINE / STANDALONE</span><h1>既存データを、KPTCの予定へ。</h1><p>ユーザー別・月別の .sch / .dtl をまとめて読み込み、予定登録用JSONへ変換します。</p><p class="privacy">通信なし・元ファイルの変更なし・自動登録なし。処理はこのPCのブラウザ内だけで完結します。</p></header>
+<section><h2>1　データを読み込む</h2><p>全ユーザーの親フォルダ、または1人分のフォルダを選択できます。ファイル選択では1人分の複数月をまとめて選んでください。</p>
+<div class="pickers"><label>フォルダをまとめて選択<input id="directory" type="file" webkitdirectory multiple></label><label>ファイルをまとめて選択<input id="files" type="file" accept=".sch,.dtl" multiple></label></div>
+<p class="hint">選び直すと入力データを置き換えます。schと対応するdtlを一緒に選択してください。上限：1000ファイル・合計50MiB。</p><p id="inventory" role="status">データ未選択</p></section>
+<fieldset id="settings"><legend>変換設定</legend><section><h2>2　登録先ユーザーを指定</h2>
+<p><strong>memberIdはKPTCの内部ユーザーIDです。社内入口の3桁IDとは異なります。</strong> KPTCのJSON取込画面でも内部IDを確認できます。</p>
+<label>任意：KPTCバックアップJSONなどからユーザー・予定種別一覧を読み込む<input id="reference" type="file" accept=".json,application/json"></label><p id="reference-status" class="hint">参照なし：登録先ID・予定種別名を手入力します。実際に登録済みかどうかはKPTC取込時に確認されます。</p>
+<datalist id="member-options"></datalist><datalist id="category-options"></datalist>
+<div class="scroll"><table><thead><tr><th>元のユーザーフォルダ</th><th>対象月</th><th>登録先ユーザー</th></tr></thead><tbody id="members"><tr><td colspan="3">データ選択後に表示します。</td></tr></tbody></table></div></section>
+<section><h2>3　予定種別とメモの扱いを確認</h2><p>旧アプリの分類を、KPTCで登録済みの予定種別名へ対応付けます。</p><div class="scroll"><table><thead><tr><th>元の分類</th><th>KPTCの予定種別名</th></tr></thead><tbody id="categories"></tbody></table></div>
+<label>dtl本文のカンマ区切りの扱い<select id="memo-mode"><option value="comma">カンマを保持（既定・改行規則が未確定の場合）</option><option value="newline">区切りを改行へ変換（複数行のメモだった場合）</option></select></label>
+<p class="hint">引用符で囲まれたカンマは本文として扱います。実際の改行規則は少数の予定で確認してください。</p>
+<label class="check"><input id="zero-duration" type="checkbox">期間欄「00」を単日として扱う（警告をレポートに記録）</label>
+<p class="hint">時刻が両方空欄なら終日（00:00〜23:59）。期間欄が省略されていれば単日、02なら開始日を含め2日間。表示・通知・色コードは無視します。</p></section></fieldset>
+<div class="action"><button id="convert" class="primary" disabled>JSONへ変換して内容を確認</button><span id="progress" role="status"></span></div>
+<section id="results" hidden><h2>4　結果を保存する</h2><p id="summary" role="status"></p><div id="downloads" class="downloads"></div><div id="issues" role="alert"></div><div class="scroll preview"><table><thead><tr><th>ユーザーID</th><th>期間・時刻</th><th>件名・分類</th><th>場所・メモ</th></tr></thead><tbody id="preview"></tbody></table></div></section>
+<section class="notes"><h2>登録前の確認事項</h2><ul><li>変換エラーが1件でもあれば予定JSONは出力しません。確認レポートで原因を修正してください。</li><li>JSONはKPTCの取込上限（1MiB・5000件）以下に自動分割します。複数の場合は番号順に取り込んでください。</li><li>予定IDは登録先ユーザー・年月・元の行位置から生成します。同じ元データ・同じユーザー指定での再変換では同じIDになります。元ファイルの行順変更後の再取込は競合する可能性があります。</li><li>月またぎで元アプリが同じ予定を別ファイルへ重ねて保存しているかは未確認です。同じ内容の候補をレポートで確認してください。自動削除はしません。</li><li>JSONに含めるのは予定のみです。ユーザー・予定種別・アカウント・パスワードは登録しません。非公開指定は引き継がずfalseにします。</li><li>日時は元データどおりで、過去・未来とも変換対象です。KPTC側のバックアップを取ったうえで、少数から移行試験を行ってください。</li><li>JSONとレポートには予定名・場所・メモなどが含まれます。GitHubや公開フォルダへ置かないでください。</li></ul></section>
+<footer>このツールはKPTC Schedulerと独立して動作します。閉じるとメモリ内の読込データは失われます。</footer>
+</main><script>/*CONVERTER_SCRIPT*/</script></body></html>
