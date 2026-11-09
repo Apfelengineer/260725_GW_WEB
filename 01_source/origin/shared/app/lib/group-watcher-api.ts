@@ -10,6 +10,7 @@ export type Member = {
   initials: string;
   color: string;
   extension: string;
+  legacyId?: string;
 };
 
 export type ScheduleItem = {
@@ -190,7 +191,7 @@ export const groupWatcherApi = {
   undo(auditId: number, version: number, csrfToken: string) {
     return this.request<AuthenticatedBootstrapResponse>("undo", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify({ auditId, version }) });
   },
-  saveMemberAccount(input: { operation: "save" | "delete"; version: number; member: Member; username: string; role: AuthRole }, csrfToken: string) {
+  saveMemberAccount(input: { operation: "create" | "save" | "delete"; version: number; member: Member; username: string; role: AuthRole }, csrfToken: string) {
     return this.request<AuthenticatedBootstrapResponse>("member-account", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, body: JSON.stringify(input) });
   },
 };

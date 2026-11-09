@@ -52,6 +52,10 @@ test("KPTC Scheduler の主要機能を提供する", async () => {
   assert.doesNotMatch(page, /LoginScreen|ゲストとしてログイン|選択したユーザーでログイン/);
   assert.match(page, /function AdminModeModal/);
   assert.match(page, /管理者モードへ切り替え/);
+  const memberForm = page.slice(page.indexOf("function MemberModal"),page.indexOf("function CategoryModal"));
+  assert.match(memberForm,/内部ユーザーID（自動採番）/);
+  assert.match(memberForm,/readOnly/);
+  assert.doesNotMatch(memberForm,/name="memberId"/);
   assert.match(page, /autoComplete="current-password"/);
   assert.match(page, /function AdminPasswordModal/);
   assert.match(page, /管理者パスワード変更/);

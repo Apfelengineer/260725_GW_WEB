@@ -27,7 +27,7 @@ if (!kptc_portal_authorize_token($token)) kptc_portal_forbidden();
     <meta property="og:type" content="website" />
     <meta property="og:image" content="./og.png" />
     <title>KPTC Scheduler｜チームと試験室の予定をひと目で</title>
-    <script type="module" crossorigin src="./assets/main-BWGqDpNE.js"></script>
+    <script type="module" crossorigin src="./assets/main-cTEDZ9Rw.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/main-DdoM_v1m.css">
   </head>
   <body>

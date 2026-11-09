@@ -106,6 +106,8 @@ php manage-auth-user-cli.php list
 
 ## JSONからの予定一括登録
 
+内部ユーザーIDは電気通信係`e001`〜、試験室`t001`〜の自動採番です。旧版DBは初回アクセス時に退避してから関連予定・アカウントも一括移行します。IDの自由編集はできません。[内部ID体系](docs/KPTC_Scheduler_内部ID体系.md)を参照してください。
+
 既存アプリの`.sch`・`.dtl`を変換する場合は、`02_release/converter/KPTC_既存データJSON変換ツール.html`をPCのブラウザで開きます。ユーザー別・月別のファイルを一括読込し、ツール上で登録先ユーザー・予定種別を指定して予定JSONを保存できます。HTML1個のオフライン独立ツールで、スケジューラへの送信や自動登録は行いません。[使い方](docs/KPTC_既存データJSON変換ツール_使い方.md)を参照してください。
 
 管理者モードの「JSONから予定を取込」で、内容確認後に予定だけを現在のDBへ一括追加できます。既存予定やユーザー・認証設定は上書きしません。最大1MiB・5000件で、過去・未来の予定を扱います。不正な予定があれば全件中止し、同じID・同じ内容の再取込は重複登録しません。ファイル形式と操作方法は[JSON予定取込](docs/KPTC_Scheduler_JSON予定取込.md)を参照してください。
@@ -172,10 +174,10 @@ Ubuntu 24.04では`01_source/deploy/kptc-scheduler-backup.service`と`.timer`を
 - 内部：`https://apfelrunner.sakura.ne.jp/GW/Scheduler/`
 - 外部：`https://apfelrunner.sakura.ne.jp/GW/Calendar/`
 
-静的画面の部屋切替URLは従来どおり`?room=m6`・`?room=m7`・`?room=m8`です。URLパスを維持することは可能ですが、JSON取得先は`data/public-availability.json`へ変わります。
+静的画面の部屋切替IDは`t001`等です。旧`?room=m6`・`?room=m7`・`?room=m8`は既存画像との対応で読み替えます。JSON取得先は`data/public-availability.json`です。
 
 ### 試験室を追加する場合
 
-公開画面の試験室一覧は、`01_source/origin/shared/public/availability-room-config.php`の許可リストに登録した「試験室」ユーザーから生成し、公開JSONへ名称・画像ファイル名・表示順を含めます。新しい試験室は、管理画面で試験室ユーザーを追加し、同ファイルの`kptc_public_room_ids()`へユーザーIDを追記して、Calendarの公開フォルダへ`<ユーザーID>.png`を配置すると、次回のJSON送信後に画面へ追加されます。画面のTypeScript修正は不要です。静的コンテナへ画像を組み込む場合は画像追加後に再ビルドします。許可リストにない試験室ユーザーは外部公開されません。
+公開画面の試験室一覧は、`01_source/origin/shared/public/availability-room-config.php`の`kptc_public_room_keys()`に登録した「試験室」から生成します。初期3室は旧キーと`legacyId`で照合し、画像名を維持します。新しい試験室は管理画面で追加し、同関数へ新ID（例：`t004`）を追記して、Calendarへ対応する画像（例：`t004.png`）を配置すると公開できます。静的コンテナは画像追加後に再ビルドします。許可リストにない試験室は公開しません。
 
 既存3室の公開名称・説明は`01_source/origin/shared/public/availability-room-config.php`で上書きしています。スケジューラー上の名称と公開名称を変える場合だけ、この設定を変更してください。画像が未配置の場合は、試験室名の先頭2文字を代替表示します。

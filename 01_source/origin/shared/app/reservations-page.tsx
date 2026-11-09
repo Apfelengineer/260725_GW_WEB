@@ -8,9 +8,9 @@ import "./reservations.css";
 import { japanToday, validatePublicAvailability, type PublicRoom, type PublicStatus } from "./lib/public-availability";
 
 const defaultRooms: Array<PublicRoom & { description?: string }> = [
-  { id: "m6", name: "電波暗室", image: "m6.png", description: "" },
-  { id: "m7", name: "電磁波妨害評価装置(G-TEM)", image: "m7.png", description: "" },
-  { id: "m8", name: "パルスサージシステム", image: "m8.png", description: "(入力インパルス試験機、静電気試験機、サージイミュニティ試験機、FTB試験機、低周波EMC試験機)" },
+  { id: "t001", name: "電波暗室", image: "m6.png", description: "" },
+  { id: "t002", name: "電磁波妨害評価装置(G-TEM)", image: "m7.png", description: "" },
+  { id: "t003", name: "パルスサージシステム", image: "m8.png", description: "(入力インパルス試験機、静電気試験機、サージイミュニティ試験機、FTB試験機、低周波EMC試験機)" },
 ];
 const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -76,7 +76,8 @@ export default function ReservationsPage() {
   const [range, setRange] = useState({ start: "", end: "" });
   const [now, setNow] = useState(Date.now);
   const [failedImageRoomId, setFailedImageRoomId] = useState("");
-  const requestedRoom = new URLSearchParams(window.location.search).get("room") || "m6";
+  const roomQuery = new URLSearchParams(window.location.search).get("room") || "t001";
+  const requestedRoom = /^m[678]$/.test(roomQuery) ? (rooms.find(item=>item.image===`${roomQuery}.png`)?.id || ({m6:"t001",m7:"t002",m8:"t003"} as Record<string,string>)[roomQuery]) : roomQuery;
   const room = rooms.find((item) => item.id === requestedRoom) ?? rooms[0] ?? defaultRooms[0];
   const roomId = room.id;
   const months = useMemo(() => Array.from({ length: 3 }, (_, index) => addMonths(japanToday(now), index)), [now]);

@@ -626,7 +626,7 @@ export default function Home() {
     if (!name) return;
     const existing = memberEditor !== "new" ? memberEditor : null;
     const member: Member = {
-      id: existing?.id ?? `m-${Date.now()}`,
+      id: existing?.id ?? "",
       name,
       group: String(form.get("group")) as Member["group"],
       initials: String(form.get("initials") ?? name.slice(0, 1)).trim().slice(0, 2) || name.slice(0, 1),
@@ -637,13 +637,16 @@ export default function Home() {
     try {
       const account = existing ? authAccounts.find((item) => item.memberId === existing.id) : null;
       await sync.command(payload => groupWatcherApi.saveMemberAccount({
-        operation: "save",
+        operation: existing ? "save" : "create",
         version: payload.version,
         member,
-        username: account?.username ?? (member.group === "試験室" ? "" : `member-${member.id}`),
+        username: account?.username ?? (member.group === "試験室" ? "" : `member-${Date.now()}-${Math.random().toString(36).slice(2,10)}`),
         role: account?.role ?? (member.group === "試験室" ? "room" : "user"),
       }, payload.csrfToken));
       setMemberEditor(null);
+      if (existing && existing.group!==member.group) {
+        setSelectedScheduleIds([]);setSelectedCell(null);setClipboard(null);setContextMenu(null);setCellContextMenu(null);setPendingMove(null);
+      }
       setToast(existing ? "ユーザーとログイン情報を更新しました" : "ユーザーを追加しました");
     } catch (reason) {
       setToast(reason instanceof Error ? reason.message : "ユーザー情報を保存できませんでした");
@@ -1273,12 +1276,14 @@ function MemberModal({ member, onClose, onSubmit }: { member: Member | null; onC
   return (
     <ModalShell title={member ? "ユーザーを編集" : "ユーザーを追加"} eyebrow="USER MANAGEMENT" onClose={onClose}>
       <form onSubmit={onSubmit} className="modal-form">
+        <label className="field full"><span>内部ユーザーID（自動採番）</span><input aria-label="内部ユーザーID" value={member?.id ?? "電気通信係：e001〜 ／ 試験室：t001〜"} readOnly /><small className="field-note">所属ごとの通し番号です。任意のIDには変更できません。</small></label>
         <label className="field full"><span>氏名</span><input name="name" autoFocus defaultValue={member?.name ?? ""} required /></label>
         <label className="field"><span>表示文字</span><input name="initials" maxLength={2} defaultValue={member?.initials ?? ""} placeholder="例：佐" /></label>
         <label className="field color-field"><span>表示色</span><input name="color" type="color" defaultValue={member?.color ?? "#268b7d"} /></label>
         <label className="field"><span>所属</span><select name="group" defaultValue={member?.group ?? "電気通信係"}>{groups.slice(1).map((groupName) => <option key={groupName}>{groupName}</option>)}</select></label>
         <label className="field"><span>内線</span><input name="extension" type="text" inputMode="tel" defaultValue={member?.extension ?? ""} /></label>
         <p className="modal-guidance full">所属を「試験室」にすると部屋として、「電気通信係」にすると一般ユーザーとして予定表へ追加されます。</p>
+        {member && <p className="modal-guidance full">所属を変更すると新しい所属のIDを採番し、予定とアカウントも引き継ぎます。表示順の並べ替えだけではIDは変わりません。</p>}
         <footer><button type="button" className="secondary-button" onClick={onClose}>キャンセル</button><button className="primary-button" type="submit">{member ? "変更を保存" : "ユーザーを追加"}</button></footer>
       </form>
     </ModalShell>

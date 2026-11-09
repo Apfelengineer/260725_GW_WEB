@@ -63,6 +63,10 @@ function kptc_backup_validate(array $payload): void {
         $ids[$account['id']] = true; $names[$name] = true;
     }
     kptc_backup_assert(array_key_exists('adminPasswordHash', $payload), '管理者設定がありません');
+    if (array_key_exists('memberIdCounters',$payload)) {
+        kptc_backup_assert(is_array($payload['memberIdCounters']), '採番情報が不正です');
+        foreach(['e','t'] as $prefix) kptc_backup_assert(is_int($payload['memberIdCounters'][$prefix]??null) && $payload['memberIdCounters'][$prefix]>=0 && $payload['memberIdCounters'][$prefix]<=999,'採番情報が不正です');
+    }
     $hash = $payload['adminPasswordHash'];
     kptc_backup_assert($hash === null || (is_string($hash) && (password_get_info($hash)['algoName'] ?? 'unknown') !== 'unknown'), '管理者パスワード設定が不正です');
 }
@@ -93,6 +97,7 @@ function kptc_backup_snapshot(string $database, string $today): array {
         $accounts = []; $result = $db->query('SELECT id,username,member_id,password_hash,role,enabled,auth_revision,created_at,updated_at,last_login_at FROM auth_users ORDER BY id');
         while ($account = $result->fetchArray(SQLITE3_ASSOC)) $accounts[] = $account;
         $hash = $db->querySingle("SELECT value FROM app_meta WHERE key='admin_mode_password_hash'");
+        $counters=['e'=>(int)$db->querySingle("SELECT value FROM app_meta WHERE key='member_id_counter_e'"),'t'=>(int)$db->querySingle("SELECT value FROM app_meta WHERE key='member_id_counter_t'")];
         $db->exec('COMMIT');
         $payload = [
             'schemaVersion'=>1, 'kind'=>'kptc-scheduler-future',
@@ -101,6 +106,7 @@ function kptc_backup_snapshot(string $database, string $today): array {
             'state'=>['members'=>$state['members'], 'categories'=>$state['categories'],
                 'schedules'=>array_values(array_filter($state['schedules'], static fn($s) => ($s['endDate'] ?? $s['date']) >= $today))],
             'authAccounts'=>$accounts, 'adminPasswordHash'=>$hash,
+            'memberIdCounters'=>$counters,
         ];
         kptc_backup_validate($payload);
         return $payload;
@@ -122,6 +128,7 @@ function kptc_backup_build_database(array $payload, string $path): void {
     $meta = $pdo->prepare('INSERT INTO app_meta VALUES(?,?)');
     // 復元直後にデモ予定や旧形式への移行を再実行しないよう、完了印を設定します。
     foreach (['room_demo_v1','remove_presence_fields_v2','organization_categories_extension_v1','remove_repeat_reminder_v1','public_availability_pending'] as $flag) $meta->execute([$flag,'1']);
+    foreach(($payload['memberIdCounters']??[]) as $prefix=>$number) if(in_array($prefix,['e','t'],true)) $meta->execute(['member_id_counter_'.$prefix,(string)$number]);
     if ($payload['adminPasswordHash'] !== null) $meta->execute(['admin_mode_password_hash',$payload['adminPasswordHash']]);
     $pdo->commit();
     kptc_backup_assert($pdo->query('PRAGMA integrity_check')->fetchColumn() === 'ok', '復元DBの整合性確認に失敗しました');

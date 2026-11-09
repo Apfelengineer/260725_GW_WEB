@@ -21,6 +21,7 @@ try {
         ],
         'authAccounts'=>[['id'=>1,'username'=>'test-user','member_id'=>'m1','password_hash'=>$hash,'role'=>'admin','enabled'=>1,'auth_revision'=>1,'created_at'=>'2026-01-01','updated_at'=>'2026-01-01','last_login_at'=>null]],
         'adminPasswordHash'=>$hash,
+        'memberIdCounters'=>['e'=>17,'t'=>9],
     ];
     $source = $dir . '/source.sqlite'; $backup = $dir . '/backups/scheduler-latest.json';
     kptc_backup_build_database($payload,$source);
@@ -31,6 +32,7 @@ try {
     $saved = kptc_backup_read($backup);
     check(array_column($saved['state']['schedules'],'id')===['today','span','future'],'Date filtering failed');
     check($saved['state']['schedules'][0]['memo']===$payload['state']['schedules'][0]['memo'],'Text changed');
+    check($saved['memberIdCounters']===['e'=>17,'t'=>9],'ID counters lost in backup');
     check($saved['state']['schedules'][0]['location']==='試験室・第一会議室','Location lost in backup');
     check((fileperms($backup)&0777)===0600,'Backup permissions not private');
     check(!isset($saved['audit_logs']),'Audit data included');
@@ -39,6 +41,7 @@ try {
     kptc_backup_restore($backup,$restored);
     $db = new PDO('sqlite:'.$restored);
     check($db->query('PRAGMA integrity_check')->fetchColumn()==='ok','Restore integrity failed');
+    check($db->query("SELECT value FROM app_meta WHERE key='member_id_counter_e'")->fetchColumn()==='17','ID counter lost in restore');
     check(json_decode($db->query('SELECT payload FROM app_state WHERE id=1')->fetchColumn(),true)['schedules'][0]['location']==='試験室・第一会議室','Location lost during restore');
     check((int)$db->query('SELECT COUNT(*) FROM audit_logs')->fetchColumn()===0,'History not empty');
     check($db->query('SELECT password_hash FROM auth_users')->fetchColumn()===$hash,'Account settings lost');

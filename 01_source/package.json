@@ -20,6 +20,7 @@
     "test:http": "node tests/cbc-http.test.mjs",
     "test:delivery": "python3 tests/availability-delivery.test.py",
     "test:import": "php tests/schedule-import.test.php",
+    "test:ids": "php tests/member-id-scheme.test.php",
     "check": "tsc --noEmit"
   },
   "dependencies": {

@@ -19,6 +19,7 @@ const distributions = {
       "origin/shared/public/availability-json.php",
       "origin/shared/public/availability-publisher.php",
       "origin/shared/public/schedule-import.php",
+      "origin/shared/public/member-id-scheme.php",
       "origin/shared/public/publish-availability-cli.php",
       "origin/shared/public/monitor-availability-cli.php",
       "origin/shared/public/manage-auth-user-cli.php",

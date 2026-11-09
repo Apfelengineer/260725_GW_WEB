@@ -7,6 +7,7 @@ require_once __DIR__ . '/availability-publisher.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/portal-access.php';
 require_once __DIR__ . '/schedule-import.php';
+require_once __DIR__ . '/member-id-scheme.php';
 
 /*
  * 内部Linuxサーバー上で動作する共有APIです。
@@ -271,6 +272,7 @@ function db(): PDO {
         }
         $pdo->prepare("INSERT INTO app_meta(key,value) VALUES('remove_repeat_reminder_v1','1')")->execute();
     }
+    kptc_member_id_migration($pdo);
     $jsonPublished = $pdo->query("SELECT value FROM app_meta WHERE key='public_availability_json_v1'")->fetchColumn();
     $publishPending = $pdo->query("SELECT value FROM app_meta WHERE key='public_availability_pending'")->fetchColumn();
     $publishedRangeStart = $pdo->query("SELECT value FROM app_meta WHERE key='public_availability_range_start'")->fetchColumn();
@@ -299,6 +301,7 @@ function audit_list(PDO $pdo): array {
     // 取り消し可能なのは、履歴上で最後に行われたデータ変更だけです。
     return array_map(function($row) use (&$historySeen) {
         $canUndo = false;
+        if (in_array($row['action'], ['ID体系移行','所属ID変更'], true)) $historySeen = true;
         if (!$historySeen && $row['before_json'] !== null) {
             $historySeen = true;
             $canUndo = (int)$row['undone'] === 0 && $row['action'] !== '取り消し';
@@ -453,7 +456,8 @@ if ($action === 'member-account') {
     $username = kptc_auth_normalize_username((string)($input['username'] ?? ''));
     $role = (string)($input['role'] ?? 'user');
     try {
-        if ($memberId === '' || !preg_match('/^[A-Za-z0-9._-]{1,80}$/', $memberId)) throw new InvalidArgumentException('ユーザーIDが不正です');
+        if (!in_array($operation,['create','save','delete'],true)) throw new InvalidArgumentException('操作が不正です');
+        if ($operation!=='create' && !preg_match('/^[et][0-9]{3}$/D', $memberId)) throw new InvalidArgumentException('ユーザーIDが不正です');
         if (!in_array($role, ['admin', 'user', 'room'], true)) throw new InvalidArgumentException('権限を選択してください');
         $pdo->beginTransaction();
         $record = current_record($pdo);
@@ -462,8 +466,13 @@ if ($action === 'member-account') {
             respond(bootstrap_payload($pdo) + ['error'=>'別の利用者による更新がありました'], 409);
         }
         $state = $record['state'];
+        if ($operation==='create') {
+            if ($memberId!=='') throw new InvalidArgumentException('新規ユーザーのIDは自動採番します');
+            $memberId=kptc_next_member_id($pdo,$state,(string)($memberInput['group']??''));
+        }
         $memberIndex = null;
         foreach ($state['members'] as $index => $member) if (($member['id'] ?? '') === $memberId) { $memberIndex = $index; break; }
+        if ($operation!=='create' && $memberIndex===null) throw new InvalidArgumentException('対象のユーザーが見つかりません');
         $accountStatement = $pdo->prepare('SELECT id,username,member_id,role,enabled FROM auth_users WHERE member_id=?');
         $accountStatement->execute([$memberId]);
         $account = $accountStatement->fetch(PDO::FETCH_ASSOC);
@@ -489,7 +498,18 @@ if ($action === 'member-account') {
             if ($name === '' || mb_strlen($name) > 100) throw new InvalidArgumentException('氏名を入力してください');
             if (!in_array($group, ['電気通信係', '試験室'], true)) throw new InvalidArgumentException('所属が不正です');
             if (!preg_match('/^#[0-9a-fA-F]{6}$/', $color)) throw new InvalidArgumentException('表示色が不正です');
+            $previousMember=$memberIndex===null?null:$state['members'][$memberIndex];
+            $previousId=$memberId;
+            $moved=$previousMember!==null && $previousMember['group']!==$group;
+            if ($moved) {
+                if (in_array((string)($previousMember['legacyId']??$previousId),kptc_public_room_keys(),true)) throw new InvalidArgumentException('公開対象試験室の所属は変更できません');
+                $memberId=kptc_next_member_id($pdo,$state,$group);
+                foreach ($state['schedules'] as &$schedule) if (($schedule['memberId']??'')===$previousId) $schedule['memberId']=$memberId;
+                unset($schedule);
+                $pdo->prepare('UPDATE auth_users SET member_id=? WHERE member_id=?')->execute([$memberId,$previousId]);
+            }
             $member = ['id'=>$memberId, 'name'=>$name, 'group'=>$group, 'initials'=>mb_substr($initials !== '' ? $initials : $name, 0, 2), 'color'=>$color, 'extension'=>mb_substr($extension, 0, 100)];
+            if (isset($previousMember['legacyId'])) $member['legacyId']=$previousMember['legacyId'];
             if ($memberIndex === null) $state['members'][] = $member; else $state['members'][$memberIndex] = $member;
 
             $withoutLogin = $role === 'room' && $username === '';
@@ -516,12 +536,13 @@ if ($action === 'member-account') {
             }
             $summary = $name . ($memberIndex === null ? 'を追加' : 'を更新');
             $actionName = $memberIndex === null ? 'ユーザー追加' : 'ユーザー編集';
+            if ($moved) { $summary=$name.'の所属と内部IDを変更（'.$previousId.' → '.$memberId.'）';$actionName='所属ID変更'; }
         }
 
         $after = json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $nextVersion = $record['version'] + 1;
         $pdo->prepare('UPDATE app_state SET payload=?,version=?,updated_at=? WHERE id=1')->execute([$after,$nextVersion,$now]);
-        $pdo->prepare('INSERT INTO audit_logs(actor_id,actor_name,action,summary,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?)')->execute([(string)$admin['member_id'],$actorName,$actionName,$summary,$before,$after,$now]);
+        $pdo->prepare('INSERT INTO audit_logs(actor_id,actor_name,action,summary,before_json,after_json,created_at) VALUES(?,?,?,?,?,?,?)')->execute([(string)$admin['member_id'],$actorName,$actionName,$summary,$actionName==='所属ID変更'?null:$before,$actionName==='所属ID変更'?null:$after,$now]);
         mark_availability_publish_pending($pdo);
         $pdo->commit();
         if ($sessionRevision !== null) $_SESSION['auth_revision'] = $sessionRevision;
@@ -622,6 +643,8 @@ if ($action === 'save-delta') {
     }
     if ($membersChanged) {
         if (!is_array($delta['members'])) { $pdo->rollBack(); respond(['error'=>'ユーザーデータが不正です'], 422); }
+        try { kptc_validate_member_identity_update($record['state']['members'],$delta['members']); }
+        catch(InvalidArgumentException $error) { $pdo->rollBack(); respond(['error'=>$error->getMessage()],422); }
         $state['members'] = array_values($delta['members']);
     }
     if ($categoriesChanged) {
@@ -705,6 +728,8 @@ if ($action === 'save') {
         $pdo->rollBack();
         respond(['error'=>'一般ユーザーはユーザー・予定種別を変更できません'], 403);
     }
+    try { kptc_validate_member_identity_update($record['state']['members'],$state['members']); }
+    catch(InvalidArgumentException $error) { $pdo->rollBack(); respond(['error'=>$error->getMessage()],422); }
     $before = json_encode($record['state'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $after = json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     $nextVersion = $record['version'] + 1;
@@ -737,6 +762,8 @@ if ($action === 'undo') {
     $stmt->execute([$auditId]);
     $target = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$target) { $pdo->rollBack(); respond(['error'=>'取り消せない操作です'], 422); }
+    $barrier=(int)$pdo->query("SELECT COALESCE(MAX(id),0) FROM audit_logs WHERE action IN ('ID体系移行','所属ID変更')")->fetchColumn();
+    if ($auditId<=$barrier) { $pdo->rollBack(); respond(['error'=>'ID体系の変更以前の操作は取り消せません'],422); }
     // 旧体系の履歴を取り消した場合も、現在の所属・内線・予定種別へ正規化してから復元します。
     $restored = json_decode($target['before_json'], true);
     if (uses_legacy_organization_categories($restored)) $restored = migrate_organization_categories($restored);

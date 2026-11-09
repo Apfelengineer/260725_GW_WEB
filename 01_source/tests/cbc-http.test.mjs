@@ -145,7 +145,41 @@ try {
   assert.equal((await upload([{...importItems[0],title:'異なる内容'}],'apply',repeated)).status,422);
   const persisted = await (await fetch(base+'/origin/Scheduler/api.php?action=bootstrap',{headers:{cookie}})).json();
   assert.equal(persisted.state.schedules.filter(item=>item.id.startsWith('import-test-')).length,2);
-  console.log('CBC HTTP: entry/API, delta save, admin/CSRF rotation, persistence; JSON import permission, preview, atomicity, version conflict, duplicates, past/future: OK');
+  for(const member of persisted.state.members) assert.match(member.id,member.group==='試験室'?/^t\d{3}$/:/^e\d{3}$/);
+  const template = persisted.state.members.find(member=>member.group==='電気通信係');
+  const maxE = Math.max(...persisted.state.members.filter(m=>m.group==='電気通信係').map(m=>Number(m.id.slice(1))));
+  async function createUser(payload,name){
+    const response = await post('member-account',payload,{operation:'create',version:payload.version,member:{...template,id:'',name},username:'test-'+name,role:'user'});
+    assert.equal(response.status,200);return response.json();
+  }
+  const added=await createUser(persisted,'first');
+  const first=added.state.members.find(m=>m.name==='first');
+  assert.equal(first.id,'e'+String(maxE+1).padStart(3,'0'));
+  const reorderedResponse=await post('save-delta',added,{version:added.version,delta:{...empty,members:[...added.state.members].reverse()}});
+  assert.equal(reorderedResponse.status,200);
+  const reordered=await reorderedResponse.json();
+  assert.deepEqual(reordered.state.members.map(m=>m.id).sort(),added.state.members.map(m=>m.id).sort());
+  const deletedResponse=await post('member-account',reordered,{operation:'delete',version:reordered.version,member:first,username:'test-first',role:'user'});
+  assert.equal(deletedResponse.status,200);
+  const deleted=await deletedResponse.json();
+  const second=await createUser(deleted,'second');
+  const movedMember=second.state.members.find(m=>m.name==='second');
+  assert.equal(movedMember.id,'e'+String(maxE+2).padStart(3,'0'),'Deleted ID not reused');
+  const withScheduleResponse=await post('save-delta',second,{version:second.version,delta:{...empty,scheduleUpserts:[{...createdSchedule,id:'transfer-test',memberId:movedMember.id}]}});
+  assert.equal(withScheduleResponse.status,200);
+  const withSchedule=await withScheduleResponse.json();
+  const changedResponse=await post('member-account',withSchedule,{operation:'save',version:withSchedule.version,member:{...movedMember,group:'試験室'},username:'test-second',role:'user'});
+  assert.equal(changedResponse.status,200);
+  const changed=await changedResponse.json();assert.equal(changed.state.members.find(m=>m.name==='second').id,'t004');
+  assert.equal(changed.authAccounts.find(a=>a.username==='test-second').memberId,'t004');
+  assert.equal(changed.state.schedules.find(s=>s.id==='transfer-test').memberId,'t004');
+  const invalidCreate=await post('member-account',changed,{operation:'create',version:changed.version,member:{...template,id:'e999'},username:'bad-id',role:'user'});
+  assert.equal(invalidCreate.status,422,'Clients cannot pick arbitrary IDs');
+  const roomCheck=spawnSync('php',['-r','require $argv[1];$p=new PDO("sqlite:".$argv[2]);$s=json_decode($p->query("SELECT payload FROM app_state WHERE id=1")->fetchColumn(),true);echo json_encode(kptc_public_rooms_from_state($s));',fileURLToPath(new URL('../../02_release/origin/Scheduler/availability-room-config.php',import.meta.url)),join(temporary,'test.sqlite')],{encoding:'utf8'});
+  assert.equal(roomCheck.status,0,roomCheck.stderr);
+  assert.deepEqual(JSON.parse(roomCheck.stdout).map(r=>r.id),['t001','t002','t003']);
+  assert.deepEqual(JSON.parse(roomCheck.stdout).map(r=>r.image),['m6.png','m7.png','m8.png']);
+  console.log('CBC HTTP: auth/save/import; automatic e/t IDs, new users, no renumber/reuse, department transfer/account links, client ID rejection and public room mapping: OK');
 } finally {
   server.kill('SIGTERM');
   if (server.exitCode === null) await once(server,'exit');

@@ -14,7 +14,7 @@
   "schedules": [
     {
       "id": "legacy-000001",
-      "memberId": "m6",
+      "memberId": "t001",
       "date": "2026-11-10",
       "endDate": "2026-11-10",
       "start": "09:00",
