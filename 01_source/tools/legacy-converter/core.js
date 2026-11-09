@@ -4,6 +4,8 @@
   const utf8 = new TextEncoder();
   const decoder = new TextDecoder("shift_jis", { fatal: true });
   const byteLength = text => utf8.encode(text).length;
+  const allowedCategories = Object.freeze(["休暇","機器点検","機器利用","キャンセル待ち","所内会議","出張・外出"]);
+  const normalizeCategory = name => allowedCategories.includes(name.trim()) ? name.trim() : "その他";
 
   // file://でも利用できる同期SHA-256。IDは対象ユーザー・年月・元の行位置から固定します。
   function sha256(text) {
@@ -83,7 +85,7 @@
     if(endDay.getUTCFullYear()>9999) throw new Error("終了日が対応範囲を超えています");
     if(days===1&&end<=start) throw new Error("終了時刻が開始時刻以前です");
     const category=field(line,12,26).trim(), title=field(line,30,70).trim(),location=field(line,70,110).trim(),detailId=field(line,110,113).trim();
-    if(!category||!title) throw new Error("分類または件名が空です");
+    if(!title) throw new Error("件名が空です");
     if(detailId&&!/^\d{3}$/.test(detailId)) throw new Error("詳細メモ番号が不正です");
     if(detailId&&detailId!=="000"&&!memoMap.has(detailId)) throw new Error(`詳細メモ${detailId}がありません。対応するdtlを選択してください`);
     const memo=memoMap.get(detailId)||"";
@@ -108,9 +110,9 @@
     }
     return {pairs:[...pairs.values()].sort((a,b)=>(a.group+"/"+a.month).localeCompare(b.group+"/"+b.month)),ignored};
   }
-  function convert(files,members,categoryMap,options={}) {
-    const input=inventory(files),schedules=[],errors=[],warnings=[],sources=[],ids=new Set();
-    const knownMembers=options.knownMembers,knownCategories=options.knownCategories;
+  function convert(files,members,options={}) {
+    const input=inventory(files),schedules=[],errors=[],warnings=[],sources=[],ids=new Set(),categoryCounts=new Map();
+    const knownMembers=options.knownMembers;
     for(const pair of input.pairs){
       const source=`${pair.group}/${pair.month}`,memberId=(members[pair.group]||"").trim();
       if(!memberId||memberId.length>120||/[\x00-\x20\x7f]/.test(memberId)){errors.push(`${source}：登録先の内部ユーザーIDを指定してください`);continue;}
@@ -123,11 +125,12 @@
           try{
             if(schedules.length>=100000)throw new Error("一度に変換できる予定は100000件までです");
             const converted=schedule(line,pair.month,memberId,index+1,memoMap,options),item=converted.item;
-            item.category=(categoryMap[item.category]||"").trim();
-            if(!item.category)throw new Error("登録先の予定種別を指定してください");
-            if(knownCategories&&!knownCategories.includes(item.category))throw new Error("参照データにない予定種別です");
+            const originalCategory=item.category;
+            item.category=normalizeCategory(originalCategory);
             if(ids.has(item.id))throw new Error("同じユーザー・年月・行位置への重複割当です。元フォルダと登録先を確認してください");
             ids.add(item.id);schedules.push(item);count++;if(converted.detailId)used.add(converted.detailId);
+            if(!categoryCounts.has(originalCategory)) categoryCounts.set(originalCategory,{from:originalCategory,to:item.category,count:0});
+            categoryCounts.get(originalCategory).count++;
             converted.warnings.forEach(w=>warnings.push(`${source} ${index+1}行目：${w}`));
           }catch(error){errors.push(`${source} ${index+1}行目：${error.message}`);}
         });
@@ -138,12 +141,7 @@
     if(!input.pairs.length)errors.push("sch／dtlファイルを選択してください");
     if(schedules.length>100000)errors.push("一度に変換できる予定は100000件までです");
     if(!errors.length&&!schedules.length)errors.push("予定が0件です");
-    return {schedules:errors.length?[]:schedules,errors,warnings,sources,ignored:input.ignored};
-  }
-  function categories(files) {
-    const names=new Set();
-    for(const pair of inventory(files).pairs)if(pair.sch)for(const line of lines(pair.sch.bytes))if(line.length>=26){const name=field(line,12,26).trim();if(name)names.add(name);}
-    return [...names].sort();
+    return {schedules:errors.length?[]:schedules,errors,warnings,sources,ignored:input.ignored,categoryConversions:[...categoryCounts.values()]};
   }
   function chunks(items,maxBytes=1048576,maxCount=5000) {
     const result=[],overhead=byteLength('{"schedules":[]}');let current=[],size=overhead;
@@ -152,5 +150,5 @@
       size+=bytes+(current.length?1:0);current.push(text);
     }if(current.length)result.push('{"schedules":['+current.join(",")+']}');return result;
   }
-  root.KptcLegacyConverter={sha256,lines,details,schedule,inventory,convert,categories,chunks,byteLength};
+  root.KptcLegacyConverter={sha256,lines,details,schedule,inventory,convert,allowedCategories,normalizeCategory,chunks,byteLength};
 })(globalThis);

@@ -8,10 +8,10 @@
 <p class="hint">選び直すと入力データを置き換えます。schと対応するdtlを一緒に選択してください。上限：1000ファイル・合計50MiB。</p><p id="inventory" role="status">データ未選択</p></section>
 <fieldset id="settings"><legend>変換設定</legend><section><h2>2　登録先ユーザーを指定</h2>
 <p><strong>memberIdはKPTCの内部ユーザーIDです。社内入口の3桁IDとは異なります。</strong> KPTCのJSON取込画面でも内部IDを確認できます。</p>
-<label>任意：KPTCバックアップJSONなどからユーザー・予定種別一覧を読み込む<input id="reference" type="file" accept=".json,application/json"></label><p id="reference-status" class="hint">参照なし：登録先ID・予定種別名を手入力します。実際に登録済みかどうかはKPTC取込時に確認されます。</p>
-<datalist id="member-options"></datalist><datalist id="category-options"></datalist>
+<label>任意：KPTCバックアップJSONなどからユーザー一覧を読み込む<input id="reference" type="file" accept=".json,application/json"></label><p id="reference-status" class="hint">参照なし：登録先の内部ユーザーIDを手入力します。実際に登録済みかどうかはKPTC取込時に確認されます。</p>
+<datalist id="member-options"></datalist>
 <div class="scroll"><table><thead><tr><th>元のユーザーフォルダ</th><th>対象月</th><th>登録先ユーザー</th></tr></thead><tbody id="members"><tr><td colspan="3">データ選択後に表示します。</td></tr></tbody></table></div></section>
-<section><h2>3　予定種別とメモの扱いを確認</h2><p>旧アプリの分類を、KPTCで登録済みの予定種別名へ対応付けます。</p><div class="scroll"><table><thead><tr><th>元の分類</th><th>KPTCの予定種別名</th></tr></thead><tbody id="categories"></tbody></table></div>
+<section><h2>3　自動変換ルールとメモの扱いを確認</h2><p>予定種別は自動変換します。<strong>休暇・機器点検・機器利用・キャンセル待ち・所内会議・出張・外出</strong>はそのまま、それ以外（空欄を含む）はすべて<strong>「その他」</strong>になります。手動の対応づけは不要です。</p>
 <label>dtl本文のカンマ区切りの扱い<select id="memo-mode"><option value="comma">カンマを保持（既定・改行規則が未確定の場合）</option><option value="newline">区切りを改行へ変換（複数行のメモだった場合）</option></select></label>
 <p class="hint">引用符で囲まれたカンマは本文として扱います。実際の改行規則は少数の予定で確認してください。</p>
 <label class="check"><input id="zero-duration" type="checkbox">期間欄「00」を単日として扱う（警告をレポートに記録）</label>
