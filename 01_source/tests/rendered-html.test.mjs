@@ -174,6 +174,25 @@ test("システム資料を同梱する", async () => {
   await assert.rejects(access(new URL("docs/assets", repositoryRoot)));
 });
 
+test("構築手順書は単独更新・後日のCalendar追加・ID移行後の復旧を分ける", async () => {
+  const guide=await readFile(new URL("docs/KPTC_Scheduler_Docker構築手順書.html",repositoryRoot),"utf8");
+  const schedulerOnly=guide.slice(guide.indexOf('<h4 id="update-scheduler-only">'),guide.indexOf('<h4 id="start-calendar-later">'));
+  const calendarLater=guide.slice(guide.indexOf('<h4 id="start-calendar-later">'),guide.indexOf('<h4 id="update-all-services">'));
+  assert.match(schedulerOnly,/build --pull kptc-scheduler/);
+  assert.match(schedulerOnly,/up -d --no-deps --force-recreate kptc-scheduler/);
+  assert.match(schedulerOnly,/if ! sudo test -f \/etc\/kptc\/publisher.env/);
+  assert.match(schedulerOnly,/pre-id-scheme-/);
+  assert.match(schedulerOnly,/公開JSONの「再送待ち」/);
+  for(const block of schedulerOnly.matchAll(/<pre><code>([\s\S]*?)<\/code><\/pre>/g))assert.doesNotMatch(block[1],/up -d --force-recreate\s*(?:\n|$)/);
+  assert.match(calendarLater,/KPTC_AVAILABILITY_DELIVERY_MODE=local/);
+  assert.match(calendarLater,/up -d --no-deps --force-recreate kptc-publisher kptc-calendar/);
+  assert.match(calendarLater,/monitor-availability-cli.php/);
+  assert.match(guide,/ID移行後に旧イメージだけへ戻すことはしない/);
+  assert.match(guide,/\/restore\/group-watcher.sqlite/);
+  assert.match(guide,/2026-11-09/);
+  assert.match(guide,/Q16\./);
+});
+
 test("静的カレンダーの現行デザインと公開専用JSONを提供する", async () => {
   const page = await readFile(new URL("origin/shared/app/reservations-page.tsx", root), "utf8");
   const styles = await readFile(new URL("origin/shared/app/reservations.css", root), "utf8");

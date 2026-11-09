@@ -11,6 +11,7 @@
     body { margin:0; color:var(--ink); background:#f3f7f9; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif; line-height:1.8; }
     header { color:#fff; background:linear-gradient(135deg,#0e2b40,#1f6790); padding:46px max(24px,calc((100% - 1120px)/2)); }
     header p { max-width:850px; margin:10px 0 0; color:#dcebf4; }
+    header a { color:#bfe9ff; }
     header .tag { display:inline-block; padding:3px 10px; border:1px solid #8ec1df; border-radius:999px; font-size:.82rem; }
     h1 { margin:12px 0 0; font-size:clamp(1.8rem,4vw,2.8rem); line-height:1.3; }
     h2 { margin-top:0; color:var(--navy); font-size:1.7rem; border-bottom:3px solid #65a9d1; padding-bottom:8px; }
@@ -97,6 +98,7 @@
     <span class="tag">Ubuntu 24.04 / 内部PHP 8.4 / 静的カレンダー / local・SFTP切替</span>
     <h1>KPTC Scheduler<br>Docker構築手順書</h1>
     <p>まずOriginサーバー1台で運用し、後から公開カレンダーだけをTamanegiへ移す手順です。カレンダーの見た目は共通で、公開側にはPHP・データベース・受信API・秘密鍵を置きません。</p>
+    <p>既にスケジューラだけを試運転している方は、<a href="#update">10章</a>を参照してください。<a href="#update-scheduler-only">スケジューラのみ更新</a>と、<a href="#start-calendar-later">後日のカレンダー追加</a>を分けて実施できます。</p>
   </header>
   <main>
     <nav aria-label="目次"><b>目次</b><ol>
@@ -397,32 +399,124 @@ sudo docker compose -f compose.origin-single.yaml stop kptc-calendar</code></pre
 
       <section id="update">
         <h2>10. 更新・復元・バックアップ</h2>
-        <h3>10-1. 通常更新</h3>
-        <p>基本は<strong>開発用PCで修正 → 試験 → ビルド → GitHubのmainへ反映 → サーバーで再構築</strong>です。サーバー上で<code>01_source</code>や配布JSを直接修正しません。手動修正がある場合は先に<code>git status</code>・<code>git diff</code>で整理し、envは作り直さず維持します。</p>
-        <p>初期構成ではOriginで実行します。<code>YYYYMMDD-HHMM</code>は更新日時に置き換えます。</p>
+        <h3>10-1. 運用段階に合わせた更新</h3>
+        <p>基本は<strong>開発用PCで修正 → 試験 → ビルド → GitHubのmainへ反映 → サーバーで再構築</strong>です。サーバー上で<code>01_source</code>や配布JSを直接修正しません。既存envをひな形で上書きしないでください。</p>
+        <p class="checkpoint"><strong>現在、同一サーバー構成でスケジューラだけを試運転している場合は、まず10-2で退避し、続いて10-1-Aだけを実行します。</strong> カレンダーを試運転する日になってから10-1-Bを実行します。Tamanegi向けのSFTP設定や別サーバーの準備は不要です。</p>
+        <table><thead><tr><th>現在・次に行うこと</th><th>使用する手順</th></tr></thead><tbody>
+          <tr><td>スケジューラのみ稼働中。これだけ更新したい。</td><td>10-2 → 10-1-A。配信担当・Calendarは起動しない。</td></tr>
+          <tr><td>スケジューラの試験が済み、同一サーバーでCalendarも試験したい。</td><td>10-1-B。既存DBとSchedulerを維持し、2サービスを追加。</td></tr>
+          <tr><td>静的Calendarを含む3サービスを既に運用している。</td><td>10-2 → 10-1-C。旧PHP版なら先に9-1も確認。</td></tr>
+        </tbody></table>
+        <p>以下は標準の配置先・DBパスを使うOrigin上の手順です。<code>YYYYMMDD-HHMM</code>は作業日時へ置き換え、同じ作業中はすべて同じ値を使います。各コマンドでエラーが出た場合は、次へ進まず原因を確認してください。</p>
+
+        <h4 id="update-scheduler-only">10-1-A. スケジューラだけを更新する</h4>
+        <p><strong>A-1：利用者の操作を止め、保存済みを確認します。</strong> 10-2のDB・設定・実行中イメージの退避を終えてから進めます。新規サーバーを作り直す作業ではありません。<code>docker compose down -v</code>、<code>docker volume rm</code>、<code>docker system prune --volumes</code>は実行しません。</p>
+        <p><strong>A-2：最新版を取得します。</strong> 最初の<code>git status</code>で独自変更がある場合は、管理者が差分を整理します。強制リセットや強制上書きで消さないでください。</p>
         <pre><code>cd /opt/kptc/260725_GW_WEB
 git status
 git fetch origin
 git switch main
-git pull --ff-only origin main
-sudo docker image tag kptc-scheduler:latest kptc-scheduler:rollback-YYYYMMDD-HHMM
-sudo docker image tag kptc-publisher:latest kptc-publisher:rollback-YYYYMMDD-HHMM
+git pull --ff-only origin main</code></pre>
+        <p><strong>A-3：既存設定を維持し、静的版で必要な出力先を確認します。</strong></p>
+        <pre><code>sudo nano /etc/kptc/scheduler.env</code></pre>
+        <p>次の項目だけを追加・修正します。重複した行を作らず、既存の同名行を変更してください。</p>
+        <pre><code>KPTC_PUBLIC_AVAILABILITY_JSON=/var/lib/kptc-outbox/public-availability.json
+KPTC_AVAILABILITY_STATUS_JSON=/var/lib/kptc-publish-status/status.json
+KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800</code></pre>
+        <p>暗号鍵<code>KPTC_PORTAL_TOKEN_KEY</code>、内部DBとバックアップの保存先、セッション保存先などの独自設定は維持します。<code>KPTC_PUBLIC_AVAILABILITY_PAGE_URL</code>も起動に必要なので、Calendarが未起動でも削除しません。旧PHP連携用のMODE・ENDPOINT・SECRET等は最新版では使いません（9-1参照）。場所欄・JSON取込・内部ID移行のための別DBや追加の鍵は不要です。</p>
+        <p>ブラウザから引き続き<code>http://origin:8080/</code>へアクセスする場合は次を維持します。HTTPSやパス付きURLを使う場合は、実際のブラウザURLに合わせて5-4節を参照してください。</p>
+        <pre><code>KPTC_SESSION_COOKIE_PATH=/
+KPTC_SESSION_COOKIE_SECURE=0</code></pre>
+        <p>Composeが設定を読み込めるように、配信担当を起動しなくても<code>publisher.env</code>を準備します。次の条件付きコピーは、既存ファイルを上書きしません。</p>
+        <pre><code>if ! sudo test -f /etc/kptc/publisher.env; then
+  sudo install -m 600 docker/publisher/publisher.env.example /etc/kptc/publisher.env
+fi</code></pre>
+        <p>リポジトリ直下の<code>.env</code>には<code>KPTC_ORIGIN_BIND_ADDRESS</code>としてOriginの実際の内部IPを設定します。既に正しく設定済みなら変更不要です。Origin外にプロキシがある場合は<code>127.0.0.1</code>を使いません。IP制限は7章に従い、管理者が維持します。</p>
+        <p><strong>A-4：スケジューラだけを再構築します。</strong> <code>config --quiet</code>とビルドの成功を確認してから、次を実行します。</p>
+        <pre><code>sudo docker compose -f compose.origin-single.yaml config --quiet
+sudo docker compose -f compose.origin-single.yaml build --pull kptc-scheduler
+sudo docker compose -f compose.origin-single.yaml up -d --no-deps --force-recreate kptc-scheduler
+sudo docker compose -f compose.origin-single.yaml ps
+sudo docker compose -f compose.origin-single.yaml logs --since 10m kptc-scheduler</code></pre>
+        <p><strong>末尾の<code>kptc-scheduler</code>と<code>--no-deps</code>を省略しないでください。</strong> この手順は配信担当・Calendarを新たに起動しません。ただし、既に起動中の別サービスを停止するものでもありません。想定外のサービスが稼働している場合は管理者が確認します。</p>
+        <p><strong>A-5：内部IDの初回移行と動作を確認します。</strong> 古いタブを閉じ、社内入口から入り直してください。最新版では初回のDB読込時に、電気通信係を<code>e001</code>〜、試験室を<code>t001</code>〜へ現在の表示順で自動採番します。予定・アカウントは引き継ぎ、任意のIDを入力する機能はありません。</p>
+        <ul><li>移行前DBは非公開領域の<code>/var/lib/kptc-scheduler/backups/pre-id-scheme-日時-識別子.sqlite</code>へ自動退避。失敗時は移行を中止。</li><li>移行済みのDBでは毎回採番しない。並べ替えでもIDは変わらない。追加時は所属ごとの続き番号。</li><li>管理者モードは入り直す。社内入口で入力する3桁IDや共通鍵は、この内部ID移行では変更しない。</li><li>ID移行前の操作履歴は取り消せない。保存済み取込JSON・変換ツールの指定は自動更新されないため、新しいユーザー一覧に合わせる。</li></ul>
+        <p>詳細は<a href="KPTC_Scheduler_内部ID体系.md">内部ID体系の説明</a>を参照してください。ブラウザでMarkdownを表示できない場合は、同ファイルをテキストエディターで開きます。</p>
+        <table><thead><tr><th>確認</th><th>合格条件</th></tr></thead><tbody>
+          <tr><td>既存データ</td><td>更新前と予定・ユーザー／試験室の件数が一致し、正しい人・部屋へ表示。</td></tr>
+          <tr><td>保存・編集</td><td>試験予定を登録・編集し、共有済みとなり、再読み込み後も残る。場所欄も保持。</td></tr>
+          <tr><td>権限・通信</td><td>管理者へ切替後も保存でき、無操作の保存ループや403が発生しない。</td></tr>
+          <tr><td>内部ID</td><td>管理者のユーザー編集画面で所属に応じたe／tのIDを確認。</td></tr>
+        </tbody></table>
+        <p class="checkpoint">ここでスケジューラ単独更新は終了です。Calendarをまだ試験しない場合、10-1-Bや全サービス起動は行いません。公開JSONの「再送待ち」や配信監視の失敗は、配信担当を止めている間は起こり得ます。一方、予定の「保存失敗」「オフライン」や再読み込みで予定が消える状態は正常ではありません。</p>
+
+        <h4 id="start-calendar-later">10-1-B. 後日、同じOriginへ静的カレンダーを追加する</h4>
+        <p><strong>前提：</strong>10-1-Aの確認が済み、Schedulerは正常稼働中です。別サーバー・SFTP設定は不要です。DBの作成し直し、Volume削除、予定の再取込は行いません。後日mainの別の版へ更新する場合は、先に10-2と10-1-Aを再実施してSchedulerも同じ版へそろえてください。</p>
+        <p>配信担当の設定を確認します。</p>
+        <pre><code>cd /opt/kptc/260725_GW_WEB
+sudo nano /etc/kptc/publisher.env</code></pre>
+        <pre><code>KPTC_AVAILABILITY_DELIVERY_MODE=local
+KPTC_AVAILABILITY_INTERVAL=30
+KPTC_PUBLIC_AVAILABILITY_STALE_SECONDS=1800</code></pre>
+        <p><code>scheduler.env</code>のカレンダーリンク先も実際のURLへ合わせます。直接HTTPなら例は<code>http://origin:8081/</code>、プロキシ経由なら例は<code>https://公開名/Calendar/</code>です。実際にこのenvを変更した場合だけ、10-1-Aの単独再作成コマンドでSchedulerへ反映し、再ログインします。変更がなければSchedulerの再作成は不要です。</p>
+        <p>7章の内容をプロキシ管理者へ伝え、Calendarへのパス転送、静的ファイル、JSONのキャッシュ無効、IP制限を確認します。外部プロキシからOriginの8081番へ接続できることが必要です。既存HPのPHPやWordPressへCalendarを振り分けません。</p>
+        <p>Schedulerの健康状態を確認してから、配信担当とCalendarの2サービスだけを起動します。</p>
+        <pre><code>sudo docker compose -f compose.origin-single.yaml ps
+sudo docker compose -f compose.origin-single.yaml config --quiet
+sudo docker compose -f compose.origin-single.yaml build --pull kptc-publisher kptc-calendar
+sudo docker compose -f compose.origin-single.yaml up -d --no-deps --force-recreate kptc-publisher kptc-calendar
+sudo docker exec kptc-scheduler php /var/www/html/publish-availability-cli.php
+sudo docker compose -f compose.origin-single.yaml exec kptc-publisher python /opt/kptc/delivery.py --once
+sudo docker compose -f compose.origin-single.yaml logs --since 5m kptc-publisher kptc-calendar
+sudo docker exec kptc-scheduler php /var/www/html/monitor-availability-cli.php</code></pre>
+        <p>常駐処理と同時実行になった場合はロックで二重配信を防ぎます。すぐに配信済みとならない場合は30秒程度待ってログ・監視を再確認します。JSON生成の<code>queued:true</code>だけでは公開完了ではありません。</p>
+        <p>次のIPは説明用です。実際のOrigin内部IPへ置き換えて確認してください。</p>
+        <pre><code>curl -i http://Origin内部IP:8081/data/public-availability.json</code></pre>
+        <p>HTTP 200、当月を含む3か月、<code>t001</code>等の公開ID、監視の<code>ok:true</code>を確認します。公開対象は設定した試験室だけで、tのIDを持つ部屋すべてが自動公開されるわけではありません。</p>
+        <p>ブラウザで実際のカレンダーURLを開き、各室の名称・画像・日付・午前／午後・メンテナンスを確認します。KPTCの試験室予定を変更し、公開画面へ反映されることも確認します。HTMLをファイルとして直接開くのではなく、HTTP／HTTPSのURLでアクセスします。失敗時は12章のQ＆Aを参照してください。</p>
+
+        <h4 id="update-all-services">10-1-C. 3サービスを既に運用している場合の通常更新</h4>
+        <p>10-2の退避を実施し、既存イメージ3つの退避があることを確認します。10-1-Aの最新版取得・設定確認に続き、3サービスすべてを同じ版へ再構築します。Scheduler単独試運転中はこのコマンドを使いません。</p>
+        <pre><code>sudo docker image tag kptc-publisher:latest kptc-publisher:rollback-YYYYMMDD-HHMM
 sudo docker image tag kptc-calendar:latest kptc-calendar:rollback-YYYYMMDD-HHMM
 sudo docker compose -f compose.origin-single.yaml build --pull
 sudo docker compose -f compose.origin-single.yaml up -d --force-recreate
 sudo docker compose -f compose.origin-single.yaml ps
 sudo docker compose -f compose.origin-single.yaml logs --since 10m</code></pre>
-        <p>分離後はOriginで<code>compose.origin-split.yaml</code>、Tamanegiで<code>compose.tamanegi.yaml</code>を使い、それぞれ同じ版のリポジトリを取得して更新します。Tamanegiへ内部の実環境ファイルを転送しません。PHP・Python・Nginx・OpenSSHの更新確認も必要で、単なる再起動ではランタイムは更新されません。</p>
+        <p>10-1-Aの内部予定・ID確認と、10-1-Bの公開JSON・カレンダー確認を実施します。旧PHPカレンダーからの初回移行は9-1の設定も必要です。まだ存在しない配信担当・Calendarのイメージを退避するコマンドは実行しません。</p>
+        <p>将来分離した後はOriginで<code>compose.origin-split.yaml</code>、Tamanegiで<code>compose.tamanegi.yaml</code>を使い、それぞれ同じ版を取得して更新します。Tamanegiへ内部の実環境ファイルを転送しません。PHP・Python・Nginx・OpenSSHの更新確認も必要で、単なる再起動ではランタイムは更新されません。</p>
 
         <h3>10-2. 更新前のSQLite退避</h3>
-        <p>更新操作の前に実行してください。SQLiteのバックアップAPIで、使用中でも整合したファイルを作成します。</p>
+        <p><strong>10-1の更新操作より先に、利用者の操作を止めて実行してください。</strong> 標準構成は<code>kptc-scheduler-data</code>を<code>/var/lib/kptc-scheduler</code>へ接続します。次で確認し、異なる場合は新しいComposeが既存DBを引き継ぐよう、管理者が先に調整します。別Volumeを作って空DBのまま進めないでください。</p>
+        <pre><code>cd /opt/kptc/260725_GW_WEB
+sudo docker inspect kptc-scheduler --format '{{range .Mounts}}{{println .Name "-&gt;" .Destination}}{{end}}'</code></pre>
+        <p>以下の<code>YYYYMMDD-HHMM</code>を作業日時へ置き換えます。同名の退避先があれば別の日時を使い、上書きしません。DBパスを独自変更している場合も管理者が実際の値へ調整してください。</p>
+        <pre><code>sudo test ! -e /var/backups/kptc/update-YYYYMMDD-HHMM
+sudo install -d -m 700 /var/backups/kptc/update-YYYYMMDD-HHMM
+sudo cp -p /etc/kptc/scheduler.env /var/backups/kptc/update-YYYYMMDD-HHMM/scheduler.env
+sudo cp -p .env /var/backups/kptc/update-YYYYMMDD-HHMM/compose.env
+sudo cp -p compose.origin-single.yaml /var/backups/kptc/update-YYYYMMDD-HHMM/compose.origin-single.yaml
+if sudo test -f /etc/kptc/publisher.env; then
+  sudo cp -p /etc/kptc/publisher.env /var/backups/kptc/update-YYYYMMDD-HHMM/publisher.env
+fi
+if sudo test -f /etc/kptc/calendar.env; then
+  sudo cp -p /etc/kptc/calendar.env /var/backups/kptc/update-YYYYMMDD-HHMM/calendar.env
+fi
+git rev-parse HEAD | sudo tee /var/backups/kptc/update-YYYYMMDD-HHMM/source-commit.txt &gt; /dev/null
+sudo docker image tag "$(sudo docker inspect --format '{{.Image}}' kptc-scheduler)" kptc-scheduler:rollback-YYYYMMDD-HHMM</code></pre>
+        <p>SQLiteのバックアップAPIで、使用中でも整合したファイルを作成します。通常のファイルコピーだけではWALに残る更新を取りこぼす可能性があります。</p>
         <pre><code>sudo docker exec kptc-scheduler php -r '
+$path="/var/lib/kptc-scheduler/pre-update-YYYYMMDD-HHMM.sqlite";
+if (file_exists($path)) exit(1);
 $source = new SQLite3("/var/lib/kptc-scheduler/group-watcher.sqlite", SQLITE3_OPEN_READONLY);
-$target = new SQLite3("/var/lib/kptc-scheduler/pre-update-YYYYMMDD-HHMM.sqlite");
+$target = new SQLite3($path);
+if (!chmod($path,0600)) exit(1);
 if (!$source-&gt;backup($target)) exit(1);
 $target-&gt;close(); $source-&gt;close();
-'</code></pre>
-        <p>envとSFTP鍵も管理者の非公開バックアップ先へ退避します。公開フォルダやGitHubへ保存しません。</p>
+'
+sudo docker cp kptc-scheduler:/var/lib/kptc-scheduler/pre-update-YYYYMMDD-HHMM.sqlite /var/backups/kptc/update-YYYYMMDD-HHMM/group-watcher.sqlite
+sudo find /var/backups/kptc/update-YYYYMMDD-HHMM -type f -exec chmod 600 {} +</code></pre>
+        <p>DBはコンテナ内とホストの非公開領域へ退避されます。元DB・退避DBの予定件数を比較できるよう、更新前に現在の件数も控えてください。分離環境のSFTP鍵など、独自の実環境設定も別途退避します。公開フォルダやGitHubへ保存しません。退避先には秘密値が含まれるため、アクセス権を広げないでください。</p>
 
         <h3>10-3. JSONバックアップからSQLiteへ復元</h3>
         <p>毎日22時に、当日以降に終了する予定を<code>scheduler-latest.json</code>へ上書きします。過去版は残しません。復元ツールは新しいSQLiteを作成し、本番DBを直接上書きしません。</p>
@@ -430,7 +524,8 @@ $target-&gt;close(); $source-&gt;close();
   /var/lib/kptc-scheduler/backups/scheduler-latest.json \
   /var/lib/kptc-scheduler/restored-YYYYMMDD-HHMM.sqlite</code></pre>
         <p>復元成功後、利用者の操作を停止し、Schedulerを停止して切り替えます。分離後はCompose名を変更します。対象日付をすべて同じ値へ置き換え、既存の同名退避がないことを確認します。</p>
-        <pre><code>sudo docker compose -f compose.origin-single.yaml stop kptc-scheduler
+        <p class="warning">復元するDBの版番号が配信済みより小さい場合は、下記の再開・生成コマンドをまだ実行せず、この節の末尾の世代に関する注意に従って旧JSON等を退避してから再開してください。</p>
+        <pre><code>sudo docker compose -f compose.origin-single.yaml stop kptc-scheduler kptc-publisher
 sudo docker run --rm -v kptc-scheduler-data:/data alpine sh -c '
 set -eu
 for file in group-watcher.sqlite group-watcher.sqlite-wal group-watcher.sqlite-shm; do
@@ -442,16 +537,53 @@ chmod 600 /data/group-watcher.sqlite
 '
 sudo docker compose -f compose.origin-single.yaml start kptc-scheduler
 sudo docker exec kptc-scheduler php /var/www/html/publish-availability-cli.php</code></pre>
+        <p>配信担当は復元前に稼働していた場合だけ、内容確認後に<code>start kptc-publisher</code>で再開して監視します。Scheduler単独試運転中は起動しません。再ログインと予定の再読み込み・保存確認を実施してください。</p>
         <p>公開JSONはDBから再生成できます。復元DBの版番号が配信済みより小さくなる場合は、上記の再開・生成コマンドを実行する前に管理者が復元内容を確認します。Schedulerと配信担当を停止した状態で、outboxの<code>public-availability.json</code>・状態Volumeの<code>status.json</code>・公開先の旧JSONを非公開領域へ退避してから再開し、生成・配信してください。これは正常な情報への意図的な復旧時だけの手順です。通常運用では古い世代を自動で受け入れません。</p>
 
-        <h3>10-4. プログラムのロールバック</h3>
-        <p>DBを自動で戻す操作ではありません。同じ静的構成内の正常版へ戻す場合、3イメージのタグを戻します。</p>
-        <pre><code>sudo docker compose -f compose.origin-single.yaml stop
+        <h3>10-4. 更新失敗時の復旧（ロールバック）</h3>
+        <p class="warning"><strong>内部ID移行後に旧イメージだけへ戻すことはしないでください。</strong> 旧コードがmのIDを前提としていると、予定や試験室との対応が崩れる可能性があります。DBの移行有無と、戻す版がe／tのIDを扱えるかを管理者が確認します。</p>
+        <h4>10-4-A. DBに変更がなく、互換性も確認できた場合</h4>
+        <p>スケジューラだけのプログラム更新を取り消す場合の例です。ID移行が行われた場合や、env・Composeにも変更がある場合は次の10-4-Bを使います。</p>
+        <pre><code>sudo docker compose -f compose.origin-single.yaml stop kptc-scheduler
 sudo docker image tag kptc-scheduler:rollback-YYYYMMDD-HHMM kptc-scheduler:latest
-sudo docker image tag kptc-publisher:rollback-YYYYMMDD-HHMM kptc-publisher:latest
-sudo docker image tag kptc-calendar:rollback-YYYYMMDD-HHMM kptc-calendar:latest
-sudo docker compose -f compose.origin-single.yaml up -d --no-build --force-recreate</code></pre>
-        <p>PHPカレンダー旧版へ戻す場合は、Compose定義・旧envも同じ旧版に揃える必要があります。旧公開JSONは必要に応じて再生成します。日次JSONバックアップだけではサーバー全損に備えられないため、DB Volume・env・鍵は別媒体のバックアップも検討してください。</p>
+sudo docker compose -f compose.origin-single.yaml up -d --no-deps --no-build --force-recreate kptc-scheduler</code></pre>
+        <p>既に3サービスを運用している場合は管理者が連携も止め、同じ版のイメージ・設定へそろえてから再開します。まだCalendarを試験していない環境では、復旧のために配信担当・Calendarを起動しません。</p>
+        <h4>10-4-B. ID移行前の状態へ戻す場合</h4>
+        <p><strong>ここからは、更新後の変更が失われる操作です。</strong> 利用者の操作を止め、更新後の新規予定・編集を失ってよいか管理者が判断してから実施します。必要なら現在のDBもSQLiteのバックアップAPIで別名へ退避してください。10-2で保存した<strong>完全なDB</strong>へ戻すため、過去予定を含まない日次JSONでは代用しません。</p>
+        <p>標準Volumeと10-2の退避先を使用する例です。退避DB・旧env・旧Compose・旧イメージがそろっていることを確認します。現在のComposeで全サービスを止めてから、既存SQLiteへのバックアップAPIで復元します。WAL／SHMを手作業で消したり、稼働中のDBへ通常コピーしたりしません。</p>
+        <pre><code>cd /opt/kptc/260725_GW_WEB
+sudo docker compose -f compose.origin-single.yaml stop
+sudo docker run --rm --network none --entrypoint php \
+  -v kptc-scheduler-data:/data \
+  -v /var/backups/kptc/update-YYYYMMDD-HHMM:/restore:ro \
+  kptc-scheduler:rollback-YYYYMMDD-HHMM -r '
+$source = new SQLite3("/restore/group-watcher.sqlite", SQLITE3_OPEN_READONLY);
+if ($source-&gt;querySingle("PRAGMA quick_check") !== "ok") exit(1);
+$target = new SQLite3("/data/group-watcher.sqlite");
+if (!$source-&gt;backup($target)) exit(1);
+if ($target-&gt;querySingle("PRAGMA quick_check") !== "ok") exit(1);
+$target-&gt;close(); $source-&gt;close();
+chown("/data/group-watcher.sqlite",33);
+chgrp("/data/group-watcher.sqlite",33);
+chmod("/data/group-watcher.sqlite",0600);
+'</code></pre>
+        <p>成功したら、旧設定とイメージを戻します。<code>publisher.env</code>・<code>calendar.env</code>は退避がある場合だけ戻し、なかった場合に新規作成する必要はありません。</p>
+        <pre><code>sudo cp -p /var/backups/kptc/update-YYYYMMDD-HHMM/scheduler.env /etc/kptc/scheduler.env
+sudo cp -p /var/backups/kptc/update-YYYYMMDD-HHMM/compose.env .env
+sudo cp -p /var/backups/kptc/update-YYYYMMDD-HHMM/compose.origin-single.yaml compose.origin-single.yaml
+if sudo test -f /var/backups/kptc/update-YYYYMMDD-HHMM/publisher.env; then
+  sudo cp -p /var/backups/kptc/update-YYYYMMDD-HHMM/publisher.env /etc/kptc/publisher.env
+fi
+if sudo test -f /var/backups/kptc/update-YYYYMMDD-HHMM/calendar.env; then
+  sudo cp -p /var/backups/kptc/update-YYYYMMDD-HHMM/calendar.env /etc/kptc/calendar.env
+fi
+sudo docker image tag kptc-scheduler:rollback-YYYYMMDD-HHMM kptc-scheduler:latest
+sudo docker compose -f compose.origin-single.yaml config --quiet
+sudo docker compose -f compose.origin-single.yaml up -d --no-deps --no-build --force-recreate kptc-scheduler
+sudo docker compose -f compose.origin-single.yaml logs --since 5m kptc-scheduler</code></pre>
+        <p>古いタブを閉じて社内入口から入り直し、退避時点の予定・ID・保存通信を確認します。配信担当とCalendarは停止したままです。旧公開JSONの退避・再生成・世代の確認を管理者が行ってから、必要な場合にだけ再開します（10-3末尾の注意を参照）。</p>
+        <p>この例では旧Composeを一時的に作業フォルダへ戻すため、<code>git status</code>に変更が出ます。次回の更新前に管理者が整理し、保存した<code>source-commit.txt</code>も参照して旧コード・設定を確認します。復旧直後に最新版を再ビルドしないでください。Volumeや新規env、バックアップを一括削除する必要はありません。</p>
+        <p>日次JSONバックアップだけではサーバー全損に備えられないため、DB Volume・env・鍵は別媒体のバックアップも検討してください。</p>
       </section>
 
       <section id="browser-ready">
@@ -500,6 +632,14 @@ foreach (["pdo_sqlite", "sqlite3"] as $name) echo $name."=".(extension_loaded($n
         <p><strong>A.</strong> 別のDB Volumeを参照していないか確認します。標準の<code>kptc-scheduler-data</code>を両Origin方式で共通使用します。Volumeを削除せず、元のデータを特定し、必要なら10-3節で復元してください。</p>
         <h3>Q12. JSON更新の成功表示と公開画面が一致しない。</h3>
         <p><strong>A.</strong> <code>queued:true</code>は出力完了で、配信完了ではありません。配信担当の<code>ok:true</code>、内部監視、公開URLの更新日時を確認します。画面は60秒ごとにJSONを再取得します。プロキシがJSONをキャッシュしていないことも確認してください。</p>
+        <h3>Q13. スケジューラだけの試運転で「公開JSON再送待ち」や配信監視エラーが出る。</h3>
+        <p><strong>A.</strong> 配信担当が未起動のため、生成済みJSONを公開先へ届けられていない可能性があります。10-1-Aの単独試験ではこの状態は起こり得ます。予定の「共有済み」とは別です。再読み込み後も予定が残ることを確認し、後日10-1-Bで配信担当・Calendarを追加してください。予定の保存失敗やオフラインは正常と判断せず、Q3〜Q5で調査します。</p>
+        <h3>Q14. 更新後、mのユーザーIDがe／tへ変わり、管理者モードが解除された。</h3>
+        <p><strong>A.</strong> 内部IDの自動移行に伴う動作です。予定・アカウントの紐付けも更新し、旧セッションは無効になります。古いタブを閉じ、社内入口から入り直して管理者モードへ再度切り替えてください。社内入口の3桁ID・暗号鍵・パスワードを変更する必要はありません。既存の取込JSONや変換ツールの指定には新しい内部IDを使います。</p>
+        <h3>Q15. スケジューラだけの更新なのにpublisher.envが見つからないと表示される。</h3>
+        <p><strong>A.</strong> Composeは対象サービス以外も含めて構成を読み込むためです。10-1-Aの条件付きコピーで<code>/etc/kptc/publisher.env</code>を準備し、再度<code>config --quiet</code>を実行します。ファイルを準備するだけでは配信担当は起動しません。既存ファイルを上書きしないでください。</p>
+        <h3>Q16. ID移行で「所属ユーザーが不明」やDB退避エラーが出る。</h3>
+        <p><strong>A.</strong> 元データに不明な参照先があるか、非公開の退避先へ書き込めない可能性があります。移行を中止し、管理者がログ・元DB・保存先権限を確認します。予定を削除して強引に進めたり、完了印を手で設定したり、フォルダの権限を777へ広げたりしません。必要な場合は10-4-Bで退避済みDB・旧コード・設定へ戻します。</p>
       </section>
 
       <section id="glossary">
@@ -540,6 +680,7 @@ foreach (["pdo_sqlite", "sqlite3"] as $name) echo $name."=".(extension_loaded($n
           <tr><td>一括置換・世代・ロック</td><td>完成したファイルを一度で入れ替える処理、情報の新旧を示す番号、同時処理を防ぐ仕組み。</td></tr>
           <tr><td>キャッシュ・CSP</td><td>以前の情報を一時保存する仕組みと、ブラウザが実行・参照できる内容を制限する方針。</td></tr>
           <tr><td>Git・GitHub・main・コミット</td><td>変更履歴を管理する道具、その共有場所、中心の変更系列、ひとまとまりの変更記録。</td></tr>
+          <tr><td>内部ID・自動採番・legacyId</td><td>人や部屋を区別するシステム内の番号、所属ごとに続き番号を付ける処理、移行前の番号を残す項目。</td></tr>
           <tr><td>タグ・ロールバック・チェックサム</td><td>版を示す名前札、以前の正常版へ戻す作業、ファイルの一致を確かめる計算値。</td></tr>
         </tbody></table>
       </section>
@@ -554,10 +695,11 @@ foreach (["pdo_sqlite", "sqlite3"] as $name) echo $name."=".(extension_loaded($n
           <tr><td>2026-10-08</td><td>Origin単一サーバー構成、詳細論理構成図、env・HTTP／HTTPS切替へ更新。PDF資料の使用を終了。</td></tr>
           <tr><td>2026-10-20</td><td>SQLite拡張構築・外部プロキシ・直接HTTPのCookie設定対策を追記。対処法をQ＆A化。</td></tr>
           <tr><td>2026-11-06</td><td>公開Calendarを静的化。local配信からTamanegiへのSFTP配信へ段階移行する構成・権限・監視・手順を追加。</td></tr>
+          <tr><td>2026-11-09</td><td>スケジューラ単独更新、後日のCalendar追加、内部ID移行とDBを含む復旧手順を追加。</td></tr>
         </tbody></table>
       </section>
     </article>
   </main>
-  <footer><p>KPTC Scheduler Docker構築手順書（HTML）／Ubuntu 24.04／同一サーバー→別サーバー段階移行／更新：2026年11月6日</p></footer>
+  <footer><p>KPTC Scheduler Docker構築手順書（HTML）／Ubuntu 24.04／同一サーバー→別サーバー段階移行／更新：2026年11月9日</p></footer>
 </body>
 </html>
